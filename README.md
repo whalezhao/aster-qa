@@ -226,3 +226,16 @@ docker-compose.yml
 
 开发和提交流程见 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题请按
 [SECURITY.md](SECURITY.md) 私下报告，不要开公开 issue。
+
+## 支持项目
+
+Aster QA 是 MIT 开源项目，代码可自由使用和修改。
+如果它对你的工作有帮助，欢迎自愿赞赏支持维护。
+
+> 赞赏是自愿赠与，不构成购买服务或商业合同，不承诺功能、支持和发票。
+
+<p align="center">
+  <img src="docs/wechat-reward.png" width="260" alt="微信扫码支持 Aster QA">
+</p>
+
+<p align="center"><sub>微信扫码 · 自愿赞赏</sub></p>
