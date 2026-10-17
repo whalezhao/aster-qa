@@ -22,10 +22,7 @@ ENV UV_COMPILE_BYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
-
-# 先装执行器依赖和 Chromium，再拷业务代码 —— 只改 Python/前端代码时不用重下浏览器
+# 先装执行器依赖和 Chromium，再拷业务代码 —— 改 Python 代码/版本号时不用重下浏览器
 WORKDIR /app/runner
 COPY runner/package.json runner/package-lock.json ./
 RUN npm ci
@@ -38,7 +35,7 @@ COPY . .
 COPY runner/.env.example runner/.env
 
 WORKDIR /app
-RUN uv sync --frozen --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 ENV PATH="/app/.venv/bin:$PATH"
 
 # 让容器的 init 进程回收 midscene 派生的浏览器子进程
