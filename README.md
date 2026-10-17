@@ -1,5 +1,7 @@
 # Aster QA
 
+[English](README.en.md) | **简体中文**
+
 [![CI](https://github.com/whalezhao/aster-qa/actions/workflows/ci.yml/badge.svg)](https://github.com/whalezhao/aster-qa/actions/workflows/ci.yml)
 [![Website](https://img.shields.io/badge/website-live-4f8cff)](https://whalezhao.github.io/aster-qa/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
