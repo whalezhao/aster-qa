@@ -4,7 +4,8 @@ updates:
     directory: /backend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 2
+    # 版本更新先暂停，等 v0.1.0 基线稳定后再打开；安全更新不受此限制
+    open-pull-requests-limit: 0
     groups:
       python-minor:
         patterns: ["*"]
@@ -17,7 +18,8 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 2
+    # 版本更新先暂停，等 v0.1.0 基线稳定后再打开；安全更新不受此限制
+    open-pull-requests-limit: 0
     groups:
       frontend-minor:
         patterns: ["*"]
@@ -30,7 +32,8 @@ updates:
     directory: /backend/runner
     schedule:
       interval: weekly
-    open-pull-requests-limit: 2
+    # 版本更新先暂停，等 v0.1.0 基线稳定后再打开；安全更新不受此限制
+    open-pull-requests-limit: 0
     groups:
       runner-minor:
         patterns: ["*"]
@@ -43,7 +46,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 2
+    # 版本更新先暂停，等 v0.1.0 基线稳定后再打开；安全更新不受此限制
+    open-pull-requests-limit: 0
     groups:
       actions:
         patterns: ["*"]
