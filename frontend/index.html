@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <title>Aster QA · AI 测试管理平台</title>
+    <style>
+      /* React 挂载前先把底色定下来，避免深色模式下闪一下白屏 */
+      html, body, #root { min-height: 100%; }
+      body { margin: 0; background: #f4f6fb; }
+      html[data-theme='dark'] body { background: #141414; }
+    </style>
+    <script>
+      // 与 src/theme/ThemeContext.tsx 的 initialMode 保持同一套规则
+      (function () {
+        try {
+          var saved = localStorage.getItem('qa_theme');
+          var mode =
+            saved === 'light' || saved === 'dark'
+              ? saved
+              : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+          document.documentElement.dataset.theme = mode;
+          document.documentElement.style.colorScheme = mode;
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

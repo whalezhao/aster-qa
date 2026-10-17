@@ -1,0 +1,45 @@
+#
+# 执行 worker：Python（跑队列）+ Node（midscene 执行器）+ Chromium。
+#
+# 这个镜像比 API 大得多（Chromium + 系统依赖约 1.5GB）。如果只想调界面，可以
+# 只起 api + web；要真正跑用例才需要它。
+
+FROM python:3.13-slim-bookworm
+
+# Node 20（midscene 执行器需要）
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+WORKDIR /app
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PYTHONUNBUFFERED=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+COPY . .
+
+# 执行器依赖 + Chromium（--with-deps 会把系统库一起装上）
+WORKDIR /app/runner
+RUN npm ci
+RUN npx playwright install --with-deps chromium
+
+# 本地开发用 .env 提供非模型配置；容器里没有这个文件也支持直接注入 MIDSCENE_* 环境变量
+COPY runner/.env.example .env
+
+WORKDIR /app
+RUN uv sync --frozen --no-dev
+ENV PATH="/app/.venv/bin:$PATH"
+
+# 让容器的 init 进程回收 midscene 派生的浏览器子进程
+STOPSIGNAL SIGTERM
+
+CMD ["python", "worker.py"]

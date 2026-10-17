@@ -1,0 +1,52 @@
+import { useQuery } from '@tanstack/react-query';
+import { Alert, Space, Typography } from 'antd';
+import { Link } from 'react-router-dom';
+import { getModelConfig } from '../api/projects';
+
+/**
+ * 「这个项目还没配好大模型」的提示条。
+ *
+ * 平台没有全局模型兜底：模型名 / 接入地址 / API Key 必须由项目自己指定，
+ * 三项不齐就不允许执行。所以用例编辑页、功能详情页、触发执行处都要给用户
+ * 一个明确的出口，而不是让大家在点执行时才撞上 400。
+ *
+ * 项目已配好时不渲染任何东西。
+ */
+export default function ModelConfigNotice({
+  projectId,
+  action = '执行',
+}: {
+  projectId: string | null | undefined;
+  /** 这里是要做什么动作，用来把话说明白，例如「执行」/「保存并执行」 */
+  action?: string;
+}) {
+  const { data } = useQuery({
+    queryKey: ['model-config', projectId],
+    queryFn: () => getModelConfig(projectId as string),
+    enabled: Boolean(projectId),
+    staleTime: 30_000,
+  });
+
+  if (!projectId || !data || data.configured) return null;
+
+  const missing = data.missing.join('、');
+  return (
+    <Alert
+      type="warning"
+      showIcon
+      style={{ marginBottom: 16 }}
+      message={`该项目还没配好大模型，无法${action}`}
+      description={
+        <Space direction="vertical" size={4}>
+          <Typography.Text>
+            缺少：<Typography.Text strong>{missing}</Typography.Text>
+          </Typography.Text>
+          <Typography.Text type="secondary">
+            平台不提供全局模型，每个项目必须自己指定模型。
+            到 <Link to={`/projects/${projectId}`}>项目详情 → 大模型配置</Link> 补齐后即可{action}。
+          </Typography.Text>
+        </Space>
+      }
+    />
+  );
+}

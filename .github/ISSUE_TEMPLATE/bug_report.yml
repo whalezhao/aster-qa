@@ -1,0 +1,51 @@
+name: Bug report
+description: Something is broken in Aster QA
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not include API keys, tokens, `.env` contents, database dumps, or
+        execution artifacts in this report.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and the expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Test cases / AI drafting
+        - Tasks and executions
+        - Reports and signoff
+        - Stats
+        - Webhooks
+        - Docker / deployment
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: v0.1.0 or git sha
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Remove secrets, tokens, and personal data first.
+      render: shell

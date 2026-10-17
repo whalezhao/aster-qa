@@ -1,0 +1,102 @@
+name: aster-qa
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://qa:${POSTGRES_PASSWORD:-qa}@postgres:5432/qa_manage
+  SECRET_KEY: ${SECRET_KEY:-dev-only-change-me}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+  ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-720}
+  RUNNER_DIR: runner
+  CASE_TIMEOUT_MS: ${CASE_TIMEOUT_MS:-600000}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: qa
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qa}
+      POSTGRES_DB: qa_manage
+    # 本地开发（不走容器）时后端要连 localhost:5432
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qa -d qa_manage"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+    volumes:
+      # worker 产出的报告/产物由 API 托管，两个容器必须共享同一份目录
+      - run_artifacts:/app/runner/.runs
+      - midscene_global:/app/runner/midscene_run
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    # Docker Desktop（Mac/Windows）里容器默认出不了宿主机网络，
+    # 模型/被测应用在宿主机或局域网时，把 .env 的 WORKER_NETWORK 设成 host，
+    # 并把 WORKER_DATABASE_URL 指向 127.0.0.1（postgres 已发布端口）。
+    network_mode: ${WORKER_NETWORK:-bridge}
+    # 每秒并发受全局上限约束；这里只限制单个 worker 进程最多开几个槽位
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
+    # 回收 midscene 派生的浏览器子进程
+    init: true
+    environment:
+      <<: *backend-env
+      DATABASE_URL: ${WORKER_DATABASE_URL:-postgresql+asyncpg://qa:${POSTGRES_PASSWORD:-qa}@postgres:5432/qa_manage}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+      WORKER_STALE_SECONDS: ${WORKER_STALE_SECONDS:-90}
+      HEADLESS: "true"
+      # 容器内以 root 运行，Chromium 沙箱会拒绝启动
+      CHROMIUM_NO_SANDBOX: "1"
+    volumes:
+      - run_artifacts:/app/runner/.runs
+      - midscene_global:/app/runner/midscene_run
+    depends_on:
+      api:
+        condition: service_healthy
+    # 缩容/重启时给正在跑的用例留足时间，别把 run 中途杀掉
+    stop_grace_period: 900s
+
+  web:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  run_artifacts:
+  midscene_global:
