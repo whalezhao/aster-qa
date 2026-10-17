@@ -6,6 +6,7 @@ import { ProLayout } from '@ant-design/pro-components';
 import {
   AppstoreOutlined,
   BarChartOutlined,
+  ClusterOutlined,
   DashboardOutlined,
   FileSearchOutlined,
   MoonOutlined,
@@ -38,7 +39,16 @@ const menuRoutes = [
 ];
 
 /** 详情页（/teams/:id、/runs/:id …）也要让父菜单保持高亮。 */
-const MENU_PREFIXES = ['/projects', '/teams', '/users', '/tasks', '/executions', '/runs', '/stats'];
+const MENU_PREFIXES = [
+  '/projects',
+  '/teams',
+  '/users',
+  '/tasks',
+  '/executions',
+  '/runs',
+  '/stats',
+  '/workers',
+];
 
 /**
  * 应用外壳：Ant Design Pro 的 ProLayout（浅色侧栏 + 顶栏），
@@ -88,6 +98,14 @@ export default function AppShell() {
   });
 
   const activePath = MENU_PREFIXES.find((p) => location.pathname.startsWith(p)) ?? '/';
+  const canSeeWorkers = user?.teams.some((t) => t.role !== 'member') ?? false;
+  const routes = canSeeWorkers
+    ? [
+        ...menuRoutes.slice(0, 5),
+        { path: '/workers', name: '执行器', icon: <ClusterOutlined /> },
+        ...menuRoutes.slice(5),
+      ]
+    : menuRoutes;
 
   return (
     <>
@@ -101,7 +119,7 @@ export default function AppShell() {
         fixedHeader
         breadcrumbRender={false}
         location={{ pathname: location.pathname }}
-        route={{ path: '/', routes: menuRoutes }}
+        route={{ path: '/', routes }}
         // 页面自己用 PageContainer 控制留白，外层不要再加一层，否则内容会缩进两次
         contentStyle={{ padding: 0 }}
         menuItemRender={(item, dom) => (

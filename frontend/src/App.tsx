@@ -21,6 +21,7 @@ const ExecutionDetail = lazy(() => import('./pages/ExecutionDetail'));
 const BatchReport = lazy(() => import('./pages/BatchReport'));
 const RunDetail = lazy(() => import('./pages/RunDetail'));
 const Stats = lazy(() => import('./pages/Stats'));
+const Workers = lazy(() => import('./pages/Workers'));
 const Users = lazy(() => import('./pages/Users'));
 
 function PageLoading() {
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="/runs" element={<Navigate to="/executions" replace />} />
         <Route path="/runs/:rid" element={<RunDetail />} />
         <Route path="/stats" element={<Stats />} />
+        <Route path="/workers" element={<Workers />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
       </Routes>

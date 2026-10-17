@@ -187,7 +187,17 @@ export default function Executions() {
                 <Link to={`/executions/${r.id}`}>{r.name}</Link>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   {fmtDateTime(r.created_at)}
-                  {r.trigger === 'regression' ? ' · 回归' : ''}
+                  {r.trigger !== 'manual'
+                    ? ` · ${
+                        {
+                          regression: '回归',
+                          rerun: '重跑失败',
+                          schedule: '定时',
+                          ci: 'CI',
+                        }[r.trigger] ?? r.trigger
+                      }`
+                    : ''}
+                  {r.environment_name ? ` · 环境 ${r.environment_name}` : ''}
                 </Typography.Text>
               </Space>
             ),

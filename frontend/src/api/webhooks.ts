@@ -3,11 +3,12 @@ import type { Webhook, WebhookDelivery } from './types';
 
 export interface WebhookInput {
   name: string;
+  kind?: 'generic' | 'wecom' | 'feishu' | 'dingtalk' | 'slack';
   url: string;
-  /** 创建时必填，之后留空表示不改 */
+  /** generic 创建时必填；企业 IM 渠道可空（钉钉/飞书填了会签名） */
   secret?: string;
   events: string[];
-  /** 是否连 YAML 正文一起发（用例多的时候 payload 会很大） */
+  /** 是否连 YAML 正文一起发（仅 generic 生效） */
   include_yaml?: boolean;
   is_active?: boolean;
 }

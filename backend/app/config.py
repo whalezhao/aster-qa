@@ -26,6 +26,23 @@ class Settings(BaseSettings):
     artifact_retention_days: int = 30
     artifact_keep_per_task: int = 5
 
+    # worker 心跳超时：超过这个时间没心跳就视为失联，API 的 worker 状态页也用它
+    worker_stale_seconds: int = 90
+
+    # 模型健康巡检：默认 30 分钟一次，避免频繁消耗 token
+    model_health_enabled: bool = True
+    model_health_interval_seconds: int = 1800
+    model_health_timeout_seconds: float = 20.0
+
+    # 定时任务轮询间隔
+    scheduler_poll_seconds: int = 20
+
+    # 环境变量密钥。留空时从 SECRET_KEY 派生；轮换 SECRET_KEY 前请先单独设置它，
+    # 否则已存的环境密钥会解不开。
+    environment_secret_key: str = ""
+    # 通知里拼报告链接用；留空则只发相对路径
+    public_base_url: str = ""
+
     @property
     def runner_path(self) -> Path:
         p = Path(self.runner_dir)

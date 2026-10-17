@@ -25,15 +25,17 @@ ENV UV_COMPILE_BYTECODE=1 \
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-COPY . .
-
-# 执行器依赖 + Chromium（--with-deps 会把系统库一起装上）
+# 先装执行器依赖和 Chromium，再拷业务代码 —— 只改 Python/前端代码时不用重下浏览器
 WORKDIR /app/runner
+COPY runner/package.json runner/package-lock.json ./
 RUN npm ci
 RUN npx playwright install --with-deps chromium
 
+WORKDIR /app
+COPY . .
+
 # 本地开发用 .env 提供非模型配置；容器里没有这个文件也支持直接注入 MIDSCENE_* 环境变量
-COPY runner/.env.example .env
+COPY runner/.env.example runner/.env
 
 WORKDIR /app
 RUN uv sync --frozen --no-dev

@@ -44,6 +44,15 @@ export interface TeamMember {
   user: Pick<User, 'id' | 'username' | 'display_name'>;
 }
 
+export interface ProjectHealth {
+  status: 'healthy' | 'unhealthy' | 'unknown';
+  message: string | null;
+  model_name: string | null;
+  latency_ms: number | null;
+  checked_at: string | null;
+  source: 'periodic' | 'manual' | null;
+}
+
 export interface Project {
   id: string;
   team_id: string;
@@ -55,6 +64,7 @@ export interface Project {
   /** 项目是否已配好大模型（模型名 + 接入地址 + API Key 齐全）。
    *  没有全局兜底：没配就不允许执行该项目的用例。 */
   has_model_config: boolean;
+  model_health?: ProjectHealth | null;
 }
 
 export interface Iteration {
@@ -103,6 +113,8 @@ export interface TestCase {
   effective_stage: FeatureStage;
   /** 用例本身不存项目，后端从 feature 上溯带出来，供「该项目未配模型」的提示用 */
   project_id: string | null;
+  /** 最新版本号（版本历史） */
+  version_no?: number | null;
 }
 
 export interface ValidateResult {
@@ -161,6 +173,10 @@ export interface Task {
   iteration_id: string | null;
   status: TaskStatus;
   retry_count: number;
+  environment_name: string | null;
+  gate_enabled: boolean;
+  gate_min_pass_rate: number | null;
+  gate_fail_on_p0: boolean;
   case_selection_mode: string;
   /** 下面几个由后端聚合填充 —— 任务列表要能直接看出组合规模与最近执行情况 */
   feature_count: number;
@@ -168,6 +184,11 @@ export interface Task {
   last_batch_id: string | null;
   last_batch_status: string | null;
   last_run_at: string | null;
+  /** 定时计划摘要 */
+  schedule_enabled: boolean;
+  schedule_cron: string | null;
+  schedule_next_run_at: string | null;
+  schedule_last_status: string | null;
   /** 人工签名：这个任务的用例集有没有人签过 */
   signed: boolean;
   signed_at: string | null;
@@ -239,6 +260,9 @@ export interface Run {
   /** 非用例原因导致的失败：ai_quota（额度用尽）/ ai_service / network。
    *  这些不计入统计通过率，UI 上要和真实的用例失败区分开。 */
   failure_kind: string | null;
+  environment_id: string | null;
+  environment_name: string | null;
+  environment_base_url: string | null;
 }
 
 export interface RunProgress {
@@ -408,6 +432,7 @@ export interface Webhook {
   id: string;
   team_id: string;
   name: string;
+  kind: 'generic' | 'wecom' | 'feishu' | 'dingtalk' | 'slack';
   url: string;
   events: string[];
   include_yaml: boolean;
@@ -454,4 +479,166 @@ export interface AiCheckResult {
   model_name: string | null;
   error: string | null;
   created_at: string | null;
+}
+
+// ===== 预检 / 执行器 / 环境 / CI / 定时 / 版本 / 覆盖 =====
+
+export interface PreflightCheck {
+  key: string;
+  ok: boolean;
+  severity: 'ok' | 'warning' | 'error' | 'info';
+  message: string;
+  overridable: boolean;
+  project_id: string | null;
+  project_name: string | null;
+}
+
+export interface PreflightResult {
+  checks: PreflightCheck[];
+  can_run: boolean;
+  environment_name: string;
+}
+
+export interface WorkerInfo {
+  id: string;
+  hostname: string | null;
+  pid: number | null;
+  slots: number;
+  started_at: string | null;
+  heartbeat_at: string | null;
+  age_seconds: number;
+  active_runs: number;
+}
+
+export interface WorkerStatus {
+  workers: WorkerInfo[];
+  stale_workers: number;
+  queued_runs: number;
+  active_runs: number;
+  max_concurrent_runs: number;
+  worker_stale_seconds: number;
+  avg_duration_ms: number | null;
+  oldest_queue_seconds: number | null;
+}
+
+export interface EnvironmentVariable {
+  id: string;
+  key: string;
+  value: string | null;
+  is_secret: boolean;
+  value_set: boolean;
+  description: string | null;
+}
+
+export interface Environment {
+  id: string;
+  project_id: string;
+  name: string;
+  base_url: string | null;
+  is_default: boolean;
+  variables: EnvironmentVariable[];
+}
+
+export interface EnvironmentVariableInput {
+  key: string;
+  value?: string | null;
+  is_secret?: boolean;
+  description?: string | null;
+  clear?: boolean;
+}
+
+export interface ApiToken {
+  id: string;
+  team_id: string;
+  name: string;
+  token_prefix: string;
+  scopes: string[];
+  created_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  last_used_at: string | null;
+}
+
+export interface ApiTokenCreated extends ApiToken {
+  token: string;
+}
+
+export interface TaskSchedule {
+  id: string;
+  task_id: string;
+  cron: string;
+  timezone: string;
+  enabled: boolean;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_batch_id: string | null;
+  last_status: 'queued' | 'skipped_overlap' | 'failed' | null;
+  last_error: string | null;
+  overlap_skipped: number;
+}
+
+export interface CaseVersion {
+  id: string;
+  case_id: string;
+  version_no: number;
+  name: string;
+  description: string | null;
+  yaml_content: string;
+  priority: Priority | null;
+  defect_ids: string | null;
+  stage_override: FeatureStage | null;
+  is_active: boolean;
+  change_source: 'create' | 'manual' | 'ai_fix' | 'rollback' | 'backfill';
+  change_note: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface GateResult {
+  status: 'disabled' | 'pending' | 'no_data' | 'passed' | 'failed';
+  passed: boolean;
+  enabled: boolean;
+  reasons: string[];
+  min_pass_rate: number | null;
+  fail_on_p0: boolean;
+  total: number;
+  passed_cases: number;
+  failed_cases: number;
+  not_run: number;
+  failed_p0: number;
+  execution_failures: number;
+  excluded_runs: number;
+  pass_rate: number | null;
+}
+
+export interface CoverageItem {
+  requirement_id: string;
+  features: string[];
+  feature_ids: string[];
+  projects: string[];
+  case_count: number;
+  executed: number;
+  passed: number;
+  failed: number;
+  infra: number;
+  not_run: number;
+  coverage_rate: number;
+  pass_rate: number | null;
+  status: 'covered' | 'partial' | 'not_run' | 'infra' | 'failed' | 'gap';
+  last_run_at: string | null;
+}
+
+export interface CoverageResult {
+  summary: Record<string, number>;
+  requirements: CoverageItem[];
+}
+
+export interface AiFixResult {
+  run_id: string;
+  proposed_yaml: string;
+  explanation: string;
+  diff: string;
+  yaml_ok: boolean;
+  yaml_errors: string[];
+  model_name: string | null;
 }

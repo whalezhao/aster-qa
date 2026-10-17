@@ -120,6 +120,16 @@ class MemberUpdate(In):
 # ------------------------------------------------------------------- 项目 / 迭代 / 标签
 
 
+class ProjectHealthOut(BaseModel):
+    model_config = ORM
+    status: str
+    message: str | None = None
+    model_name: str | None = None
+    latency_ms: int | None = None
+    checked_at: datetime | None = None
+    source: str | None = None
+
+
 class ProjectOut(BaseModel):
     model_config = ORM
     id: uuid.UUID
@@ -132,6 +142,8 @@ class ProjectOut(BaseModel):
     # 项目是否已配置自己的大模型。没配就不允许执行该项目的用例，
     # 前端列表和用例页据此提示。默认 False，由路由填充。
     has_model_config: bool = False
+    # 最近一次模型连通性巡检结果；由列表接口批量填充，避免 N+1
+    model_health: ProjectHealthOut | None = None
 
 
 class ProjectCreate(In):
@@ -170,6 +182,7 @@ class ModelConfigOut(BaseModel):
     token_quota: int | None = None
     # 本自然月已用（执行器 + 平台侧），用于界面上直接显示「用了多少 / 限额多少」
     month_tokens_used: int = 0
+    model_health: ProjectHealthOut | None = None
 
 
 class ModelConfigIn(In):
@@ -190,6 +203,21 @@ class ModelConfigIn(In):
     # 0 或不传 = 不改；要清空限额用 clear_token_quota
     token_quota: int | None = Field(default=None, ge=0)
     clear_token_quota: bool = False
+
+
+class ModelConfigTestIn(In):
+    """测试连接：留空的字段用已保存的配置，方便保存前先试。"""
+
+    model_name: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+
+
+class ModelConfigTestOut(BaseModel):
+    ok: bool
+    # 直接可展示的一句话；失败时说明是地址、密钥还是网络的问题
+    message: str
+    latency_ms: int = 0
 
 
 class IterationOut(BaseModel):
@@ -296,6 +324,8 @@ class TestCaseOut(BaseModel):
     # 用例编辑页要据此提示「这个项目还没配模型」，但用例本身只知道 feature，
     # 所以把 project_id 一并带上，省一次来回
     project_id: uuid.UUID | None = None
+    # 最新版本号；前端版本历史入口用
+    version_no: int | None = None
 
 
 class TestCaseBrief(BaseModel):
@@ -316,6 +346,9 @@ class TestCaseCreate(In):
     priority: str | None = None
     defect_ids: str | None = Field(default=None, max_length=255)
     stage_override: str | None = None
+    # 版本来源：手动 / AI 修复 / AI 草稿；不参与 TestCase 建表
+    change_source: str | None = None
+    change_note: str | None = None
 
 
 class TestCaseUpdate(In):
@@ -326,6 +359,8 @@ class TestCaseUpdate(In):
     defect_ids: str | None = Field(default=None, max_length=255)
     stage_override: str | None = None
     is_active: bool | None = None
+    change_source: str | None = None
+    change_note: str | None = None
 
 
 class YamlValidateIn(In):
@@ -377,7 +412,16 @@ class TaskOut(BaseModel):
     iteration_id: uuid.UUID | None
     status: str
     retry_count: int
+    environment_name: str | None = None
+    gate_enabled: bool = False
+    gate_min_pass_rate: float | None = None
+    gate_fail_on_p0: bool = False
     case_selection_mode: str
+    # 定时计划摘要，由列表接口批量填充
+    schedule_enabled: bool = False
+    schedule_cron: str | None = None
+    schedule_next_run_at: datetime | None = None
+    schedule_last_status: str | None = None
     # 下面这些由列表接口聚合填充 —— 任务粒度的列表要能直接看出
     # 「组合了几个功能、多少用例、最近跑得怎么样」
     feature_count: int = 0
@@ -402,6 +446,10 @@ class TaskCreate(In):
     project_id: uuid.UUID | None = None
     iteration_id: uuid.UUID | None = None
     retry_count: int = Field(default=0, ge=0, le=5)
+    environment_name: str | None = Field(default=None, max_length=64)
+    gate_enabled: bool = False
+    gate_min_pass_rate: float | None = Field(default=None, ge=0, le=1)
+    gate_fail_on_p0: bool = False
     feature_ids: list[uuid.UUID] = []
     tag_ids: list[uuid.UUID] = []
     run_now: bool = False
@@ -412,6 +460,10 @@ class TaskUpdate(In):
     description: str | None = None
     iteration_id: uuid.UUID | None = None
     retry_count: int | None = Field(default=None, ge=0, le=5)
+    environment_name: str | None = Field(default=None, max_length=64)
+    gate_enabled: bool | None = None
+    gate_min_pass_rate: float | None = Field(default=None, ge=0, le=1)
+    gate_fail_on_p0: bool | None = None
 
 
 class CaseIdList(In):
@@ -482,6 +534,9 @@ class RunOut(BaseModel):
     model_name: str | None
     error_message: str | None
     failure_kind: str | None = None
+    environment_id: uuid.UUID | None = None
+    environment_name: str | None = None
+    environment_base_url: str | None = None
 
 
 class RunProgressOut(BaseModel):
@@ -538,6 +593,10 @@ class BatchOut(BaseModel):
     iteration_id: uuid.UUID | None = None
     name: str
     trigger: str
+    environment_name: str | None = None
+    parent_batch_id: uuid.UUID | None = None
+    gate_status: str | None = None
+    gate_detail: dict | None = None
     created_at: datetime
     # 执行人（批次创建者），合规报告要写清楚是谁触发/执行了这次测试
     created_by_name: str | None = None
@@ -568,6 +627,7 @@ class BatchRunOut(BaseModel):
     duration_ms: int | None = None
     model_name: str | None = None
     failure_kind: str | None = None
+    environment_name: str | None = None
     report_available: bool = False
     started_at: datetime | None = None
     shard_index: int | None = None
@@ -635,6 +695,7 @@ class WebhookOut(BaseModel):
     id: uuid.UUID
     team_id: uuid.UUID
     name: str
+    kind: str = "generic"
     url: str
     events: list[str]
     include_yaml: bool
@@ -649,8 +710,10 @@ class WebhookOut(BaseModel):
 
 class WebhookCreate(In):
     name: str = Field(min_length=1, max_length=128)
+    kind: str = "generic"
     url: str = Field(min_length=8, max_length=500)
-    secret: str = Field(min_length=8, max_length=255)
+    # generic 必须配；企业 IM 渠道的 URL 自带凭据，可以留空
+    secret: str | None = Field(default=None, max_length=255)
     events: list[str] = Field(min_length=1)
     include_yaml: bool = False
     is_active: bool = True
@@ -658,9 +721,10 @@ class WebhookCreate(In):
 
 class WebhookUpdate(In):
     name: str | None = Field(default=None, min_length=1, max_length=128)
+    kind: str | None = None
     url: str | None = Field(default=None, min_length=8, max_length=500)
     # 传了就是换密钥；不传保持原样
-    secret: str | None = Field(default=None, min_length=8, max_length=255)
+    secret: str | None = Field(default=None, max_length=255)
     events: list[str] | None = None
     include_yaml: bool | None = None
     is_active: bool | None = None
@@ -710,6 +774,209 @@ class AiCheckOut(BaseModel):
     model_name: str | None = None
     error: str | None = None
     created_at: datetime | None = None
+
+
+class PreflightCheckOut(BaseModel):
+    key: str
+    ok: bool
+    severity: str
+    message: str
+    overridable: bool = False
+    project_id: uuid.UUID | None = None
+    project_name: str | None = None
+
+
+class PreflightOut(BaseModel):
+    checks: list[PreflightCheckOut]
+    can_run: bool
+    environment_name: str
+
+
+class WorkerOut(BaseModel):
+    id: str
+    hostname: str | None = None
+    pid: int | None = None
+    slots: int
+    started_at: datetime | None = None
+    heartbeat_at: datetime | None = None
+    age_seconds: int = 0
+    active_runs: int = 0
+
+
+class WorkerStatusOut(BaseModel):
+    workers: list[WorkerOut]
+    stale_workers: int = 0
+    queued_runs: int = 0
+    active_runs: int = 0
+    max_concurrent_runs: int = 4
+    worker_stale_seconds: int = 90
+    avg_duration_ms: int | None = None
+    oldest_queue_seconds: int | None = None
+
+
+class EnvironmentVariableOut(BaseModel):
+    id: uuid.UUID
+    key: str
+    value: str | None = None
+    is_secret: bool
+    value_set: bool
+    description: str | None = None
+
+
+class EnvironmentOut(BaseModel):
+    model_config = ORM
+    id: uuid.UUID
+    project_id: uuid.UUID
+    name: str
+    base_url: str | None
+    is_default: bool
+    variables: list[EnvironmentVariableOut] = []
+
+
+class EnvironmentIn(In):
+    name: str = Field(min_length=1, max_length=64)
+    base_url: str | None = Field(default=None, max_length=512)
+
+
+class EnvironmentUpdate(In):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    base_url: str | None = Field(default=None, max_length=512)
+
+
+class EnvironmentVariableIn(In):
+    key: str = Field(min_length=1, max_length=64)
+    value: str | None = None
+    is_secret: bool = False
+    description: str | None = Field(default=None, max_length=255)
+    clear: bool = False
+
+
+class EnvironmentVariablesIn(In):
+    variables: list[EnvironmentVariableIn] = []
+
+
+class ApiTokenOut(BaseModel):
+    model_config = ORM
+    id: uuid.UUID
+    team_id: uuid.UUID
+    name: str
+    token_prefix: str
+    scopes: list[str] = []
+    created_at: datetime
+    expires_at: datetime | None = None
+    revoked_at: datetime | None = None
+    last_used_at: datetime | None = None
+
+
+class ApiTokenCreateIn(In):
+    name: str = Field(min_length=1, max_length=128)
+    scopes: list[str] = ["run", "read"]
+    expires_at: datetime | None = None
+
+
+class ApiTokenCreatedOut(ApiTokenOut):
+    # 只在创建响应里出现一次，之后任何接口都不回明文
+    token: str
+
+
+class ScheduleOut(BaseModel):
+    model_config = ORM
+    id: uuid.UUID
+    task_id: uuid.UUID
+    cron: str
+    timezone: str
+    enabled: bool
+    next_run_at: datetime | None = None
+    last_run_at: datetime | None = None
+    last_batch_id: uuid.UUID | None = None
+    last_status: str | None = None
+    last_error: str | None = None
+    overlap_skipped: int = 0
+
+
+class ScheduleIn(In):
+    cron: str = Field(min_length=1, max_length=64)
+    timezone: str = Field(default="Asia/Shanghai", max_length=64)
+    enabled: bool = True
+
+
+class CaseVersionOut(BaseModel):
+    model_config = ORM
+    id: uuid.UUID
+    case_id: uuid.UUID
+    version_no: int
+    name: str
+    description: str | None = None
+    yaml_content: str
+    priority: str | None = None
+    defect_ids: str | None = None
+    stage_override: str | None = None
+    is_active: bool
+    change_source: str
+    change_note: str | None = None
+    created_by: uuid.UUID | None = None
+    created_at: datetime
+
+
+class CaseDiffOut(BaseModel):
+    from_version: int
+    to_version: int
+    diff: str
+
+
+class AiFixIn(In):
+    run_id: uuid.UUID | None = None
+
+
+class AiFixOut(BaseModel):
+    run_id: uuid.UUID
+    proposed_yaml: str
+    explanation: str
+    diff: str
+    yaml_ok: bool
+    yaml_errors: list[str] = []
+    model_name: str | None = None
+
+
+class GateOut(BaseModel):
+    status: str
+    passed: bool
+    enabled: bool = False
+    reasons: list[str] = []
+    min_pass_rate: float | None = None
+    fail_on_p0: bool = False
+    total: int = 0
+    passed_cases: int = 0
+    failed_cases: int = 0
+    not_run: int = 0
+    failed_p0: int = 0
+    execution_failures: int = 0
+    excluded_runs: int = 0
+    pass_rate: float | None = None
+
+
+class CoverageOut(BaseModel):
+    summary: dict = {}
+    requirements: list[dict] = []
+
+
+class CiRunOut(BaseModel):
+    batch_id: uuid.UUID
+    run_ids: list[uuid.UUID]
+    case_count: int = 0
+    gate: GateOut | None = None
+
+
+class CiBatchOut(BaseModel):
+    id: uuid.UUID
+    status: str
+    running: bool = False
+    total: int = 0
+    passed: int = 0
+    failed: int = 0
+    excluded_runs: int = 0
+    environment_name: str | None = None
+    gate: GateOut | None = None
 
 
 MeOut.model_rebuild()

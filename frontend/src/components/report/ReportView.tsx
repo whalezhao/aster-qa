@@ -36,6 +36,7 @@ import type {
   ReportTask,
 } from '../../api/runs';
 import { fmtDuration, fmtTokens } from '../../lib/format';
+import AiFixModal from '../AiFixModal';
 import KeyframePlayer from './KeyframePlayer';
 
 const NODE_LABELS: Record<string, string> = {
@@ -307,6 +308,7 @@ function CaseCard({
   onToggle: () => void;
 }) {
   const [replay, setReplay] = useState<ReportKeyframe[] | null>(null);
+  const [fixOpen, setFixOpen] = useState(false);
   const frames = useMemo(() => caseKeyframes(item), [item]);
   return (
     <article className="qa-report-case">
@@ -334,6 +336,19 @@ function CaseCard({
             <Link to={`/cases/${item.caseUuid}`} onClick={(event) => event.stopPropagation()}>
               用例
             </Link>
+          )}
+          {item.caseUuid && item.status === 'failed' && (
+            <Button
+              type="text"
+              size="small"
+              onClick={(event) => {
+                event.stopPropagation();
+                setFixOpen(true);
+              }}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              AI 修复
+            </Button>
           )}
           {frames.length > 1 && (
             <Button
@@ -375,6 +390,12 @@ function CaseCard({
       >
         {replay && <KeyframePlayer frames={replay} assetBase={assetBase} />}
       </Modal>
+      <AiFixModal
+        open={fixOpen}
+        caseId={item.caseUuid ?? ''}
+        caseName={item.name}
+        onClose={() => setFixOpen(false)}
+      />
     </article>
   );
 }

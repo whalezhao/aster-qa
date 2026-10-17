@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Form, Input, Modal, Popconfirm, Space, Tag } from 'antd';
+import { App, Button, Form, Input, Modal, Popconfirm, Space, Tag, Tooltip } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { getProjects, createProject, deleteProject, updateProject } from '../../api/projects';
 import { apiError } from '../../api/client';
@@ -78,17 +78,39 @@ export default function ProjectsTab({ tid }: { tid: string }) {
           },
           {
             title: '大模型',
-            width: 130,
+            width: 150,
             sorter: byNumber<Project>((r) => (r.has_model_config ? 1 : 0)),
-            render: (_, r) =>
-              r.has_model_config ? (
-                <Tag color="success">已配置</Tag>
-              ) : (
-                // 没配模型的项目跑不了任何用例，列表里要一眼能扫出来
-                <Link to={`/projects/${r.id}`}>
-                  <Tag color="warning">未配置</Tag>
-                </Link>
-              ),
+            render: (_, r) => (
+              <Space direction="vertical" size={2}>
+                {r.has_model_config ? (
+                  <Tag color="success">已配置</Tag>
+                ) : (
+                  // 没配模型的项目跑不了任何用例，列表里要一眼能扫出来
+                  <Link to={`/projects/${r.id}`}>
+                    <Tag color="warning">未配置</Tag>
+                  </Link>
+                )}
+                {r.model_health && (
+                  <Tooltip title={r.model_health.message}>
+                    <Tag
+                      color={
+                        r.model_health.status === 'healthy'
+                          ? 'green'
+                          : r.model_health.status === 'unhealthy'
+                            ? 'red'
+                            : 'default'
+                      }
+                    >
+                      {r.model_health.status === 'healthy'
+                        ? '模型正常'
+                        : r.model_health.status === 'unhealthy'
+                          ? '模型异常'
+                          : '未检测'}
+                    </Tag>
+                  </Tooltip>
+                )}
+              </Space>
+            ),
           },
           {
             title: 'Base URL',

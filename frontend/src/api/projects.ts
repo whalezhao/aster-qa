@@ -1,5 +1,5 @@
 import { http } from './client';
-import type { Project } from './types';
+import type { Project, ProjectHealth } from './types';
 
 export interface ProjectInput {
   name?: string;
@@ -51,6 +51,7 @@ export interface ModelConfig {
   token_quota: number | null;
   /** 本月已用（执行器 + 平台侧 AI 调用） */
   month_tokens_used: number;
+  model_health?: ProjectHealth | null;
 }
 
 export interface ModelConfigInput {
@@ -86,4 +87,23 @@ export async function setModelConfig(
 
 export async function clearModelConfig(projectId: string): Promise<void> {
   await http.delete(`/api/projects/${projectId}/model-config`);
+}
+
+export interface ModelTestResult {
+  ok: boolean;
+  /** 成功/失败原因，界面直接展示 */
+  message: string;
+  latency_ms: number;
+}
+
+/** 用当前表单值实际请求一次模型；没填的项后端会回退到已保存的配置。 */
+export async function testModelConfig(
+  projectId: string,
+  input: Pick<ModelConfigInput, 'model_name' | 'base_url' | 'api_key'>,
+): Promise<ModelTestResult> {
+  const { data } = await http.post<ModelTestResult>(
+    `/api/projects/${projectId}/model-config/test`,
+    input,
+  );
+  return data;
 }

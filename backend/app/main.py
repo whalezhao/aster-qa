@@ -12,13 +12,18 @@ from sqlalchemy import text
 from .ai_review import assess_loop
 from .api import (
     ai,
+    api_tokens,
     auth,
     batches,
     cases,
+    ci,
+    environments,
     features,
     iterations,
+    preflight,
     projects,
     runs,
+    schedules,
     settings,
     stats,
     tags,
@@ -28,11 +33,14 @@ from .api import (
     teams,
     users,
     webhooks,
+    workers,
 )
 from .config import get_settings
 from .db import engine
 from .migrate import run_migrations
+from .model_health import model_health_loop
 from .retention import cleanup_loop
+from .scheduler import scheduler_loop
 from .webhook import deliver_loop
 
 log = logging.getLogger("api")
@@ -63,6 +71,11 @@ async def lifespan(app: FastAPI):
             "SECRET_KEY 只有 %d 字节，建议改成 32 字节以上的随机值",
             len(get_settings().secret_key),
         )
+    if not get_settings().environment_secret_key:
+        log.warning(
+            "未设置 ENVIRONMENT_SECRET_KEY，环境变量密钥将从 SECRET_KEY 派生；"
+            "轮换 SECRET_KEY 前请先把它固定下来"
+        )
     # webhook 投递跟 API 同进程、但独立于请求：签名接口只把投递入队，不等发送。
     # 也不能放进 worker —— 那是串行跑 midscene 的，一次执行可能几十分钟。
     sender = asyncio.create_task(deliver_loop())
@@ -70,10 +83,16 @@ async def lifespan(app: FastAPI):
     assessor = asyncio.create_task(assess_loop())
     # 执行产物按保留策略定期清理（启动先清一次）
     janitor = asyncio.create_task(cleanup_loop())
+    # 定时回归：行锁认领，多个 API 副本也只会触发一次
+    scheduler = asyncio.create_task(scheduler_loop())
+    # 模型健康巡检：默认 30 分钟一次，结果供项目列表与预检使用
+    health = asyncio.create_task(model_health_loop())
     yield
     sender.cancel()
     assessor.cancel()
     janitor.cancel()
+    scheduler.cancel()
+    health.cancel()
     await engine.dispose()
 
 
@@ -106,6 +125,12 @@ app.include_router(stats.router)
 app.include_router(webhooks.router)
 app.include_router(ai.router)
 app.include_router(settings.router)
+app.include_router(environments.router)
+app.include_router(api_tokens.router)
+app.include_router(ci.router)
+app.include_router(preflight.router)
+app.include_router(workers.router)
+app.include_router(schedules.router)
 
 
 @app.middleware("http")

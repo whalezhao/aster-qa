@@ -22,6 +22,8 @@ import { runTaskPrecheck } from '../api/ai';
 import { apiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import AiInsightCard from '../components/AiInsightCard';
+import PreflightModal from '../components/PreflightModal';
+import TaskScheduleTab from '../components/TaskScheduleTab';
 import {
   BATCH_STATUS_COLORS,
   BATCH_STATUS_LABELS,
@@ -47,6 +49,7 @@ export default function TaskDetail() {
   const [reportSignOpen, setReportSignOpen] = useState(false);
   const [reportBatchId, setReportBatchId] = useState<string | undefined>();
   const [reportNote, setReportNote] = useState('');
+  const [preflightOpen, setPreflightOpen] = useState(false);
   // 签名前的 AI 预检：只给建议，不阻止签名
   const [precheck, setPrecheck] = useState<AiCheckResult | null>(null);
 
@@ -179,7 +182,7 @@ export default function TaskDetail() {
             type="primary"
             icon={<PlayCircleOutlined />}
             loading={runMutation.isPending}
-            onClick={() => runMutation.mutate()}
+            onClick={() => setPreflightOpen(true)}
           >
             立即执行
           </Button>
@@ -194,6 +197,28 @@ export default function TaskDetail() {
             <Tag color={TASK_STATUS_COLORS[task.status]}>{TASK_STATUS_LABELS[task.status] ?? task.status}</Tag>
           </ProDescriptions.Item>
           <ProDescriptions.Item label="重试次数">{task.retry_count}</ProDescriptions.Item>
+          <ProDescriptions.Item label="环境">{task.environment_name || '默认'}</ProDescriptions.Item>
+          <ProDescriptions.Item label="质量门禁">
+            {task.gate_enabled ? (
+              <Space size={4}>
+                <Tag color="blue">
+                  通过率 ≥ {Math.round((task.gate_min_pass_rate ?? 0) * 100)}%
+                </Tag>
+                {task.gate_fail_on_p0 && <Tag color="red">P0 失败即拒绝</Tag>}
+              </Space>
+            ) : (
+              <Tag>未启用</Tag>
+            )}
+          </ProDescriptions.Item>
+          <ProDescriptions.Item label="定时">
+            {task.schedule_enabled ? (
+              <Tooltip title={`下次 ${fmtDateTime(task.schedule_next_run_at)}`}>
+                <Tag color="green">{task.schedule_cron}</Tag>
+              </Tooltip>
+            ) : (
+              <Tag>未启用</Tag>
+            )}
+          </ProDescriptions.Item>
           <ProDescriptions.Item label="用例选择">{task.case_selection_mode}</ProDescriptions.Item>
           <ProDescriptions.Item label="描述" span={2}>
             {task.description || '-'}
@@ -217,7 +242,19 @@ export default function TaskDetail() {
           { key: 'tags', label: '标签', children: <TagsTab tid={tid} teamId={task?.team_id} /> },
           { key: 'features', label: '功能', children: <FeaturesTab tid={tid} /> },
           { key: 'batches', label: '执行记录', children: <BatchesTab tid={tid} /> },
+          { key: 'schedule', label: '定时', children: <TaskScheduleTab taskId={tid} /> },
         ]}
+      />
+
+      <PreflightModal
+        open={preflightOpen}
+        taskId={tid}
+        taskName={task?.name}
+        onCancel={() => setPreflightOpen(false)}
+        onRun={() => {
+          setPreflightOpen(false);
+          runMutation.mutate();
+        }}
       />
 
       <Modal

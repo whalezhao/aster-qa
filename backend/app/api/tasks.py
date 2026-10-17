@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import and_, delete, func, or_, select
 
 from ..deps import CurrentUser, DbSession, get_team_membership, require_team_role, visible_team_ids
+from ..environments import resolve_run_environments
 from ..models import (
     Feature,
     Project,
@@ -12,6 +13,7 @@ from ..models import (
     Tag,
     TaskCase,
     TaskFeature,
+    TaskSchedule,
     TaskSignoff,
     TaskTag,
     TestCase,
@@ -90,6 +92,13 @@ async def _enrich_tasks(db, tasks: list[TestTask]) -> list[TaskOut]:
     ).all()
     signoff_by_task = {row[0]: row[1] for row in signoffs}
 
+    schedules = {
+        row.task_id: row
+        for row in (
+            await db.execute(select(TaskSchedule).where(TaskSchedule.task_id.in_(ids)))
+        ).scalars()
+    }
+
     batch_status: dict[uuid.UUID, str] = {}
     if batch_by_task:
         agg = (
@@ -149,6 +158,12 @@ async def _enrich_tasks(db, tasks: list[TestTask]) -> list[TaskOut]:
         if task.id in signoff_by_task:
             item.signed = True
             item.signed_at = signoff_by_task[task.id]
+        if task.id in schedules:
+            schedule = schedules[task.id]
+            item.schedule_enabled = schedule.enabled
+            item.schedule_cron = schedule.cron
+            item.schedule_next_run_at = schedule.next_run_at
+            item.schedule_last_status = schedule.last_status
         out.append(item)
     return out
 
@@ -217,6 +232,21 @@ async def list_my_tasks(user: CurrentUser, db: DbSession) -> list[TaskOut]:
     return await _enrich_tasks(db, list((await db.execute(stmt)).scalars()))
 
 
+async def _task_project_ids(db, task: TestTask) -> set[uuid.UUID]:
+    ids = set(
+        (
+            await db.execute(
+                select(Feature.project_id)
+                .join(TaskFeature, TaskFeature.feature_id == Feature.id)
+                .where(TaskFeature.task_id == task.id)
+            )
+        ).scalars()
+    )
+    if task.project_id is not None:
+        ids.add(task.project_id)
+    return ids
+
+
 @router.post("/api/teams/{team_id}/tasks", status_code=status.HTTP_201_CREATED)
 async def create_task(
     team_id: uuid.UUID, body: TaskCreate, user: CurrentUser, db: DbSession
@@ -261,11 +291,23 @@ async def create_task(
         project_id=projects[0].id if len(projects) == 1 else None,
         iteration_id=body.iteration_id,
         retry_count=body.retry_count,
+        environment_name=(body.environment_name or "").strip() or None,
+        gate_enabled=body.gate_enabled,
+        gate_min_pass_rate=body.gate_min_pass_rate,
+        gate_fail_on_p0=body.gate_fail_on_p0,
         case_selection_mode="snapshot",
         status="draft",
     )
     db.add(task)
     await db.flush()
+
+    if task.environment_name and project_ids:
+        try:
+            await resolve_run_environments(
+                db, task, project_ids, environment_name=task.environment_name
+            )
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     case_count = await attach_features(db, task, body.feature_ids)
     for tag_id in body.tag_ids:
@@ -293,8 +335,10 @@ async def create_task(
 
 
 @router.get("/api/tasks/{task_id}", response_model=TaskOut)
-async def get_task(task_id: uuid.UUID, user: CurrentUser, db: DbSession) -> TestTask:
-    return await require_task(db, task_id, user)
+async def get_task(task_id: uuid.UUID, user: CurrentUser, db: DbSession) -> TaskOut:
+    task = await require_task(db, task_id, user)
+    # 详情页也要显示定时摘要/门禁等由列表聚合的字段
+    return (await _enrich_tasks(db, [task]))[0]
 
 
 @router.patch("/api/tasks/{task_id}", response_model=TaskOut)
@@ -302,7 +346,18 @@ async def update_task(
     task_id: uuid.UUID, body: TaskUpdate, user: CurrentUser, db: DbSession
 ) -> TestTask:
     task = await require_task(db, task_id, user)
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    if "environment_name" in data:
+        data["environment_name"] = (data["environment_name"] or "").strip() or None
+        project_ids = await _task_project_ids(db, task)
+        if data["environment_name"] and project_ids:
+            try:
+                await resolve_run_environments(
+                    db, task, project_ids, environment_name=data["environment_name"]
+                )
+            except ValueError as exc:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    for field, value in data.items():
         setattr(task, field, value)
     await db.commit()
     await db.refresh(task)

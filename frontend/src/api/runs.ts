@@ -35,6 +35,18 @@ export async function reparseRun(id: string): Promise<{ cases: number; ai_calls:
   return data;
 }
 
+/** 只重跑这次 run 里失败用例；返回新批次。 */
+export async function rerunFailedRun(
+  id: string,
+): Promise<{ batch_id: string; run_ids: string[]; case_count: number }> {
+  const { data } = await http.post<{
+    batch_id: string;
+    run_ids: string[];
+    case_count: number;
+  }>(`/api/runs/${id}/rerun-failed`);
+  return data;
+}
+
 export async function getRunReportUrl(id: string): Promise<{ url: string }> {
   const { data } = await http.get<{ url: string }>(`/api/runs/${id}/report-url`);
   return data;

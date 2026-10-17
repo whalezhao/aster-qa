@@ -40,6 +40,7 @@ import { getIterationsByTeam } from '../api/iterations';
 import AiMascot from '../components/AiMascot';
 import SpeakButton from '../components/SpeakButton';
 import QaTable from '../components/QaTable';
+import RequirementCoverageTab from './stats/RequirementCoverageTab';
 import { useActiveTeam } from '../team/TeamContext';
 import {
   fmtDateTime,
@@ -224,13 +225,22 @@ function TabsBlock({
           options={[
             { label: '总览', value: 'overview' },
             { label: '回归进度', value: 'regression' },
+            { label: '需求覆盖', value: 'coverage' },
           ]}
         />
       </Space>
       {tab === 'overview' ? (
         <OverviewTab scope={scope} days={days} dimension={dimension} teamId={teamId} />
-      ) : (
+      ) : tab === 'regression' ? (
         <RegressionTab teamId={teamId} iterationId={iterationId} />
+      ) : (
+        <RequirementCoverageTab
+          params={{
+            team_id: scope.team_id,
+            project_id: scope.project_id,
+            iteration_id: scope.iteration_id,
+          }}
+        />
       )}
     </div>
   );

@@ -27,12 +27,14 @@ from sqlalchemy import and_, delete, func, or_, select, update
 
 from app.config import get_settings
 from app.db import SessionLocal, engine
+from app.environments import ensure_default_environment, load_environment_variables
 from app.modelconfig import missing_fields
 from app.models import (
     AppSetting,
     CaseResult,
     Feature,
     Project,
+    ProjectEnvironment,
     ProjectModelConfig,
     Run,
     RunBatch,
@@ -41,6 +43,7 @@ from app.models import (
     TestTask,
     WorkerHeartbeat,
 )
+from app.quality_gate import evaluate_gate
 from app.runner import execute as exec_mod
 from app.runner import parsers, persist, staging
 from app.taskstatus import ACTIVE_RUN_STATUSES, refresh_task_status
@@ -96,6 +99,7 @@ def _build_env(
     staged: staging.StagedRun,
     runner_root: Path,
     project_overrides: dict[str, str] | None = None,
+    secret_env: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """组装子进程环境。
 
@@ -103,14 +107,23 @@ def _build_env(
         父进程环境（node 需要 PATH/HOME）
       → runner/.env（全局默认）
       → 项目级模型配置（本次执行所属项目的覆盖）
+      → 环境密钥（YAML 里用 ${{KEY}} 引用）
       → 本次执行的固定值（RUN_DIR / HEADLESS）
 
-    必须显式注入而不是指望 CLI 自己读 .env：实测 `midscene-test` 根本不加载 .env
-    （ai-config.log 里所有 MIDSCENE_* 都是 undefined），不注入就连模型都调不通。
+    必须显式注入：实测 `midscene-test` 根本不加载 .env，不注入连模型都调不通。
     """
     env = dict(os.environ)
     env.update(runner_env)
+    # 执行器/浏览器不需要这些；别把数据库密码和平台签名密钥带进子进程
+    for secret_key in (
+        "DATABASE_URL",
+        "SECRET_KEY",
+        "ENVIRONMENT_SECRET_KEY",
+        "POSTGRES_PASSWORD",
+    ):
+        env.pop(secret_key, None)
     env.update(project_overrides or {})
+    env.update(secret_env or {})
     # 每个 run 一个独立的 MIDSCENE_RUN_DIR —— log 因此天然只含本次执行，
     # token 统计不需要记 offset、也不用按时间窗猜归属
     env["MIDSCENE_RUN_DIR"] = staging.runner_relative_run_dir(staged, runner_root)
@@ -238,6 +251,19 @@ async def notify_batch_finished(db, run: Run) -> None:
         return
 
     await enqueue(db, team_id=run.team_id, event="batch.completed", ref_id=run.batch_id)
+
+    # 门禁结果在批次收尾时固化一次，之后任务配置变化不影响历史结论
+    batch = await db.get(RunBatch, run.batch_id)
+    task = await db.get(TestTask, batch.task_id) if batch and batch.task_id else None
+    if batch is not None:
+        gate = await evaluate_gate(db, batch, task)
+        batch.gate_status = gate["status"]
+        batch.gate_detail = gate
+        if gate["status"] == "failed":
+            await enqueue(
+                db, team_id=run.team_id, event="quality_gate.failed", ref_id=batch.id
+            )
+
     # AI 评估入队（不在这里调模型 —— worker 要赶紧去跑下一个任务）
     from app.ai_review import enqueue_batch_check
 
@@ -434,14 +460,48 @@ async def process(run_id: uuid.UUID) -> None:
             return
         overrides = project_model_overrides(model_config)
 
+        env_row = None
+        if run.environment_id:
+            env_row = await db.get(ProjectEnvironment, run.environment_id)
+        if env_row is None and run.project_id:
+            env_name = (run.environment_name or "默认").strip() or "默认"
+            env_row = (
+                await db.execute(
+                    select(ProjectEnvironment).where(
+                        ProjectEnvironment.project_id == run.project_id,
+                        ProjectEnvironment.name == env_name,
+                    )
+                )
+            ).scalar_one_or_none()
+            if env_row is None and env_name == "默认":
+                env_row = await ensure_default_environment(db, run.project_id)
+
+        plain_vars: dict[str, str] = {}
+        secret_vars: dict[str, str] = {}
+        if env_row is not None:
+            try:
+                plain_vars, secret_vars = await load_environment_variables(db, env_row.id)
+            except RuntimeError as exc:
+                await _fail(db, run, str(exc))
+                return
+            run.environment_id = env_row.id
+            run.environment_name = env_row.name
+            run.environment_base_url = env_row.base_url
+        base_url = (
+            env_row.base_url
+            if env_row is not None and env_row.base_url
+            else (project.base_url if project else None)
+        )
+
         try:
             staged = staging.stage(
                 runner_root=runner_root,
                 run_id=run.id,
                 cases=cases,
-                base_url=project.base_url if project else None,
+                base_url=base_url,
                 retry=retry,
                 timeout_ms=settings.case_timeout_ms,
+                variables=plain_vars,
             )
         except OSError as exc:
             await _fail(db, run, f"准备工作目录失败：{exc}")
@@ -449,20 +509,30 @@ async def process(run_id: uuid.UUID) -> None:
 
         run.work_dir = str(staged.work_dir)
         run.result_dir = str(staged.result_dir)
-        # 指纹要含项目级覆盖 —— 换了模型就是换了配置，趋势图上的跳变要能归因
-        run.env_hash = staging.env_fingerprint({**runner_env, **overrides})
+        env_label = env_row.name if env_row is not None else "默认"
+        # 指纹要含项目级覆盖和环境变量名 —— 换了模型/环境就是换了配置，趋势图上的跳变要能归因
+        run.env_hash = staging.env_fingerprint(
+            {
+                **runner_env,
+                **overrides,
+                "QA_ENV_NAME": env_label if env_row is not None else "",
+                "QA_BASE_URL": base_url or "",
+            },
+            variables={**plain_vars, **{key: "" for key in secret_vars}},
+        )
         run.status = "running"
         await db.commit()
 
         # session 马上要关，后面只用这些不可变的值
-        base_url = project.base_url if project else "-"
+        log_base_url = base_url or "-"
         case_count = len(cases)
 
     log.info(
-        "run %s 开始执行：%d 个用例，base_url=%s，模型=%s（%s配置）",
+        "run %s 开始执行：%d 个用例，环境=%s，base_url=%s，模型=%s（%s配置）",
         run_id,
         case_count,
-        base_url,
+        env_label,
+        log_base_url,
         overrides.get("MIDSCENE_MODEL_NAME") or runner_env.get("MIDSCENE_MODEL_NAME") or "-",
         "项目级" if overrides else "全局",
     )
@@ -482,7 +552,7 @@ async def process(run_id: uuid.UUID) -> None:
     outcome = await exec_mod.execute(
         runner_root=runner_root,
         staged=staged,
-        env=_build_env(runner_env, staged, runner_root, overrides),
+        env=_build_env(runner_env, staged, runner_root, overrides, secret_vars),
         timeout_ms=timeout_ms,
         poll_cancel=poll_cancel,
     )

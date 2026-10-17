@@ -37,6 +37,7 @@ from ..models import (
     TestTask,
     User,
 )
+from ..quality_gate import evaluate_gate
 from ..schemas import (
     BatchDetailOut,
     BatchListOut,
@@ -45,6 +46,7 @@ from ..schemas import (
     SignoffIn,
 )
 from .runs import _resolve_data_path
+from .task_common import active_task_ids, failed_case_ids, spawn_runs
 
 router = APIRouter(prefix="/api/batches", tags=["batches"])
 
@@ -344,6 +346,10 @@ async def list_batches(
                 "iteration_id": batch.iteration_id,
                 "name": batch.name,
                 "trigger": batch.trigger,
+                "environment_name": batch.environment_name,
+                "parent_batch_id": batch.parent_batch_id,
+                "gate_status": batch.gate_status,
+                "gate_detail": batch.gate_detail,
                 "created_at": batch.created_at,
                 "started_at": agg.get("started_at"),
                 "ended_at": agg.get("ended_at"),
@@ -394,6 +400,8 @@ async def get_batch(batch_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Ba
     creator = await db.get(User, batch.created_by) if batch.created_by else None
     creator_name = (creator.display_name or creator.username) if creator else None
     team = await db.get(Team, batch.team_id)
+    task_obj = await db.get(TestTask, batch.task_id) if batch.task_id else None
+    gate = batch.gate_detail or await evaluate_gate(db, batch, task_obj)
 
     return BatchDetailOut(
         id=batch.id,
@@ -410,6 +418,10 @@ async def get_batch(batch_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Ba
         iteration_id=batch.iteration_id,
         name=batch.name,
         trigger=batch.trigger,
+        environment_name=batch.environment_name,
+        parent_batch_id=batch.parent_batch_id,
+        gate_status=gate.get("status"),
+        gate_detail=gate,
         created_at=batch.created_at,
         created_by_name=creator_name,
         started_at=agg.get("started_at"),
@@ -439,6 +451,7 @@ async def get_batch(batch_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Ba
                 "duration_ms": run.duration_ms,
                 "model_name": run.model_name,
                 "failure_kind": run.failure_kind,
+                "environment_name": run.environment_name,
                 "report_available": bool(run.report_html_path),
                 "started_at": run.started_at,
                 "shard_index": run.shard_index,
@@ -446,6 +459,94 @@ async def get_batch(batch_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Ba
             }
             for run, project_name in runs
         ],
+    )
+
+
+# ------------------------------------------------------------- 重跑失败用例
+
+
+async def _rerun_failed(
+    db,
+    user,
+    task: TestTask,
+    case_ids: list[uuid.UUID],
+    *,
+    unresolved: int,
+    parent_batch_id: uuid.UUID | None,
+    environment_name: str | None,
+) -> dict:
+    if unresolved:
+        raise HTTPException(
+            409,
+            f"有 {unresolved} 条失败结果无法归属到用例（历史数据或用例已删除），不能精确重跑",
+        )
+    if not case_ids:
+        raise HTTPException(400, "没有可重跑的失败用例")
+    available = set(
+        (
+            await db.execute(
+                select(TaskCase.case_id)
+                .join(TestCase, TestCase.id == TaskCase.case_id)
+                .where(
+                    TaskCase.task_id == task.id,
+                    TaskCase.case_id.in_(case_ids),
+                    TestCase.is_active.is_(True),
+                )
+            )
+        ).scalars()
+    )
+    missing = set(case_ids) - available
+    if missing:
+        raise HTTPException(
+            409, f"有 {len(missing)} 个失败用例已被移出任务或停用，不能重跑"
+        )
+    if await active_task_ids(db, [task.id]):
+        raise HTTPException(409, "任务正在执行，请等当前批次结束再重跑")
+    batch, runs = await spawn_runs(
+        db,
+        task,
+        user,
+        trigger="rerun",
+        case_ids=sorted(available, key=str),
+        parent_batch_id=parent_batch_id,
+        environment_name=environment_name,
+    )
+    await db.commit()
+    return {
+        "batch_id": str(batch.id),
+        "run_ids": [str(run.id) for run in runs],
+        "case_count": len(available),
+        "parent_batch_id": str(parent_batch_id) if parent_batch_id else None,
+    }
+
+
+@router.post("/{batch_id}/rerun-failed")
+async def rerun_batch_failed(
+    batch_id: uuid.UUID, user: CurrentUser, db: DbSession
+) -> dict:
+    batch = await db.get(RunBatch, batch_id)
+    if batch is None:
+        raise HTTPException(404, "执行记录不存在")
+    await require_team_role(batch.team_id, user, db, "member")
+    statuses = list(
+        (await db.execute(select(Run.status).where(Run.batch_id == batch.id))).scalars()
+    )
+    if any(status in ACTIVE_RUN_STATUSES for status in statuses):
+        raise HTTPException(409, "批次还没结束，不能重跑")
+    if batch.task_id is None:
+        raise HTTPException(400, "源任务已删除，无法重跑")
+    task = await db.get(TestTask, batch.task_id)
+    if task is None:
+        raise HTTPException(400, "源任务已删除，无法重跑")
+    case_ids, unresolved = await failed_case_ids(db, batch_id=batch.id)
+    return await _rerun_failed(
+        db,
+        user,
+        task,
+        case_ids,
+        unresolved=unresolved,
+        parent_batch_id=batch.id,
+        environment_name=batch.environment_name,
     )
 
 

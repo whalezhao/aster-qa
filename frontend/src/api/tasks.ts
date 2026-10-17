@@ -8,6 +8,10 @@ export interface TaskInput {
   project_id?: string | null;
   iteration_id?: string | null;
   retry_count?: number;
+  environment_name?: string | null;
+  gate_enabled?: boolean;
+  gate_min_pass_rate?: number | null;
+  gate_fail_on_p0?: boolean;
   /** 建任务时直接选功能 —— 一个任务就是一堆功能的组合 */
   feature_ids?: string[];
   tag_ids?: string[];

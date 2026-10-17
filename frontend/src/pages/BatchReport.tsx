@@ -205,9 +205,35 @@ export default function BatchReport() {
                 </tr>
                 <tr>
                   <th>触发方式</th>
-                  <td>{batch.trigger === 'regression' ? '回归执行' : '手动执行'}</td>
+                  <td>
+                    {
+                      {
+                        manual: '手动执行',
+                        regression: '回归执行',
+                        rerun: '失败重跑',
+                        schedule: '定时执行',
+                        ci: 'CI 触发',
+                      }[batch.trigger] ?? batch.trigger
+                    }
+                  </td>
                   <th>执行状态</th>
                   <td>{BATCH_STATUS_LABELS[batch.status] ?? batch.status}</td>
+                </tr>
+                <tr>
+                  <th>执行环境</th>
+                  <td>{batch.environment_name || '默认'}</td>
+                  <th>质量门禁</th>
+                  <td>
+                    {batch.gate_detail && batch.gate_detail.status !== 'disabled'
+                      ? batch.gate_detail.status === 'passed'
+                        ? '通过'
+                        : batch.gate_detail.status === 'failed'
+                          ? `未通过：${batch.gate_detail.reasons.join('；')}`
+                          : batch.gate_detail.status === 'no_data'
+                            ? `无有效执行：${batch.gate_detail.reasons.join('；')}`
+                            : '待执行完成'
+                      : '未启用'}
+                  </td>
                 </tr>
                 <tr>
                   <th>执行人</th>

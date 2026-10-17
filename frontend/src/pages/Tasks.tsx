@@ -22,6 +22,8 @@ import { useActiveTeam } from '../team/TeamContext';
 import { useAuth } from '../auth/AuthContext';
 import { getSettings, updateSettings } from '../api/settings';
 import FeatureTreeSelect from '../components/FeatureTreeSelect';
+import PreflightModal from '../components/PreflightModal';
+import { getTeamEnvironments } from '../api/environments';
 import {
   BATCH_STATUS_COLORS,
   BATCH_STATUS_LABELS,
@@ -50,6 +52,10 @@ interface TaskFormValues {
   project_id?: string | null;
   iteration_id?: string | null;
   retry_count?: number;
+  environment_name?: string | null;
+  gate_enabled?: boolean;
+  gate_min_pass_rate?: number | null;
+  gate_fail_on_p0?: boolean;
   feature_ids?: string[];
   run_now?: boolean;
 }
@@ -102,6 +108,7 @@ export default function Tasks() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
+  const [preflightTaskId, setPreflightTaskId] = useState<string | null>(null);
   const [form] = Form.useForm<TaskFormValues>();
   // 勾选的任务 —— 「快速多任务执行」就是一次跑掉这几条
   const [selected, setSelected] = useState<string[]>([]);
@@ -141,6 +148,12 @@ export default function Tasks() {
     queryFn: () => getIterationsByTeam(teamId as string),
     enabled: Boolean(teamId),
   });
+  const { data: teamEnvironments = [] } = useQuery({
+    queryKey: ['team-environments', teamId],
+    queryFn: () => getTeamEnvironments(teamId as string),
+    enabled: Boolean(teamId),
+  });
+  const environmentNames = Array.from(new Set(teamEnvironments.map((env) => env.name)));
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ['tasks', teamId, params],
     queryFn: () => getTasks(teamId as string, params),
@@ -153,10 +166,17 @@ export default function Tasks() {
   };
 
   const saveMutation = useMutation({
-    mutationFn: (v: TaskFormValues) =>
-      editing
-        ? updateTask(editing.id, v as TaskInput)
-        : createTask(teamId as string, { ...v, name: v.name }),
+    mutationFn: (v: TaskFormValues) => {
+      const payload: TaskFormValues = { ...v };
+      if (editing) delete payload.run_now;
+      if (payload.gate_min_pass_rate != null) {
+        // 表单里填百分数，接口收 0..1
+        payload.gate_min_pass_rate = payload.gate_min_pass_rate / 100;
+      }
+      return editing
+        ? updateTask(editing.id, payload as TaskInput)
+        : createTask(teamId as string, { ...payload, name: payload.name });
+    },
     onSuccess: (res) => {
       setOpen(false);
       invalidate();
@@ -299,7 +319,13 @@ export default function Tasks() {
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
-    form.setFieldsValue({ type: 'feature_regression', retry_count: 0, run_now: false });
+    form.setFieldsValue({
+      type: 'feature_regression',
+      retry_count: 0,
+      run_now: false,
+      gate_enabled: false,
+      gate_fail_on_p0: false,
+    });
     setOpen(true);
   };
 
@@ -517,6 +543,19 @@ export default function Tasks() {
             ),
           },
           {
+            title: '定时',
+            width: 120,
+            sorter: byDate<Task>((r) => r.schedule_next_run_at),
+            render: (_, r) =>
+              r.schedule_enabled ? (
+                <Tooltip title={`下次 ${fmtDateTime(r.schedule_next_run_at)}`}>
+                  <Tag color="green">定时</Tag>
+                </Tooltip>
+              ) : (
+                <Typography.Text type="secondary">-</Typography.Text>
+              ),
+          },
+          {
             title: '最近执行',
             width: 210,
             sorter: byDate<Task>((r) => r.last_run_at),
@@ -548,7 +587,7 @@ export default function Tasks() {
                   icon={<ThunderboltOutlined />}
                   loading={runMutation.isPending && runMutation.variables === r.id}
                   disabled={r.status === 'queued' || r.status === 'running'}
-                  onClick={() => runMutation.mutate(r.id)}
+                  onClick={() => setPreflightTaskId(r.id)}
                 >
                   执行
                 </Button>
@@ -566,6 +605,13 @@ export default function Tasks() {
                       project_id: r.project_id,
                       iteration_id: r.iteration_id,
                       retry_count: r.retry_count,
+                      environment_name: r.environment_name,
+                      gate_enabled: r.gate_enabled,
+                      gate_min_pass_rate:
+                        r.gate_min_pass_rate == null
+                          ? undefined
+                          : Math.round(r.gate_min_pass_rate * 100),
+                      gate_fail_on_p0: r.gate_fail_on_p0,
                     });
                     setOpen(true);
                   }}
@@ -641,6 +687,31 @@ export default function Tasks() {
             <Form.Item name="retry_count" label="重试次数" style={{ width: 120 }}>
               <InputNumber min={0} max={5} style={{ width: '100%' }} />
             </Form.Item>
+            <Form.Item
+              name="environment_name"
+              label="环境"
+              style={{ width: 180 }}
+              tooltip="跨项目任务要求每个项目都有同名环境；留空使用「默认」"
+            >
+              <Select
+                allowClear
+                placeholder="默认"
+                options={environmentNames.map((name) => ({ value: name, label: name }))}
+              />
+            </Form.Item>
+            <Form.Item name="gate_enabled" label="质量门禁" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            <Form.Item
+              name="gate_min_pass_rate"
+              label="最低通过率 (%)"
+              style={{ width: 140 }}
+            >
+              <InputNumber min={0} max={100} style={{ width: '100%' }} placeholder="不限" />
+            </Form.Item>
+            <Form.Item name="gate_fail_on_p0" label="P0 失败即拒绝" valuePropName="checked">
+              <Switch />
+            </Form.Item>
             {!editing && (
               <Form.Item name="run_now" label="保存后立即执行" valuePropName="checked">
                 <Switch />
@@ -653,6 +724,17 @@ export default function Tasks() {
           </Form.Item>
         </Form>
       </Modal>
+      <PreflightModal
+        open={Boolean(preflightTaskId)}
+        taskId={preflightTaskId ?? ''}
+        taskName={tasks.find((task) => task.id === preflightTaskId)?.name}
+        onCancel={() => setPreflightTaskId(null)}
+        onRun={() => {
+          const id = preflightTaskId;
+          setPreflightTaskId(null);
+          if (id) runMutation.mutate(id);
+        }}
+      />
     </PageContainer>
   );
 }

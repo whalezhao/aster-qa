@@ -1,5 +1,12 @@
 import { API_BASE, http, TOKEN_KEY } from './client';
-import type { CaseHistoryItem, FeatureStage, Priority, TestCase, ValidateResult } from './types';
+import type {
+  AiFixResult,
+  CaseHistoryItem,
+  FeatureStage,
+  Priority,
+  TestCase,
+  ValidateResult,
+} from './types';
 
 export interface CaseInput {
   name?: string;
@@ -8,6 +15,8 @@ export interface CaseInput {
   priority?: Priority | null;
   defect_ids?: string | null;
   stage_override?: FeatureStage | null;
+  change_source?: 'manual' | 'ai_fix';
+  change_note?: string | null;
 }
 
 export async function validateYaml(yaml_content: string): Promise<ValidateResult> {
@@ -43,6 +52,19 @@ export async function deleteCase(id: string): Promise<void> {
 
 export async function getCaseHistory(id: string): Promise<CaseHistoryItem[]> {
   const { data } = await http.get<CaseHistoryItem[]>(`/api/cases/${id}/history`);
+  return data;
+}
+
+/** 基于最近一次失败让 AI 生成修复建议；不会自动保存。 */
+export async function aiFixCase(
+  id: string,
+  runId?: string | null,
+): Promise<AiFixResult> {
+  const { data } = await http.post<AiFixResult>(
+    `/api/cases/${id}/ai-fix`,
+    { run_id: runId ?? null },
+    { timeout: 180_000 },
+  );
   return data;
 }
 

@@ -11,10 +11,12 @@ from sqlalchemy import delete, func, select
 
 from ..config import get_settings
 from ..deps import require_team_role
+from ..environments import DEFAULT_ENVIRONMENT, resolve_run_environments
 from ..modelconfig import assert_projects_configured
 from ..models import (
     AiCheck,
     AppSetting,
+    CaseResult,
     Feature,
     Iteration,
     ProjectModelConfig,
@@ -115,13 +117,31 @@ def split_shards(case_ids: list[uuid.UUID], shard_size: int) -> list[list[uuid.U
 
 
 async def spawn_runs(
-    db, task: TestTask, user, trigger: str = "manual"
+    db,
+    task: TestTask,
+    user=None,
+    trigger: str = "manual",
+    *,
+    case_ids: list[uuid.UUID] | None = None,
+    parent_batch_id: uuid.UUID | None = None,
+    environment_name: str | None = None,
+    created_by_id: uuid.UUID | None = None,
+    created_by_token_id: uuid.UUID | None = None,
 ) -> tuple[RunBatch, list[Run]]:
     """为一次执行建批次，并按项目拆出多个 run。
 
     批次是用户视角的「一次执行」，run 是技术粒度（一次 midscene 进程只能跑一个项目）。
+    `case_ids` 用于「只重跑失败用例」：只跑指定用例，仍然按项目拆 run。
     """
-    groups = await resolve_run_groups(db, task)
+    cases_by_project = await _cases_by_project(db, task)
+    if case_ids is not None:
+        wanted = set(case_ids)
+        cases_by_project = {
+            project_id: [cid for cid in ids if cid in wanted]
+            for project_id, ids in cases_by_project.items()
+        }
+        cases_by_project = {pid: ids for pid, ids in cases_by_project.items() if ids}
+    groups = {pid: len(ids) for pid, ids in cases_by_project.items()}
     if not groups:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "任务下没有可执行的用例")
     # 执行门禁：项目必须明确配过模型才允许跑。所有执行路径都汇到这里，拦一处就够。
@@ -135,6 +155,14 @@ async def spawn_runs(
         except RuntimeError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
+    env_name = (environment_name or task.environment_name or "").strip() or DEFAULT_ENVIRONMENT
+    try:
+        environments = await resolve_run_environments(
+            db, task, set(groups), environment_name=env_name
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
     batch = RunBatch(
         task_id=task.id,
         team_id=task.team_id,
@@ -142,24 +170,27 @@ async def spawn_runs(
         # 存任务名快照：任务改名或删除后历史记录还要能显示
         name=task.name,
         trigger=trigger,
-        created_by=user.id,
+        parent_batch_id=parent_batch_id,
+        environment_name=env_name,
+        created_by=user.id if user else created_by_id,
+        created_by_token_id=created_by_token_id,
     )
     db.add(batch)
     await db.flush()
 
     settings = await db.get(AppSetting, 1)
     shard_size = max(0, int(settings.run_shard_size if settings else 4))
-    cases_by_project = await _cases_by_project(db, task)
 
     runs: list[Run] = []
     for project_id in sorted(groups, key=str):
-        case_ids = cases_by_project.get(project_id, [])
-        if not case_ids:
+        project_case_ids = cases_by_project.get(project_id, [])
+        if not project_case_ids:
             continue
         # 一个项目内的 YAML 默认串行；按 shard_size 切片后每个 run 一个浏览器，
         # 可以分发到不同槽位/worker 并行跑。0 表示不分片（保持老行为）。
-        chunks = split_shards(case_ids, shard_size)
+        chunks = split_shards(project_case_ids, shard_size)
         shard_count = len(chunks)
+        env = environments[project_id]
         for chunk_index, chunk in enumerate(chunks):
             run = Run(
                 task_id=task.id,
@@ -167,10 +198,17 @@ async def spawn_runs(
                 team_id=task.team_id,
                 project_id=project_id,
                 iteration_id=task.iteration_id,
-                created_by=user.id,
+                environment_id=env.id,
+                environment_name=env.name,
+                environment_base_url=env.base_url,
+                created_by=user.id if user else created_by_id,
                 status="queued",
-                # 只有真正拆成多片时才记分片信息，避免单 run 报告里出现「1/1」噪音
-                case_ids=[str(case_id) for case_id in chunk] if shard_count > 1 else None,
+                # 分片或显式指定子集时必须落 case_ids，否则 worker 会跑整个任务
+                case_ids=(
+                    [str(case_id) for case_id in chunk]
+                    if shard_count > 1 or case_ids is not None
+                    else None
+                ),
                 shard_index=chunk_index + 1 if shard_count > 1 else None,
                 shard_count=shard_count if shard_count > 1 else None,
             )
@@ -182,6 +220,29 @@ async def spawn_runs(
     # flush 才能拿到主键 —— id 的默认值是 Python 侧 uuid4，构造时还没赋值
     await db.flush()
     return batch, runs
+
+
+async def failed_case_ids(
+    db, *, batch_id: uuid.UUID | None = None, run_id: uuid.UUID | None = None
+) -> tuple[list[uuid.UUID], int]:
+    """返回 (可重跑的失败用例 id, 无法归属的失败结果数)。"""
+    stmt = (
+        select(CaseResult.test_case_id)
+        .join(Run, Run.id == CaseResult.run_id)
+        .where(
+            CaseResult.status.not_in(("success", "passed")),
+            # 模型/网络/额度导致的失败不重跑：环境没恢复时再跑一遍只会再红一次
+            Run.failure_kind.is_(None),
+        )
+    )
+    if batch_id is not None:
+        stmt = stmt.where(Run.batch_id == batch_id)
+    if run_id is not None:
+        stmt = stmt.where(CaseResult.run_id == run_id)
+    rows = list((await db.execute(stmt)).scalars())
+    resolvable = sorted({row for row in rows if row is not None}, key=str)
+    unresolved = sum(1 for row in rows if row is None)
+    return resolvable, unresolved
 
 
 async def delete_tasks(db, tasks: list[TestTask]) -> tuple[list[str], list[str]]:

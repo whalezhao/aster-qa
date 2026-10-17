@@ -1,0 +1,180 @@
+"""项目环境与变量解析。
+
+约定：
+- 任务只存环境名；执行时在每个项目下找同名环境。
+- 非密钥变量进 midscene config.variables，YAML 用 `${KEY}`。
+- 密钥进子进程环境，YAML 用 `${{KEY}}`；绝不写进磁盘配置。
+"""
+
+import re
+import uuid
+
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .crypto import decrypt_secret
+from .models import Project, ProjectEnvironment, ProjectEnvironmentVariable, TestTask
+
+DEFAULT_ENVIRONMENT = "默认"
+_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+RESERVED_KEYS = {"BASE_URL"}
+# 这些 key 一旦进子进程环境，等于把代码执行/加载路径交给配置者
+FORBIDDEN_SECRET_KEYS = {
+    "PATH",
+    "HOME",
+    "SHELL",
+    "USER",
+    "LOGNAME",
+    "PWD",
+    "TMPDIR",
+    "NODE_OPTIONS",
+    "NODE_PATH",
+    "BASH_ENV",
+    "ENV",
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "LD_PRELOAD",
+    "LD_LIBRARY_PATH",
+    "DYLD_INSERT_LIBRARIES",
+    "DYLD_LIBRARY_PATH",
+    "MIDSCENE_RUN_DIR",
+    "SECRET_KEY",
+    "DATABASE_URL",
+    "POSTGRES_PASSWORD",
+}
+FORBIDDEN_SECRET_PREFIXES = ("MIDSCENE_", "OPENAI_", "LD_", "DYLD_", "PYTHON", "npm_", "NODE_")
+
+
+class EnvironmentResolutionError(ValueError):
+    """任务环境在部分项目下不存在。消息直接给用户看。"""
+
+
+def validate_variable_key(key: str, *, is_secret: bool) -> str:
+    key = (key or "").strip()
+    if not _KEY_RE.match(key) or len(key) > 64:
+        raise ValueError("变量名只能包含字母、数字、下划线，且不能以数字开头")
+    if key in RESERVED_KEYS:
+        raise ValueError(f"{key} 由平台注入，不能再配置")
+    if is_secret and (
+        key in FORBIDDEN_SECRET_KEYS or key.startswith(FORBIDDEN_SECRET_PREFIXES)
+    ):
+        raise ValueError(f"{key} 是执行器保留变量，不能作为密钥注入")
+    return key
+
+
+async def ensure_default_environment(
+    db: AsyncSession, project_id: uuid.UUID, *, created_by: uuid.UUID | None = None
+) -> ProjectEnvironment:
+    row = (
+        await db.execute(
+            select(ProjectEnvironment).where(
+                ProjectEnvironment.project_id == project_id,
+                ProjectEnvironment.is_default.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is not None:
+        return row
+    project = await db.get(Project, project_id)
+    if project is None:
+        raise ValueError("项目不存在")
+    row = ProjectEnvironment(
+        project_id=project_id,
+        name=DEFAULT_ENVIRONMENT,
+        base_url=project.base_url,
+        is_default=True,
+        created_by=created_by,
+    )
+    db.add(row)
+    try:
+        async with db.begin_nested():
+            await db.flush()
+    except IntegrityError:
+        # 并发创建：另一个请求已经建好了，回滚这个 savepoint 后重查
+        row = (
+            await db.execute(
+                select(ProjectEnvironment).where(
+                    ProjectEnvironment.project_id == project_id,
+                    ProjectEnvironment.is_default.is_(True),
+                )
+            )
+        ).scalar_one()
+    return row
+
+
+async def sync_default_environment(db: AsyncSession, project: Project) -> None:
+    row = (
+        await db.execute(
+            select(ProjectEnvironment).where(
+                ProjectEnvironment.project_id == project.id,
+                ProjectEnvironment.is_default.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is not None:
+        row.base_url = project.base_url
+
+
+async def resolve_run_environments(
+    db: AsyncSession,
+    task: TestTask,
+    project_ids: set[uuid.UUID],
+    *,
+    environment_name: str | None = None,
+) -> dict[uuid.UUID, ProjectEnvironment]:
+    """按任务的环境名解析每个项目的环境；缺一个就整体拒绝。"""
+    if not project_ids:
+        return {}
+    env_name = (environment_name or task.environment_name or "").strip() or DEFAULT_ENVIRONMENT
+    rows = list(
+        (
+            await db.execute(
+                select(ProjectEnvironment).where(
+                    ProjectEnvironment.project_id.in_(project_ids),
+                    ProjectEnvironment.name == env_name,
+                )
+            )
+        ).scalars()
+    )
+    found = {row.project_id: row for row in rows}
+
+    if env_name == DEFAULT_ENVIRONMENT:
+        for project_id in project_ids - set(found):
+            found[project_id] = await ensure_default_environment(db, project_id)
+
+    missing = sorted(project_ids - set(found), key=str)
+    if missing:
+        names = list(
+            (
+                await db.execute(select(Project.name).where(Project.id.in_(missing)))
+            ).scalars()
+        )
+        raise EnvironmentResolutionError(
+            f"环境「{env_name}」在以下项目下不存在：{'、'.join(names) or '未知项目'}"
+        )
+    return found
+
+
+async def load_environment_variables(
+    db: AsyncSession, environment_id: uuid.UUID
+) -> tuple[dict[str, str], dict[str, str]]:
+    """返回 (普通变量, 密钥变量)。密钥只在这里解密，调用方不得记录其值。"""
+    rows = list(
+        (
+            await db.execute(
+                select(ProjectEnvironmentVariable).where(
+                    ProjectEnvironmentVariable.environment_id == environment_id
+                )
+            )
+        ).scalars()
+    )
+    plain: dict[str, str] = {}
+    secret: dict[str, str] = {}
+    for row in rows:
+        value = row.value or ""
+        if row.is_secret:
+            secret[row.key] = decrypt_secret(value) if value else ""
+        else:
+            plain[row.key] = value
+    return plain, secret

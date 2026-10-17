@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Space, Tag, Typography } from 'antd';
+import { App, Button, Space, Tag, Tooltip, Typography } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { ModalForm, PageContainer, ProFormText, ProFormTextArea } from '@ant-design/pro-components';
 import { Link } from 'react-router-dom';
@@ -88,17 +88,39 @@ export default function Projects() {
           },
           {
             title: '大模型',
-            width: 110,
+            width: 150,
             sorter: byNumber<Project>((r) => (r.has_model_config ? 1 : 0)),
-            render: (_, r) =>
-              r.has_model_config ? (
-                <Tag color="success">已配置</Tag>
-              ) : (
-                // 没配模型的项目跑不了任何用例，列表里要一眼能扫出来
-                <Link to={`/projects/${r.id}`}>
-                  <Tag color="warning">未配置</Tag>
-                </Link>
-              ),
+            render: (_, r) => (
+              <Space direction="vertical" size={2}>
+                {r.has_model_config ? (
+                  <Tag color="success">已配置</Tag>
+                ) : (
+                  // 没配模型的项目跑不了任何用例，列表里要一眼能扫出来
+                  <Link to={`/projects/${r.id}`}>
+                    <Tag color="warning">未配置</Tag>
+                  </Link>
+                )}
+                {r.model_health && (
+                  <Tooltip title={r.model_health.message}>
+                    <Tag
+                      color={
+                        r.model_health.status === 'healthy'
+                          ? 'green'
+                          : r.model_health.status === 'unhealthy'
+                            ? 'red'
+                            : 'default'
+                      }
+                    >
+                      {r.model_health.status === 'healthy'
+                        ? '模型正常'
+                        : r.model_health.status === 'unhealthy'
+                          ? '模型异常'
+                          : '未检测'}
+                    </Tag>
+                  </Tooltip>
+                )}
+              </Space>
+            ),
           },
           {
             title: 'Base URL',

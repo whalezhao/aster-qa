@@ -9,6 +9,7 @@ import ProjectsTab from './team/ProjectsTab';
 import IterationsTab from './team/IterationsTab';
 import TagsTab from './team/TagsTab';
 import WebhooksTab from './team/WebhooksTab';
+import ApiTokensTab from './team/ApiTokensTab';
 
 export default function TeamDetail() {
   const { tid = '' } = useParams();
@@ -32,6 +33,7 @@ export default function TeamDetail() {
           { key: 'iterations', label: '迭代', children: <IterationsTab tid={tid} /> },
           { key: 'tags', label: '标签', children: <TagsTab tid={tid} /> },
           { key: 'webhooks', label: 'Webhook', children: <WebhooksTab tid={tid} /> },
+          { key: 'tokens', label: 'API Token', children: <ApiTokensTab tid={tid} /> },
         ]}
       />
     </ProCard>

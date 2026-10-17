@@ -25,6 +25,7 @@ export default function WebhooksTab({ tid }: { tid: string }) {
   const [editing, setEditing] = useState<Webhook | null>(null);
   const [viewing, setViewing] = useState<Webhook | null>(null);
   const [form] = Form.useForm<WebhookFormValues>();
+  const kind = Form.useWatch('kind', form) ?? 'generic';
 
   const { data: hooks = [], isLoading } = useQuery({
     queryKey: ['webhooks', tid],
@@ -92,7 +93,12 @@ export default function WebhooksTab({ tid }: { tid: string }) {
         onClick={() => {
           setEditing(null);
           form.resetFields();
-          form.setFieldsValue({ events: ['task.signed'], include_yaml: false, is_active: true });
+          form.setFieldsValue({
+            events: ['task.signed'],
+            kind: 'generic',
+            include_yaml: false,
+            is_active: true,
+          });
           setOpen(true);
         }}
       >
@@ -107,6 +113,24 @@ export default function WebhooksTab({ tid }: { tid: string }) {
         locale={{ emptyText: '还没有配置 webhook' }}
         columns={[
           { title: '名称', dataIndex: 'name', sorter: byText<Webhook>((h) => h.name) },
+          {
+            title: '类型',
+            dataIndex: 'kind',
+            width: 110,
+            render: (value: Webhook['kind']) => (
+              <Tag>
+                {
+                  {
+                    generic: '通用',
+                    wecom: '企业微信',
+                    feishu: '飞书',
+                    dingtalk: '钉钉',
+                    slack: 'Slack',
+                  }[value] ?? value
+                }
+              </Tag>
+            ),
+          },
           { title: '地址', dataIndex: 'url', ellipsis: true, sorter: byText<Webhook>((h) => h.url) },
           {
             title: '订阅事件',
@@ -165,6 +189,7 @@ export default function WebhooksTab({ tid }: { tid: string }) {
                     setEditing(h);
                     form.setFieldsValue({
                       name: h.name,
+                      kind: h.kind,
                       url: h.url,
                       secret: undefined,
                       events: h.events,
@@ -217,33 +242,51 @@ export default function WebhooksTab({ tid }: { tid: string }) {
           >
             <Input placeholder="例如：禅道同步" />
           </Form.Item>
+          <Form.Item name="kind" label="渠道类型">
+            <Select
+              options={[
+                { value: 'generic', label: '通用 Webhook（HMAC 签名）' },
+                { value: 'wecom', label: '企业微信机器人' },
+                { value: 'feishu', label: '飞书机器人' },
+                { value: 'dingtalk', label: '钉钉机器人' },
+                { value: 'slack', label: 'Slack Incoming Webhook' },
+              ]}
+            />
+          </Form.Item>
           <Form.Item
             name="url"
-            label="地址"
+            label={kind === 'generic' ? '地址' : '机器人 Webhook 地址'}
             rules={[
               { required: true, message: '请输入接收地址' },
               { pattern: /^https?:\/\//, message: '要以 http:// 或 https:// 开头' },
             ]}
           >
-            <Input placeholder="https://zentao.example.com/api/qa-webhook" />
+            <Input placeholder="https://..." />
           </Form.Item>
           <Form.Item
             name="secret"
-            label={editing ? '密钥（留空则不修改）' : '密钥'}
-            tooltip="接收方拿它比对 X-QA-Token，并用它验 HMAC 签名。存进去之后读不回来，只能改。"
+            label={
+              kind === 'generic'
+                ? editing
+                  ? '密钥（留空则不修改）'
+                  : '密钥'
+                : '签名密钥（可选）'
+            }
+            tooltip={
+              kind === 'generic'
+                ? '接收方拿它比对 X-QA-Token，并用它验 HMAC 签名。存进去之后读不回来，只能改。'
+                : '钉钉/飞书机器人开启了「加签」时才需要填。'
+            }
             rules={
-              editing
-                ? []
-                : [
+              kind === 'generic' && !editing
+                ? [
                     { required: true, message: '请设置密钥' },
                     { min: 8, message: '至少 8 位' },
                   ]
+                : []
             }
           >
-            <Input.Password
-              autoComplete="new-password"
-              placeholder={editing ? '留空则不改' : '至少 8 位'}
-            />
+            <Input.Password placeholder={editing ? '留空则不修改' : kind === 'generic' ? '必填' : '可选'} />
           </Form.Item>
           <Form.Item name="events" label="订阅事件" rules={[{ required: true, message: '至少选一个' }]}>
             <Select
@@ -256,14 +299,16 @@ export default function WebhooksTab({ tid }: { tid: string }) {
             <Form.Item name="is_active" label="启用" valuePropName="checked">
               <Switch />
             </Form.Item>
-            <Form.Item
-              name="include_yaml"
-              label="连用例 YAML 一起发"
-              valuePropName="checked"
-              tooltip="默认不发正文（用例多的时候 payload 会到几百 KB）。接收方需要正文时才开"
-            >
-              <Switch />
-            </Form.Item>
+            {kind === 'generic' && (
+              <Form.Item
+                name="include_yaml"
+                label="连用例 YAML 一起发"
+                valuePropName="checked"
+                tooltip="默认不发正文（用例多的时候 payload 会到几百 KB）。接收方需要正文时才开"
+              >
+                <Switch />
+              </Form.Item>
+            )}
           </Space>
         </Form>
       </Modal>
@@ -365,6 +410,7 @@ export function DeliveriesModal({ hook, onClose }: { hook: Webhook | null; onClo
 
 interface WebhookFormValues {
   name: string;
+  kind: 'generic' | 'wecom' | 'feishu' | 'dingtalk' | 'slack';
   url: string;
   secret?: string;
   events: string[];

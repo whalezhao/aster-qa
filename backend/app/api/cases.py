@@ -4,10 +4,12 @@ import uuid
 import httpx
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from .. import ai_case
+from ..ai_fix import propose_case_fix
+from ..case_versions import diff_text, rollback_case, snapshot_case
 from ..db import SessionLocal
 from ..deps import CurrentUser, DbSession, require_case_access, require_feature_access
 from ..modelconfig import missing_fields
@@ -20,11 +22,16 @@ from ..models import (
     RunBatch,
     Team,
     TestCase,
+    TestCaseVersion,
 )
 from ..quota import ensure_quota, record_usage
 from ..schemas import (
+    AiFixIn,
+    AiFixOut,
+    CaseDiffOut,
     CaseDraftIn,
     CaseDraftOut,
+    CaseVersionOut,
     TestCaseCreate,
     TestCaseOut,
     TestCaseUpdate,
@@ -187,7 +194,7 @@ async def list_cases(
 )
 async def create_case(
     feature_id: uuid.UUID, body: TestCaseCreate, user: CurrentUser, db: DbSession
-) -> TestCase:
+) -> TestCaseOut:
     feature = await require_feature_access(db, feature_id, user)
     errors, _ = validate_yaml(body.yaml_content)
     if errors:
@@ -201,24 +208,53 @@ async def create_case(
     ).first()
     if exists is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "该功能下已有同名用例")
-    case = TestCase(feature_id=feature_id, created_by=user.id, **body.model_dump())
+    data = body.model_dump(exclude={"change_source", "change_note"})
+    case = TestCase(feature_id=feature_id, created_by=user.id, **data)
     db.add(case)
+    await db.flush()
+    version = await snapshot_case(
+        db,
+        case,
+        source="create",
+        note=body.change_note,
+        user_id=user.id,
+    )
     await db.commit()
     case.feature = feature
-    return case
+    out = TestCaseOut.model_validate(case)
+    out.version_no = version.version_no
+    return out
 
 
 @router.get("/api/cases/{case_id}", response_model=TestCaseOut)
-async def get_case(case_id: uuid.UUID, user: CurrentUser, db: DbSession) -> TestCase:
-    return await require_case_access(db, case_id, user)
+async def get_case(case_id: uuid.UUID, user: CurrentUser, db: DbSession) -> TestCaseOut:
+    case = await require_case_access(db, case_id, user)
+    out = TestCaseOut.model_validate(case)
+    out.version_no = (
+        await db.execute(
+            select(func.max(TestCaseVersion.version_no)).where(
+                TestCaseVersion.case_id == case.id
+            )
+        )
+    ).scalar()
+    return out
 
 
 @router.patch("/api/cases/{case_id}", response_model=TestCaseOut)
 async def update_case(
     case_id: uuid.UUID, body: TestCaseUpdate, user: CurrentUser, db: DbSession
-) -> TestCase:
-    case = await require_case_access(db, case_id, user)
-    data = body.model_dump(exclude_unset=True)
+) -> TestCaseOut:
+    existing = await require_case_access(db, case_id, user)
+    feature = existing.feature
+    case = (
+        await db.execute(
+            select(TestCase)
+            .options(selectinload(TestCase.feature))
+            .where(TestCase.id == case_id)
+            .with_for_update()
+        )
+    ).scalar_one()
+    data = body.model_dump(exclude_unset=True, exclude={"change_source", "change_note"})
     if "yaml_content" in data:
         errors, _ = validate_yaml(data["yaml_content"])
         if errors:
@@ -229,10 +265,31 @@ async def update_case(
         "released",
     }:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "非法分期")
+    if "name" in data and data["name"] != case.name:
+        duplicate = (
+            await db.execute(
+                select(TestCase.id).where(
+                    TestCase.feature_id == case.feature_id,
+                    TestCase.name == data["name"],
+                    TestCase.id != case.id,
+                )
+            )
+        ).first()
+        if duplicate is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "该功能下已有同名用例")
+    source = body.change_source or "manual"
+    if source not in {"manual", "ai_fix"}:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "非法版本来源")
     for field, value in data.items():
         setattr(case, field, value)
+    version = await snapshot_case(
+        db, case, source=source, note=body.change_note, user_id=user.id
+    )
     await db.commit()
-    return case
+    case.feature = feature
+    out = TestCaseOut.model_validate(case)
+    out.version_no = version.version_no
+    return out
 
 
 @router.delete("/api/cases/{case_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -240,6 +297,151 @@ async def delete_case(case_id: uuid.UUID, user: CurrentUser, db: DbSession) -> N
     case = await require_case_access(db, case_id, user)
     await db.delete(case)
     await db.commit()
+
+
+@router.get("/api/cases/{case_id}/versions", response_model=list[CaseVersionOut])
+async def list_versions(
+    case_id: uuid.UUID,
+    user: CurrentUser,
+    db: DbSession,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[TestCaseVersion]:
+    case = await require_case_access(db, case_id, user)
+    return list(
+        (
+            await db.execute(
+                select(TestCaseVersion)
+                .where(TestCaseVersion.case_id == case.id)
+                .order_by(TestCaseVersion.version_no.desc())
+                .limit(max(1, min(limit, 200)))
+                .offset(max(0, offset))
+            )
+        ).scalars()
+    )
+
+
+@router.get("/api/cases/{case_id}/versions/diff", response_model=CaseDiffOut)
+async def version_diff(
+    case_id: uuid.UUID,
+    user: CurrentUser,
+    db: DbSession,
+    from_version: int,
+    to_version: int | None = None,
+) -> CaseDiffOut:
+    case = await require_case_access(db, case_id, user)
+    source = (
+        await db.execute(
+            select(TestCaseVersion).where(
+                TestCaseVersion.case_id == case.id,
+                TestCaseVersion.version_no == from_version,
+            )
+        )
+    ).scalar_one_or_none()
+    if source is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "起始版本不存在")
+    if to_version is None:
+        target_yaml = case.yaml_content
+        target_no = (
+            await db.execute(
+                select(func.max(TestCaseVersion.version_no)).where(
+                    TestCaseVersion.case_id == case.id
+                )
+            )
+        ).scalar() or 0
+    else:
+        target = (
+            await db.execute(
+                select(TestCaseVersion).where(
+                    TestCaseVersion.case_id == case.id,
+                    TestCaseVersion.version_no == to_version,
+                )
+            )
+        ).scalar_one_or_none()
+        if target is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "目标版本不存在")
+        target_yaml = target.yaml_content
+        target_no = target.version_no
+    return CaseDiffOut(
+        from_version=source.version_no,
+        to_version=int(target_no),
+        diff=diff_text(
+            source.yaml_content,
+            target_yaml,
+            f"v{source.version_no}",
+            f"v{target_no}",
+        ),
+    )
+
+
+@router.get(
+    "/api/cases/{case_id}/versions/{version_id}", response_model=CaseVersionOut
+)
+async def get_version(
+    case_id: uuid.UUID, version_id: uuid.UUID, user: CurrentUser, db: DbSession
+) -> TestCaseVersion:
+    case = await require_case_access(db, case_id, user)
+    version = await db.get(TestCaseVersion, version_id)
+    if version is None or version.case_id != case.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "版本不存在")
+    return version
+
+
+@router.post(
+    "/api/cases/{case_id}/versions/{version_id}/rollback",
+    response_model=CaseVersionOut,
+)
+async def rollback_to_version(
+    case_id: uuid.UUID, version_id: uuid.UUID, user: CurrentUser, db: DbSession
+) -> TestCaseVersion:
+    existing = await require_case_access(db, case_id, user)
+    case = (
+        await db.execute(
+            select(TestCase)
+            .options(selectinload(TestCase.feature))
+            .where(TestCase.id == case_id)
+            .with_for_update()
+        )
+    ).scalar_one()
+    version = await db.get(TestCaseVersion, version_id)
+    if version is None or version.case_id != case.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "版本不存在")
+    errors, _ = validate_yaml(version.yaml_content)
+    if errors:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "该版本 YAML 已不符合当前校验规则：" + "; ".join(errors),
+        )
+    try:
+        new_version = await rollback_case(db, case, version, user_id=user.id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    await db.commit()
+    case.feature = existing.feature
+    return new_version
+
+
+@router.post("/api/cases/{case_id}/ai-fix", response_model=AiFixOut)
+async def ai_fix(
+    case_id: uuid.UUID, body: AiFixIn, user: CurrentUser, db: DbSession
+) -> AiFixOut:
+    case = await require_case_access(db, case_id, user)
+    try:
+        proposal = await propose_case_fix(db, case, run_id=body.run_id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    await db.commit()
+    return AiFixOut(
+        run_id=proposal.run_id,
+        proposed_yaml=proposal.proposed_yaml,
+        explanation=proposal.explanation,
+        diff=proposal.diff,
+        yaml_ok=proposal.yaml_ok,
+        yaml_errors=proposal.yaml_errors,
+        model_name=proposal.model_name,
+    )
 
 
 @router.get("/api/cases/{case_id}/history")

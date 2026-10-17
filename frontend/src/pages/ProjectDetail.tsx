@@ -15,13 +15,14 @@ import {
   updateFeature,
   type FeatureInput,
 } from '../api/features';
-import { clearModelConfig, getModelConfig, getProject, setModelConfig } from '../api/projects';
+import { clearModelConfig, getModelConfig, getProject, setModelConfig, testModelConfig } from '../api/projects';
 import { getIterationsByTeam } from '../api/iterations';
 import { apiError } from '../api/client';
 import { PAGE, byNumber, byRank, byText } from '../lib/table';
 import { fmtTokens } from '../lib/format';
 import type { BulkReleaseResult, Feature, FeatureStage } from '../api/types';
 import QaTable from '../components/QaTable';
+import EnvironmentsCard from '../components/EnvironmentsCard';
 
 type StageFilter = 'all' | FeatureStage;
 
@@ -66,6 +67,7 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const { data: config, isLoading } = useQuery({
     queryKey: ['model-config', projectId],
@@ -116,6 +118,7 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
       return setModelConfig(projectId, payload);
     },
     onSuccess: () => {
+      setTestResult(null);
       message.success('已保存，该项目下次执行起生效');
       queryClient.invalidateQueries({ queryKey: ['model-config', projectId] });
       // 项目列表上的「已配置/未配置」标记、以及各处提示都依赖它，一并刷新
@@ -123,6 +126,22 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
     onError: (e) => message.error(apiError(e)),
+  });
+
+  const test = useMutation({
+    mutationFn: () => {
+      const v = form.getFieldsValue(['model_name', 'base_url', 'api_key']) as Record<
+        string,
+        string | undefined
+      >;
+      return testModelConfig(projectId, {
+        model_name: v.model_name?.trim() || undefined,
+        base_url: v.base_url?.trim() || undefined,
+        api_key: v.api_key?.trim() || undefined,
+      });
+    },
+    onSuccess: (r) => setTestResult({ ok: r.ok, message: r.message }),
+    onError: (e) => setTestResult({ ok: false, message: apiError(e) }),
   });
 
   const clearKey = useMutation({
@@ -158,6 +177,19 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
             <Tag color="success">已配置</Tag>
           ) : (
             <Tag color="warning">未配置 · 该项目无法执行</Tag>
+          )}
+          {config?.model_health && (
+            <Tag
+              color={
+                config.model_health.status === 'healthy'
+                  ? 'green'
+                  : config.model_health.status === 'unhealthy'
+                    ? 'red'
+                    : 'default'
+              }
+            >
+              模型{config.model_health.status === 'healthy' ? '正常' : config.model_health.status === 'unhealthy' ? '异常' : '未检测'}
+            </Tag>
           )}
         </Space>
       }
@@ -298,6 +330,13 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
           <Button type="primary" htmlType="submit" loading={save.isPending}>
             保存
           </Button>
+          <Button
+            onClick={() => test.mutate()}
+            loading={test.isPending}
+            title="用当前表单里的值实际请求一次模型"
+          >
+            测试连接
+          </Button>
           {config?.api_key_set && (
             <Popconfirm
               title="清除该项目的 API Key？"
@@ -310,6 +349,18 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
             </Popconfirm>
           )}
         </Space>
+
+        {testResult && (
+          <Alert
+            style={{ marginTop: 16 }}
+            type={testResult.ok ? 'success' : 'error'}
+            showIcon
+            closable
+            onClose={() => setTestResult(null)}
+            message={testResult.ok ? '连接成功' : '连接失败'}
+            description={testResult.message}
+          />
+        )}
       </Form>
     </ProCard>
   );
@@ -420,6 +471,10 @@ export default function ProjectDetail() {
       </ProCard>
 
       <ModelConfigCard projectId={pid} />
+
+      <ProCard style={{ marginTop: 16 }} title="环境与变量">
+        <EnvironmentsCard projectId={pid} />
+      </ProCard>
 
       <ProCard style={{ marginTop: 16 }} title="功能列表">
         <Space style={{ marginBottom: 16 }} wrap>

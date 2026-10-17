@@ -10,10 +10,11 @@ from sqlalchemy import func, select
 
 from ..config import get_settings
 from ..deps import CurrentUser, DbSession, require_team_role, visible_team_ids
-from ..models import AiCall, CaseResult, Run
+from ..models import AiCall, CaseResult, Run, RunBatch, TestTask
 from ..runner import parsers, persist
 from ..schemas import CaseResultOut, RunDetailOut, RunListOut, RunProgressOut
-from ..taskstatus import refresh_task_status
+from ..taskstatus import ACTIVE_RUN_STATUSES, refresh_task_status
+from .task_common import failed_case_ids
 
 router = APIRouter(tags=["runs"])
 
@@ -66,6 +67,35 @@ async def _require_run(db, run_id: uuid.UUID, user, minimum: str = "member") -> 
         raise HTTPException(status.HTTP_404_NOT_FOUND, "执行记录不存在")
     await require_team_role(run.team_id, user, db, minimum)
     return run
+
+
+@router.post("/api/runs/{run_id}/rerun-failed")
+async def rerun_run_failed(
+    run_id: uuid.UUID, user: CurrentUser, db: DbSession
+) -> dict:
+    run = await _require_run(db, run_id, user)
+    if run.status in ACTIVE_RUN_STATUSES:
+        raise HTTPException(status.HTTP_409_CONFLICT, "这次执行还没结束，不能重跑")
+    if run.task_id is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "源任务已删除，无法重跑")
+    task = await db.get(TestTask, run.task_id)
+    if task is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "源任务已删除，无法重跑")
+    case_ids, unresolved = await failed_case_ids(db, run_id=run.id)
+    batch = await db.get(RunBatch, run.batch_id) if run.batch_id else None
+    # batches 依赖 runs 的路径解析，这里延迟导入避免循环
+    from .batches import _rerun_failed
+
+    return await _rerun_failed(
+        db,
+        user,
+        task,
+        case_ids,
+        unresolved=unresolved,
+        parent_batch_id=run.batch_id,
+        environment_name=run.environment_name
+        or (batch.environment_name if batch else None),
+    )
 
 
 # ------------------------------------------------------------------------- 列表详情

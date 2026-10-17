@@ -710,6 +710,152 @@ async def _feature_coverage(db: DbSession, task_ids: list[uuid.UUID]) -> dict:
     return {task_id: int(count) for task_id, count in rows}
 
 
+@router.get("/requirement-coverage")
+async def requirement_coverage(
+    user: CurrentUser,
+    db: DbSession,
+    team_id: uuid.UUID | None = None,
+    project_id: uuid.UUID | None = None,
+    iteration_id: uuid.UUID | None = None,
+) -> dict:
+    """需求 → 功能 → 用例 → 最近结果的覆盖矩阵。"""
+    await _authorize(db, user, team_id, project_id)
+    if team_id is None and project_id is None:
+        raise HTTPException(400, "请选择团队或项目")
+
+    stmt = (
+        select(
+            Feature.id,
+            Feature.name,
+            Feature.requirement_ids,
+            Feature.project_id,
+            Project.name,
+        )
+        .join(Project, Project.id == Feature.project_id)
+        .order_by(Project.name, Feature.name)
+    )
+    if project_id is not None:
+        stmt = stmt.where(Feature.project_id == project_id)
+    else:
+        stmt = stmt.where(Project.team_id == team_id)
+    if iteration_id is not None:
+        stmt = stmt.where(Feature.iteration_id == iteration_id)
+    features = (await db.execute(stmt)).all()
+
+    feature_ids = [row[0] for row in features]
+    cases = (
+        await db.execute(
+            select(TestCase.id, TestCase.feature_id, TestCase.name, TestCase.priority)
+            .where(TestCase.feature_id.in_(feature_ids), TestCase.is_active.is_(True))
+            .order_by(TestCase.name)
+        )
+    ).all() if feature_ids else []
+    case_ids = [row[0] for row in cases]
+
+    latest: dict[uuid.UUID, dict] = {}
+    if case_ids:
+        result_rows = (
+            await db.execute(
+                select(
+                    CaseResult.test_case_id,
+                    CaseResult.status,
+                    Run.failure_kind,
+                    Run.started_at,
+                    Run.created_at,
+                )
+                .join(Run, Run.id == CaseResult.run_id)
+                .where(CaseResult.test_case_id.in_(case_ids))
+                .distinct(CaseResult.test_case_id)
+                .order_by(
+                    CaseResult.test_case_id,
+                    Run.started_at.desc().nullslast(),
+                    Run.created_at.desc(),
+                    # 同一个 YAML 可能包含多个 midscene case；只要有一个失败，
+                    # 这个平台的用例就应显示为失败
+                    case((CaseResult.status == "success", 1), else_=0).asc(),
+                    CaseResult.id.desc(),
+                )
+            )
+        ).all()
+        for case_id, status, failure_kind, started_at, created_at in result_rows:
+            latest[case_id] = {
+                "status": status,
+                "failure_kind": failure_kind,
+                "last_run_at": started_at or created_at,
+            }
+
+    from ..coverage import compute_requirement_coverage
+    from ..ids import split_ids
+
+    rows: list[dict] = []
+    all_requirements: dict[str, dict] = {}
+    unmapped = 0
+    for feature_id, feature_name, requirement_ids, feature_project_id, project_name in features:
+        requirements = split_ids(requirement_ids)
+        if not requirements:
+            unmapped += 1
+            continue
+        for req in requirements:
+            all_requirements.setdefault(
+                req,
+                {
+                    "feature_id": feature_id,
+                    "feature_name": feature_name,
+                    "project_name": project_name,
+                },
+            )
+        for case_id, case_feature_id, case_name, priority in cases:
+            if case_feature_id != feature_id:
+                continue
+            result = latest.get(case_id, {})
+            for req in requirements:
+                rows.append(
+                    {
+                        "requirement_id": req,
+                        "feature_id": feature_id,
+                        "feature_name": feature_name,
+                        "project_name": project_name,
+                        "case_id": case_id,
+                        "case_name": case_name,
+                        "priority": priority,
+                        "status": result.get("status"),
+                        "failure_kind": result.get("failure_kind"),
+                        "last_run_at": result.get("last_run_at"),
+                    }
+                )
+
+    data = compute_requirement_coverage(rows)
+    existing = {item["requirement_id"] for item in data["requirements"]}
+    for req, meta in all_requirements.items():
+        if req in existing:
+            continue
+        data["requirements"].append(
+            {
+                "requirement_id": req,
+                "features": [meta["feature_name"]],
+                "feature_ids": [str(meta["feature_id"])],
+                "projects": [meta["project_name"]],
+                "case_count": 0,
+                "executed": 0,
+                "passed": 0,
+                "failed": 0,
+                "infra": 0,
+                "not_run": 0,
+                "coverage_rate": 0,
+                "pass_rate": None,
+                "status": "gap",
+                "last_run_at": None,
+            }
+        )
+    data["requirements"].sort(key=lambda item: item["requirement_id"])
+    data["summary"]["total"] = len(data["requirements"])
+    data["summary"]["gap"] = sum(
+        1 for item in data["requirements"] if item["status"] == "gap"
+    )
+    data["summary"]["unmapped_features"] = unmapped
+    return data
+
+
 async def _authorize(
     db: DbSession, user: CurrentUser, team_id: uuid.UUID | None, project_id: uuid.UUID | None
 ) -> None:

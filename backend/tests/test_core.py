@@ -16,6 +16,7 @@ from app.ai_case import (
     summarize_yaml,
 )
 from app.api.auth import _clear, _hit
+from app.api.projects import _test_failure
 from app.api.task_common import split_shards
 from app.runner import staging
 from app.taskstatus import aggregate
@@ -65,6 +66,20 @@ def test_stream_error_messages_are_friendly():
     assert "繁忙" in _friendly_stream_error(
         httpx.HTTPStatusError("busy", request=request, response=busy)
     )
+
+
+def test_model_connection_error_messages():
+    request = httpx.Request("POST", "http://model.test/v1/chat/completions")
+    unauthorized = httpx.Response(401, request=request, text="invalid api key")
+    message = _test_failure(
+        httpx.HTTPStatusError("bad", request=request, response=unauthorized), timeout=20
+    )
+    assert "API Key" in message
+    assert "401" in message
+    assert "invalid api key" in message
+
+    assert "断开" in _test_failure(httpx.RemoteProtocolError("boom"), timeout=20)
+    assert "超时" in _test_failure(httpx.ReadTimeout("slow"), timeout=20)
 
 
 def test_yaml_validation_accepts_valid_case():

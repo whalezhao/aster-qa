@@ -29,9 +29,22 @@ also the idea behind the logo.
 - **Tasks and batch execution**: a task is a snapshot of a set of features. Cross-project
   tasks are split into multiple runs. Large single-project tasks are sharded by “cases per
   run”. Multi-worker horizontal scaling and a global concurrency cap are supported.
+- **Preflight checks**: model connectivity, environment, quota, target URL and worker
+  availability in one place. Model failures block the run with a concrete reason.
 - **Executions**: drill down from batch to run, case, and report. Reports are
   case-centric: each step has a keyframe timeline with replay plus parameters, output,
   logs, and reasoning.
+- **Rerun failed cases only**: rebuild a batch from the failed cases of a batch or run,
+  reusing the original environment and keeping parent/child lineage.
+- **CI/CD and quality gates**: team API tokens trigger runs and read batch status; gates
+  enforce a minimum pass rate and P0-failure policy for CI.
+- **Scheduled regression**: one cron schedule per task with timezone support; overlapping
+  runs are skipped and failures can notify.
+- **Environments and variables**: multiple environments per project; plain variables use
+  `${KEY}`, secrets are injected only into the process environment (`${{KEY}}`) and
+  encrypted at rest.
+- **Notification channels**: generic HMAC webhooks plus WeCom, Feishu, DingTalk and Slack
+  bots.
 - **Compliance-ready reports**: when one execution spans multiple projects, the run
   reports are merged into one formal report (report number, scope, summary, failures).
   Supports printing / PDF export and per-execution electronic signoff — one execution
@@ -39,12 +52,17 @@ also the idea behind the logo.
 - **AI execution assessment**: reads the actual failed steps and failure reasons, then
   reports a root cause, ownership (case / product / environment), and concrete advice.
   All-green batches skip the model and use a trophy card.
+- **AI case repair**: proposes revised YAML plus a diff from real failure evidence; the
+  user confirms before it is saved as a new version.
+- **Case version history**: snapshots on create, save, AI repair and rollback, with diff
+  and rollback. Rollback creates a new version instead of deleting history.
 - **Manual signoff**: creates a content-fingerprint signature for the task’s case set and
   marks it stale when the cases change.
-- **Webhooks**: `task.signed`, `batch.completed`, and `batch.assessed`, with HMAC signing
-  and exponential-backoff retries.
-- **Statistics**: pass rate, Wilson lower bound, first-pass rate, flaky ranking, and
-  token usage.
+- **Webhooks**: `task.signed`, `batch.completed`, `batch.assessed`,
+  `quality_gate.failed`, `schedule.failed`, and `model.unhealthy`, with HMAC signing and
+  exponential-backoff retries.
+- **Statistics**: pass rate, Wilson lower bound, first-pass rate, flaky ranking, token
+  usage, and a requirement coverage matrix.
 - **Team review**: AI summarizes executions over a period and suggests improvements.
 - **Project-level model configuration and token quota**: there is no global model. Each
   project selects its own model, and a monthly quota can block execution and AI calls.

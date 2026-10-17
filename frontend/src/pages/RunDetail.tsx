@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, Col, Progress, Row, Space, Spin, Statistic, Tabs, Tag } from 'antd';
 import { ProCard, ProDescriptions } from '@ant-design/pro-components';
 import { ReloadOutlined, StopOutlined } from '@ant-design/icons';
-import { cancelRun, getRun, getRunCases, isRunActive, reparseRun } from '../api/runs';
+import { cancelRun, getRun, getRunCases, isRunActive, reparseRun, rerunFailedRun } from '../api/runs';
 import { apiError } from '../api/client';
 import { fmtDateTime, fmtDuration, fmtPercent, fmtTokens, runStatusView } from '../lib/format';
 import { PAGE, byNumber, byRank, byText } from '../lib/table';
 import type { RunCase } from '../api/types';
 import QaTable from '../components/QaTable';
+import AiFixModal from '../components/AiFixModal';
 import { RunReportView } from '../components/report/ReportView';
 
 export default function RunDetail() {
@@ -26,6 +27,7 @@ export default function RunDetail() {
   }, [tabParam]);
   const { message } = App.useApp();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: run, isLoading } = useQuery({
     queryKey: ['run', rid],
@@ -48,6 +50,15 @@ export default function RunDetail() {
       message.success(`已重新解析，重建 ${res.cases} 条用例结果`);
       queryClient.invalidateQueries({ queryKey: ['run', rid] });
       queryClient.invalidateQueries({ queryKey: ['run-cases', rid] });
+    },
+    onError: (e) => message.error(apiError(e)),
+  });
+
+  const rerunFailed = useMutation({
+    mutationFn: () => rerunFailedRun(rid),
+    onSuccess: (res) => {
+      message.success(`已提交重跑 ${res.case_count} 个失败用例`);
+      navigate(`/executions/${res.batch_id}`);
     },
     onError: (e) => message.error(apiError(e)),
   });
@@ -75,6 +86,11 @@ export default function RunDetail() {
       }
       extra={
         <Space>
+          {!active && (run.failed ?? 0) > 0 && (
+            <Button loading={rerunFailed.isPending} onClick={() => rerunFailed.mutate()}>
+              仅重跑失败用例
+            </Button>
+          )}
           <Button
             icon={<ReloadOutlined />}
             loading={reparseMutation.isPending}
@@ -141,6 +157,11 @@ export default function RunDetail() {
         <ProDescriptions.Item label="Token 用量">{fmtTokens(run.ai_total_tokens)}</ProDescriptions.Item>
         <ProDescriptions.Item label="AI 耗时">{fmtDuration(run.ai_cost_ms)}</ProDescriptions.Item>
         <ProDescriptions.Item label="模型">{run.model_name || '-'}</ProDescriptions.Item>
+        <ProDescriptions.Item label="环境">
+          {run.environment_name
+            ? `${run.environment_name}${run.environment_base_url ? ` · ${run.environment_base_url}` : ''}`
+            : '默认'}
+        </ProDescriptions.Item>
         <ProDescriptions.Item label="退出码">{run.exit_code ?? '-'}</ProDescriptions.Item>
         <ProDescriptions.Item label="Run ID">{run.id}</ProDescriptions.Item>
         <ProDescriptions.Item label="任务">
@@ -168,6 +189,7 @@ export default function RunDetail() {
 }
 
 function CasesTab({ rid }: { rid: string }) {
+  const [fixing, setFixing] = useState<{ id: string; name: string } | null>(null);
   const { data: cases = [], isLoading } = useQuery({
     queryKey: ['run-cases', rid],
     queryFn: () => getRunCases(rid),
@@ -175,43 +197,66 @@ function CasesTab({ rid }: { rid: string }) {
   });
 
   return (
-    <QaTable<RunCase>
-      rowKey="id"
-      loading={isLoading}
-      dataSource={cases}
-      pagination={PAGE}
-      locale={{ emptyText: '暂无用例结果' }}
-      columns={[
-        {
-          title: '#',
-          dataIndex: 'case_index',
-          width: 60,
-          sorter: byNumber<RunCase>((r) => r.case_index),
-        },
-        { title: '用例', dataIndex: 'name', sorter: byText<RunCase>((r) => r.name) },
-        {
-          title: '结果',
-          dataIndex: 'status',
-          width: 110,
-          sorter: byRank<RunCase>((r) => r.status, ['passed', 'failed']),
-          render: (s: string) => (
-            <Tag color={s === 'passed' ? 'success' : s === 'failed' ? 'error' : 'default'}>{s}</Tag>
-          ),
-        },
-        {
-          title: '尝试次数',
-          dataIndex: 'attempt_count',
-          width: 100,
-          sorter: byNumber<RunCase>((r) => r.attempt_count),
-        },
-        {
-          title: '重试后通过',
-          dataIndex: 'passed_after_retry',
-          width: 110,
-          sorter: byNumber<RunCase>((r) => (r.passed_after_retry ? 1 : 0)),
-          render: (v: boolean) => (v ? <Tag color="warning">是</Tag> : '否'),
-        },
-      ]}
-    />
+    <>
+      <QaTable<RunCase>
+        rowKey="id"
+        loading={isLoading}
+        dataSource={cases}
+        pagination={PAGE}
+        locale={{ emptyText: '暂无用例结果' }}
+        columns={[
+          {
+            title: '#',
+            dataIndex: 'case_index',
+            width: 60,
+            sorter: byNumber<RunCase>((r) => r.case_index),
+          },
+          { title: '用例', dataIndex: 'name', sorter: byText<RunCase>((r) => r.name) },
+          {
+            title: '结果',
+            dataIndex: 'status',
+            width: 110,
+            sorter: byRank<RunCase>((r) => r.status, ['passed', 'failed']),
+            render: (s: string) => (
+              <Tag color={s === 'passed' ? 'success' : s === 'failed' ? 'error' : 'default'}>{s}</Tag>
+            ),
+          },
+          {
+            title: '尝试次数',
+            dataIndex: 'attempt_count',
+            width: 100,
+            sorter: byNumber<RunCase>((r) => r.attempt_count),
+          },
+          {
+            title: '重试后通过',
+            dataIndex: 'passed_after_retry',
+            width: 110,
+            sorter: byNumber<RunCase>((r) => (r.passed_after_retry ? 1 : 0)),
+            render: (v: boolean) => (v ? <Tag color="warning">是</Tag> : '否'),
+          },
+          {
+            title: '操作',
+            width: 110,
+            render: (_value, row) =>
+              row.status !== 'success' && row.test_case_id ? (
+                <Button
+                  size="small"
+                  onClick={() => setFixing({ id: row.test_case_id!, name: row.name })}
+                >
+                  AI 修复
+                </Button>
+              ) : (
+                '-'
+              ),
+          },
+        ]}
+      />
+      <AiFixModal
+        open={Boolean(fixing)}
+        caseId={fixing?.id ?? ''}
+        caseName={fixing?.name}
+        onClose={() => setFixing(null)}
+      />
+    </>
   );
 }

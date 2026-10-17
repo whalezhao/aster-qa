@@ -19,7 +19,6 @@ import hashlib
 import hmac
 import json
 import logging
-import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -29,16 +28,19 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import SessionLocal
+from .ids import split_ids
 from .models import (
     AiCheck,
     CaseResult,
     Feature,
     Iteration,
     Project,
+    ProjectModelHealth,
     Run,
     RunBatch,
     Tag,
     TaskCase,
+    TaskSchedule,
     TaskSignoff,
     TaskTag,
     Team,
@@ -48,6 +50,7 @@ from .models import (
     Webhook,
     WebhookDelivery,
 )
+from .webhook_channels import provider_business_error, render_provider_request
 
 log = logging.getLogger("webhook")
 
@@ -57,6 +60,9 @@ EVENTS: dict[str, str] = {
     "task.signed": "任务签名（人工审核通过）",
     "batch.completed": "一次执行完成",
     "batch.assessed": "AI 评估完成（给出结果结论与建议）",
+    "quality_gate.failed": "质量门禁未通过",
+    "schedule.failed": "定时执行失败",
+    "model.unhealthy": "项目模型不可用",
     "ping": "测试投递（配好之后点一下看通不通）",
 }
 
@@ -64,17 +70,6 @@ POLL_SECONDS = 5
 MAX_ATTEMPTS = 6  # 1m → 2m → 4m → 8m → 16m → 30m，之后放弃
 REQUEST_TIMEOUT = 10.0
 _SNIPPET = 500
-
-
-def split_ids(raw: str | None) -> list[str]:
-    """「1234, BUG-56；789」→ ['1234', 'BUG-56', '789']。
-
-    编号是手填的，逗号/分号/空格都当分隔符 —— webhook 里发数组，
-    接收方不用猜我们用什么分隔的。
-    """
-    if not raw:
-        return []
-    return [p for p in re.split(r"[,，;；\s]+", raw.strip()) if p]
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -277,6 +272,7 @@ async def _batch_context(db: AsyncSession, batch: RunBatch) -> dict[str, Any]:
             "id": str(batch.id),
             "name": batch.name,
             "trigger": batch.trigger,
+            "environment_name": batch.environment_name,
             "created_at": _iso(batch.created_at),
             # RunBatch 上没有 started_at/ended_at（批次指标一律现算），这里取各 run 的
             # 最早开始 / 最晚结束 —— 直接读 batch 上的字段会 AttributeError 把 worker 打挂
@@ -335,6 +331,62 @@ async def build_payload(
                 },
             },
         }
+    if event == "quality_gate.failed":
+        batch = await db.get(RunBatch, ref_id)
+        if batch is None:
+            raise ValueError("批次不存在")
+        return {
+            **envelope,
+            "data": {
+                **await _batch_context(db, batch),
+                "gate": batch.gate_detail or {},
+            },
+        }
+    if event == "schedule.failed":
+        schedule = await db.get(TaskSchedule, ref_id)
+        if schedule is None:
+            raise ValueError("定时计划不存在")
+        task = await db.get(TestTask, schedule.task_id)
+        return {
+            **envelope,
+            "data": {
+                "schedule": {
+                    "id": str(schedule.id),
+                    "cron": schedule.cron,
+                    "timezone": schedule.timezone,
+                    "error": schedule.last_error,
+                    "last_run_at": _iso(schedule.last_run_at),
+                },
+                "task": (
+                    {"id": str(task.id), "name": task.name, "type": task.type}
+                    if task
+                    else None
+                ),
+            },
+        }
+    if event == "model.unhealthy":
+        project = await db.get(Project, ref_id)
+        health = await db.get(ProjectModelHealth, ref_id)
+        if project is None or health is None:
+            raise ValueError("项目或健康记录不存在")
+        return {
+            **envelope,
+            "data": {
+                "project": {
+                    "id": str(project.id),
+                    "name": project.name,
+                    "code": project.code,
+                },
+                "health": {
+                    "status": health.status,
+                    "message": health.message,
+                    "model_name": health.model_name,
+                    "latency_ms": health.latency_ms,
+                    "checked_at": _iso(health.checked_at),
+                    "source": health.source,
+                },
+            },
+        }
     if event == "ping":
         return {**envelope, "data": {"message": "这是一条测试投递，通了。"}}
     raise ValueError(f"未知事件：{event}")
@@ -370,7 +422,9 @@ async def enqueue(
     for hook in hooks:
         if event not in split_ids(hook.events):
             continue
-        payload = await build_payload(db, event, ref_id, hook.include_yaml)
+        payload = await build_payload(
+            db, event, ref_id, hook.include_yaml and hook.kind == "generic"
+        )
         db.add(WebhookDelivery(webhook_id=hook.id, event=event, payload=payload))
         queued += 1
     return queued
@@ -424,34 +478,62 @@ async def _deliver_due(db: AsyncSession) -> int:
     sent = 0
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=False) as client:
         for delivery, hook in rows:
-            body = json.dumps(
-                delivery.payload, ensure_ascii=False, separators=(",", ":")
-            ).encode()
-            timestamp = str(int(datetime.now(UTC).timestamp()))
-            headers = {
-                "Content-Type": "application/json",
-                "User-Agent": "aster-qa-webhook/1",
-                "X-QA-Event": delivery.event,
-                "X-QA-Delivery": str(delivery.id),
-                "X-QA-Timestamp": timestamp,
-                "X-QA-Token": hook.secret,
-                "X-QA-Signature": sign(hook.secret, timestamp, body),
-                # 通用 HMAC V2：给认这一套的接收端（Hermes 等自建网关）用同一把密钥验签
-                "X-Webhook-Timestamp": timestamp,
-                "X-Webhook-Signature-V2": sign_v2(hook.secret, timestamp, body),
-            }
+            rendered = render_provider_request(
+                hook.kind, hook.url, hook.secret, delivery.event, delivery.payload
+            )
+            if rendered is not None:
+                url, body, headers = rendered
+                headers.update(
+                    {"X-QA-Event": delivery.event, "X-QA-Delivery": str(delivery.id)}
+                )
+            else:
+                if not hook.secret:
+                    delivery.attempts += 1
+                    delivery.error = "generic webhook 未配置 secret"
+                    if delivery.attempts >= MAX_ATTEMPTS:
+                        delivery.status = "failed"
+                        delivery.finished_at = datetime.now(UTC)
+                    else:
+                        delivery.next_attempt_at = datetime.now(UTC) + timedelta(
+                            seconds=min(1800, 60 * 2 ** (delivery.attempts - 1))
+                        )
+                    continue
+                url = hook.url
+                body = json.dumps(
+                    delivery.payload, ensure_ascii=False, separators=(",", ":")
+                ).encode()
+                timestamp = str(int(datetime.now(UTC).timestamp()))
+                headers = {
+                    "Content-Type": "application/json",
+                    "User-Agent": "aster-qa-webhook/1",
+                    "X-QA-Event": delivery.event,
+                    "X-QA-Delivery": str(delivery.id),
+                    "X-QA-Timestamp": timestamp,
+                    "X-QA-Token": hook.secret,
+                    "X-QA-Signature": sign(hook.secret, timestamp, body),
+                    # 通用 HMAC V2：给认这一套的接收端（Hermes 等自建网关）用同一把密钥验签
+                    "X-Webhook-Timestamp": timestamp,
+                    "X-Webhook-Signature-V2": sign_v2(hook.secret, timestamp, body),
+                }
 
             delivery.attempts += 1
-            status_code, snippet, error = await _send(client, hook.url, body, headers)
+            status_code, snippet, error = await _send(client, url, body, headers)
             delivery.response_status = status_code
             delivery.response_snippet = snippet
-            if status_code is not None and 200 <= status_code < 300:
+            business_error = provider_business_error(
+                hook.kind, status_code or 0, snippet or ""
+            )
+            if (
+                status_code is not None
+                and 200 <= status_code < 300
+                and business_error is None
+            ):
                 delivery.status = "success"
                 delivery.finished_at = datetime.now(UTC)
                 delivery.error = None
                 sent += 1
                 continue
-            delivery.error = error or f"HTTP {status_code}"
+            delivery.error = error or business_error or f"HTTP {status_code}"
 
             if delivery.attempts >= MAX_ATTEMPTS:
                 delivery.status = "failed"

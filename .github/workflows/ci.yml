@@ -20,6 +20,35 @@ jobs:
       - run: uv run ruff check app worker.py scripts tests
       - run: uv run pytest -q
 
+  migrations:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: qa
+          POSTGRES_PASSWORD: qa
+          POSTGRES_DB: qa_manage
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qa -d qa_manage"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql+asyncpg://qa:qa@localhost:5432/qa_manage
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run alembic upgrade head
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

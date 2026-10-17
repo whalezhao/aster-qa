@@ -56,6 +56,9 @@ cases:
 `beforeEach` 里的 `gotoUrl: ${BASE_URL}` 由平台替换成该项目的被测地址。\
 **始终原样保留这一行，不要写死任何具体 URL。**
 
+项目还可以配置其他环境变量：普通变量用 `${KEY}` 引用，密钥用 `${{KEY}}` 引用。\
+用户提到账号、密码、测试数据时，优先使用这些占位符，不要把真实值写进 YAML。
+
 ## 可用的步骤节点
 
 操作类（**首选 `aiAct`**）：
@@ -338,6 +341,7 @@ async def call_model(
     messages: list[dict],
     *,
     timeout: float = 180.0,
+    max_tokens: int = 4096,
 ) -> tuple[str, dict]:
     """调项目配置的模型。走 OpenAI 兼容的 chat/completions。"""
     base = (config.base_url or "").rstrip("/")
@@ -349,7 +353,7 @@ async def call_model(
         "messages": messages,
         # 生成用例要的是稳定而不是创意
         "temperature": 0.2,
-        "max_tokens": 4096,
+        "max_tokens": max_tokens,
     }
     # 推理模型默认会把 token 大量花在思考上，甚至把 max_tokens 烧光、content 返回 null。
     # 实测 chat_template_kwargs 能彻底关掉；但换到别的服务端可能不认这个字段，

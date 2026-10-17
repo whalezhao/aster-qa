@@ -16,6 +16,7 @@ import { failureKindLabel, fmtDateTime, fmtDuration } from '../lib/format';
 import { PAGE, byDate, byNumber, byRank, byText } from '../lib/table';
 import type { CaseHistoryItem, FeatureStage, Priority, ValidateResult } from '../api/types';
 import QaTable from '../components/QaTable';
+import CaseVersionsTab from '../components/CaseVersionsTab';
 
 interface CaseFormValues {
   name: string;
@@ -76,11 +77,13 @@ export default function CaseEditor() {
         // 清空输入框存 NULL，别在库里留空串
         defect_ids: v.defect_ids?.trim() || null,
         stage_override: v.stage_override ?? null,
+        change_source: 'manual',
       } as CaseInput),
     onSuccess: () => {
       message.success('用例已保存');
       queryClient.invalidateQueries({ queryKey: ['case', cid] });
       queryClient.invalidateQueries({ queryKey: ['cases'] });
+      queryClient.invalidateQueries({ queryKey: ['case-versions', cid] });
     },
     onError: (e) => message.error(apiError(e)),
   });
@@ -196,6 +199,11 @@ export default function CaseEditor() {
             key: 'history',
             label: '历史执行结果',
             children: <HistoryTab cid={cid} />,
+          },
+          {
+            key: 'versions',
+            label: '版本历史',
+            children: <CaseVersionsTab caseId={cid} />,
           },
         ]}
       />

@@ -1,6 +1,6 @@
 import { http } from './client';
 import type { ReportStructured } from './runs';
-import type { RunStatus } from './types';
+import type { GateResult, RunStatus } from './types';
 
 /** 批次状态。派生自它下面的 runs，不落库。 */
 export type BatchStatus =
@@ -40,7 +40,11 @@ export interface Batch {
   team_name?: string | null;
   iteration_id: string | null;
   name: string;
-  trigger: 'manual' | 'regression';
+  trigger: 'manual' | 'regression' | 'rerun' | 'schedule' | 'ci';
+  environment_name: string | null;
+  parent_batch_id: string | null;
+  gate_status: GateResult['status'] | null;
+  gate_detail: GateResult | null;
   created_at: string;
   created_by_name?: string | null;
   started_at: string | null;
@@ -69,6 +73,7 @@ export interface BatchRun {
   duration_ms: number | null;
   model_name: string | null;
   failure_kind: string | null;
+  environment_name: string | null;
   report_available: boolean;
   started_at: string | null;
   shard_index: number | null;
@@ -98,6 +103,18 @@ export async function getBatches(params: BatchListParams): Promise<{ items: Batc
 
 export async function getBatch(id: string): Promise<BatchDetail> {
   const { data } = await http.get<BatchDetail>(`/api/batches/${id}`);
+  return data;
+}
+
+/** 只重跑这个批次里失败用例；返回新批次。 */
+export async function rerunFailedBatch(
+  id: string,
+): Promise<{ batch_id: string; run_ids: string[]; case_count: number }> {
+  const { data } = await http.post<{
+    batch_id: string;
+    run_ids: string[];
+    case_count: number;
+  }>(`/api/batches/${id}/rerun-failed`);
   return data;
 }
 

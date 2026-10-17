@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Breadcrumb, Button, Col, Empty, Progress, Row, Space, Statistic, Tag, Tooltip, Typography, theme } from 'antd';
 import { ProCard, ProDescriptions } from '@ant-design/pro-components';
 import { FileTextOutlined, TrophyOutlined } from '@ant-design/icons';
-import { getBatch, type BatchDetail, type BatchFeature, type BatchRun } from '../api/batches';
+import { getBatch, rerunFailedBatch, type BatchDetail, type BatchFeature, type BatchRun } from '../api/batches';
 import { useActiveTeam } from '../team/TeamContext';
 import {
   BATCH_STATUS_COLORS,
@@ -40,13 +40,24 @@ export default function ExecutionDetail() {
   });
 
   const queryClient = useQueryClient();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const rerun = useMutation({
     mutationFn: () => rerunBatchCheck(bid),
     onSuccess: (check) => {
       // 写回 pending 状态，上面的轮询会自动接着跑
       queryClient.setQueryData(['batch-ai-check', bid], check);
       message.success('已提交重新评估');
+    },
+    onError: (e) => message.error(apiError(e)),
+  });
+
+  const rerunFailed = useMutation({
+    mutationFn: () => rerunFailedBatch(bid),
+    onSuccess: (res) => {
+      message.success(`已提交重跑 ${res.case_count} 个失败用例`);
+      queryClient.invalidateQueries({ queryKey: ['batch', bid] });
+      queryClient.invalidateQueries({ queryKey: ['batches'] });
+      navigate(`/executions/${res.batch_id}`);
     },
     onError: (e) => message.error(apiError(e)),
   });
@@ -86,6 +97,21 @@ export default function ExecutionDetail() {
         }
         extra={
           <Space>
+            {!running && batch.failed > 0 && (
+              <Button
+                loading={rerunFailed.isPending}
+                onClick={() =>
+                  modal.confirm({
+                    title: `只重跑 ${batch.failed} 个失败用例？`,
+                    content:
+                      '会创建一个新批次，并沿用本次执行的环境；一个 YAML 里的其他用例也会一起再跑。',
+                    onOk: () => rerunFailed.mutateAsync(),
+                  })
+                }
+              >
+                仅重跑失败用例
+              </Button>
+            )}
             <Button
               icon={<FileTextOutlined />}
               onClick={() => navigate(`/executions/${bid}/report`)}
@@ -117,14 +143,53 @@ export default function ExecutionDetail() {
           <ProDescriptions.Item label="耗时">{fmtDuration(batch.duration_ms)}</ProDescriptions.Item>
           <ProDescriptions.Item label="项目数">{batch.project_count}</ProDescriptions.Item>
           <ProDescriptions.Item label="触发方式">
-            {batch.trigger === 'regression' ? '回归' : '手动'}
+            {
+              {
+                manual: '手动',
+                regression: '回归',
+                rerun: '重跑失败',
+                schedule: '定时',
+                ci: 'CI',
+              }[batch.trigger] ?? batch.trigger
+            }
           </ProDescriptions.Item>
+          <ProDescriptions.Item label="环境">{batch.environment_name || '默认'}</ProDescriptions.Item>
           <ProDescriptions.Item label="执行 ID">
             <Typography.Text copyable style={{ fontSize: 12 }}>
               {batch.id}
             </Typography.Text>
           </ProDescriptions.Item>
         </ProDescriptions>
+
+        {batch.gate_detail && batch.gate_detail.status !== 'disabled' && (
+          <Alert
+            style={{ marginTop: 12 }}
+            type={
+              batch.gate_detail.status === 'failed'
+                ? 'error'
+                : batch.gate_detail.status === 'pending'
+                  ? 'info'
+                  : batch.gate_detail.status === 'no_data'
+                    ? 'warning'
+                    : 'success'
+            }
+            showIcon
+            message={
+              batch.gate_detail.status === 'failed'
+                ? '质量门禁未通过'
+                : batch.gate_detail.status === 'pending'
+                  ? '质量门禁待执行完成'
+                  : batch.gate_detail.status === 'no_data'
+                    ? '质量门禁无有效执行'
+                    : '质量门禁通过'
+            }
+            description={
+              batch.gate_detail.reasons.length
+                ? batch.gate_detail.reasons.join('；')
+                : `通过率 ${fmtPercent((batch.gate_detail.pass_rate ?? 0) * 100)}`
+            }
+          />
+        )}
 
         {running && (
           <>

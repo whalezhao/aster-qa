@@ -25,6 +25,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -171,6 +172,123 @@ class ProjectModelConfig(Timestamped, Base):
     project: Mapped["Project"] = relationship(back_populates="model_config")
 
 
+class ProjectModelHealth(Base):
+    """项目模型接通的最近一次探测结果（每项目一行，只保留最新）。"""
+
+    __tablename__ = "project_model_health"
+    __table_args__ = (
+        CheckConstraint(
+            _in("status", "healthy", "unhealthy", "unknown"),
+            name="ck_project_model_health_status",
+        ),
+        CheckConstraint(
+            _in("source", "periodic", "manual"), name="ck_project_model_health_source"
+        ),
+    )
+
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="unknown")
+    model_name: Mapped[str | None] = mapped_column(String(128))
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    message: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="periodic")
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class ProjectEnvironment(Timestamped, Base):
+    """项目的一套测试环境（地址 + 变量）。
+
+    任务只存环境名；执行时按项目名解析成对应环境。跨项目任务要求每个项目
+    都有同名环境，避免「这个项目跑 staging、那个项目跑 prod」的隐性错配。
+    """
+
+    __tablename__ = "project_environments"
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_project_environments_name"),
+        Index("ix_project_environments_project", "project_id"),
+        Index(
+            "uq_project_environments_default",
+            "project_id",
+            unique=True,
+            postgresql_where=text("is_default"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    base_url: Mapped[str | None] = mapped_column(String(512))
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+
+class ProjectEnvironmentVariable(Timestamped, Base):
+    """环境变量。密钥值在库里是 Fernet 密文，接口只回 value_set。"""
+
+    __tablename__ = "project_environment_variables"
+    __table_args__ = (
+        UniqueConstraint(
+            "environment_id", "key", name="uq_project_environment_variables_key"
+        ),
+        Index("ix_project_environment_variables_env", "environment_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    environment_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("project_environments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    key: Mapped[str] = mapped_column(String(128), nullable=False)
+    value: Mapped[str | None] = mapped_column(Text)
+    is_secret: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    description: Mapped[str | None] = mapped_column(String(255))
+
+
+class TeamApiToken(Base):
+    """CI 用的团队级 token。库里只存 SHA-256，明文只在创建时返回一次。"""
+
+    __tablename__ = "team_api_tokens"
+    __table_args__ = (
+        Index("ix_team_api_tokens_team", "team_id"),
+        CheckConstraint("length(token_hash) = 64", name="ck_team_api_tokens_hash"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    token_prefix: Mapped[str] = mapped_column(String(24), nullable=False)
+    scopes: Mapped[str] = mapped_column(String(64), nullable=False, default="run,read")
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Iteration(Timestamped, Base):
     __tablename__ = "iterations"
     __table_args__ = (
@@ -279,6 +397,41 @@ class TestCase(Timestamped, Base):
         return self.feature.project_id if self.feature else None
 
 
+class TestCaseVersion(Base):
+    """用例的一次内容快照。创建、保存、AI 修复、回滚都会各留一版。"""
+
+    __tablename__ = "test_case_versions"
+    __table_args__ = (
+        UniqueConstraint("case_id", "version_no", name="uq_test_case_versions_no"),
+        CheckConstraint(
+            _in("change_source", "create", "manual", "ai_fix", "rollback", "backfill"),
+            name="ck_test_case_versions_source",
+        ),
+        Index("ix_test_case_versions_case", "case_id", "version_no"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("test_cases.id", ondelete="CASCADE"), nullable=False
+    )
+    version_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    yaml_content: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[str | None] = mapped_column(String(4))
+    defect_ids: Mapped[str | None] = mapped_column(String(255))
+    stage_override: Mapped[str | None] = mapped_column(String(16))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    change_source: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")
+    change_note: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class Tag(Timestamped, Base):
     __tablename__ = "tags"
     __table_args__ = (
@@ -339,6 +492,14 @@ class TestTask(Timestamped, Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
     case_selection_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="snapshot")
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 环境名而不是环境 id：跨项目任务要求每个项目都有同名环境。
+    # NULL = 使用各项目的「默认」环境（兼容历史任务）。
+    environment_name: Mapped[str | None] = mapped_column(String(64))
+    # CI 质量门禁：手动执行不阻断，只影响 /api/ci 的结论
+    gate_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 0..1；NULL = 不限制通过率
+    gate_min_pass_rate: Mapped[float | None] = mapped_column(Numeric(6, 4))
+    gate_fail_on_p0: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
@@ -405,9 +566,13 @@ class RunBatch(Timestamped, Base):
 
     __tablename__ = "run_batches"
     __table_args__ = (
-        CheckConstraint(_in("trigger", "manual", "regression"), name="ck_run_batches_trigger"),
+        CheckConstraint(
+            _in("trigger", "manual", "regression", "rerun", "schedule", "ci"),
+            name="ck_run_batches_trigger",
+        ),
         Index("ix_run_batches_team", "team_id"),
         Index("ix_run_batches_task", "task_id"),
+        Index("ix_run_batches_parent", "parent_batch_id"),
     )
 
     id: Mapped[uuid.UUID] = _pk()
@@ -423,6 +588,19 @@ class RunBatch(Timestamped, Base):
     # 任务名的快照：任务改名或删除后，历史执行记录还要能显示当时叫什么
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     trigger: Mapped[str] = mapped_column(String(16), nullable=False, default="manual")
+    # 重跑失败时指向源批次；定时/CI 触发来源也靠 trigger 区分
+    parent_batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("run_batches.id", ondelete="SET NULL")
+    )
+    # 环境名快照：环境改名/删除后历史批次仍能显示当时跑的是什么
+    environment_name: Mapped[str | None] = mapped_column(String(64))
+    # CI token 触发的批次留审计线索；用户手动触发为 NULL
+    created_by_token_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("team_api_tokens.id", ondelete="SET NULL")
+    )
+    # 门禁结果在批次收尾时固化一次；之后任务配置变化不影响历史结论
+    gate_status: Mapped[str | None] = mapped_column(String(16))
+    gate_detail: Mapped[dict | None] = mapped_column(JSONB)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
@@ -432,6 +610,41 @@ class RunBatch(Timestamped, Base):
 
     runs: Mapped[list["Run"]] = relationship(
         back_populates="batch", passive_deletes=True
+    )
+
+
+class TaskSchedule(Timestamped, Base):
+    """任务的一条定时回归计划（每个任务最多一条）。"""
+
+    __tablename__ = "task_schedules"
+    __table_args__ = (
+        CheckConstraint(
+            _in("last_status", "queued", "skipped_overlap", "failed"),
+            name="ck_task_schedules_last_status",
+        ),
+        Index("ix_task_schedules_due", "enabled", "next_run_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("test_tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    cron: Mapped[str] = mapped_column(String(64), nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Asia/Shanghai")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("run_batches.id", ondelete="SET NULL")
+    )
+    last_status: Mapped[str | None] = mapped_column(String(24))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    overlap_skipped: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
 
 
@@ -479,6 +692,12 @@ class Run(Timestamped, Base):
     iteration_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("iterations.id", ondelete="SET NULL")
     )
+    # 环境快照：id 用于追溯，name/base_url 用于环境被改名/删除后仍可读
+    environment_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("project_environments.id", ondelete="SET NULL")
+    )
+    environment_name: Mapped[str | None] = mapped_column(String(64))
+    environment_base_url: Mapped[str | None] = mapped_column(String(512))
 
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
     # 认领这个 run 的 worker 进程。多 worker 下用来判断「原 worker 是否还活着」，
@@ -683,17 +902,26 @@ class Webhook(Timestamped, Base):
     """团队级的 webhook 配置 —— 形如 GitLab：一个地址勾选订阅哪些事件。"""
 
     __tablename__ = "webhooks"
-    __table_args__ = (Index("ix_webhooks_team", "team_id"),)
+    __table_args__ = (
+        Index("ix_webhooks_team", "team_id"),
+        CheckConstraint(
+            _in("kind", "generic", "wecom", "feishu", "dingtalk", "slack"),
+            name="ck_webhooks_kind",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     team_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
+    # generic 是原样 POST + HMAC；其余是企业IM机器人，发送时按渠道渲染 body
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="generic")
     url: Mapped[str] = mapped_column(String(500), nullable=False)
     # 明文存：HMAC 验签必须拿到原文，没法像 API Key 那样只存哈希。
     # 保护级别等同于数据库本身 —— 接口只回 secret_set，绝不回原文。
-    secret: Mapped[str] = mapped_column(String(255), nullable=False)
+    # 企业 IM 渠道的 URL 自带凭据，secret 可为空（钉钉/飞书可选签名）。
+    secret: Mapped[str | None] = mapped_column(String(255))
     events: Mapped[str] = mapped_column(String(255), nullable=False)
     # 用例一多，YAML 正文能把 payload 顶到几百 KB，默认不发
     include_yaml: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -790,7 +1018,7 @@ class AiTokenUsage(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
-    # case_draft / assess / precheck / team_review
+    # case_draft / assess / precheck / team_review / model_test
     source: Mapped[str] = mapped_column(String(32), nullable=False)
     tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(

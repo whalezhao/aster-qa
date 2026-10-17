@@ -23,11 +23,15 @@ from ..webhook import EVENTS, build_payload, split_ids, task_ping_payload
 router = APIRouter(tags=["webhooks"])
 
 
+KINDS = {"generic", "wecom", "feishu", "dingtalk", "slack"}
+
+
 def _out(hook: Webhook, last: WebhookDelivery | None = None) -> WebhookOut:
     return WebhookOut(
         id=hook.id,
         team_id=hook.team_id,
         name=hook.name,
+        kind=hook.kind,
         url=hook.url,
         events=split_ids(hook.events),
         include_yaml=hook.include_yaml,
@@ -42,7 +46,9 @@ def _out(hook: Webhook, last: WebhookDelivery | None = None) -> WebhookOut:
     )
 
 
-def _validate(url: str, events: list[str]) -> None:
+def _validate(url: str, events: list[str], kind: str, secret: str | None) -> None:
+    if kind not in KINDS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "未知通知渠道类型")
     if not url.startswith(("http://", "https://")):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "地址必须以 http:// 或 https:// 开头")
     unknown = [e for e in events if e not in EVENTS]
@@ -50,6 +56,10 @@ def _validate(url: str, events: list[str]) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"未知事件：{'、'.join(unknown)}")
     if not events:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "至少要订阅一个事件")
+    if kind == "generic" and not secret:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "通用 Webhook 必须设置签名密钥"
+        )
 
 
 async def _require_hook(db, webhook_id: uuid.UUID, user, minimum: str = "admin") -> Webhook:
@@ -109,14 +119,15 @@ async def create_webhook(
     team_id: uuid.UUID, body: WebhookCreate, user: CurrentUser, db: DbSession
 ) -> WebhookOut:
     await require_team_role(team_id, user, db, "admin")
-    _validate(body.url, body.events)
+    _validate(body.url, body.events, body.kind, body.secret)
     hook = Webhook(
         team_id=team_id,
         name=body.name,
+        kind=body.kind,
         url=body.url,
-        secret=body.secret,
+        secret=(body.secret or "").strip() or None,
         events=",".join(body.events),
-        include_yaml=body.include_yaml,
+        include_yaml=body.include_yaml and body.kind == "generic",
         is_active=body.is_active,
         created_by=user.id,
     )
@@ -132,10 +143,19 @@ async def update_webhook(
 ) -> WebhookOut:
     hook = await _require_hook(db, webhook_id, user)
     fields = body.model_dump(exclude_unset=True)
-    if "url" in fields or "events" in fields:
-        _validate(fields.get("url", hook.url), fields.get("events") or split_ids(hook.events))
+    kind = fields.get("kind", hook.kind)
+    secret = fields.get("secret", hook.secret)
+    _validate(
+        fields.get("url", hook.url),
+        fields.get("events") or split_ids(hook.events),
+        kind,
+        (secret or "").strip() or None,
+    )
     if "events" in fields:
         hook.events = ",".join(fields.pop("events"))
+    if "secret" in fields:
+        fields["secret"] = (fields["secret"] or "").strip() or None
+    fields["include_yaml"] = bool(fields.get("include_yaml", hook.include_yaml)) and kind == "generic"
     for key, value in fields.items():
         setattr(hook, key, value)
     await db.commit()
@@ -166,14 +186,18 @@ async def test_webhook(
     """
     hook = await _require_hook(db, webhook_id, user)
     if task_id is None:
-        payload = await build_payload(db, "ping", hook.id, hook.include_yaml)
+        payload = await build_payload(
+            db, "ping", hook.id, hook.include_yaml and hook.kind == "generic"
+        )
     else:
         task = await db.get(TestTask, task_id)
         if task is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "任务不存在")
         if task.team_id != hook.team_id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "这个任务不属于该 webhook 的团队")
-        payload = await task_ping_payload(db, task, hook.include_yaml)
+        payload = await task_ping_payload(
+            db, task, hook.include_yaml and hook.kind == "generic"
+        )
 
     delivery = WebhookDelivery(webhook_id=hook.id, event="ping", payload=payload)
     db.add(delivery)

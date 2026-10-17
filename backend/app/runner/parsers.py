@@ -177,7 +177,13 @@ def read_case_evidence(result_dir: Path, limit: int = 12) -> list[dict]:
             if len(steps) > 12:
                 # 用例步骤可能很多，全喂给模型既贵又浪费注意力：留开头的导航和末尾的失败点
                 steps = steps[:2] + steps[-10:]
-            items.append({"case": case.get("name"), "steps": steps})
+            items.append(
+                {
+                    "case": case.get("name"),
+                    "source_path": case.get("sourcePath"),
+                    "steps": steps,
+                }
+            )
     return items
 
 

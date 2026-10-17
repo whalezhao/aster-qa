@@ -133,14 +133,23 @@ def load_runner_env(runner_root: Path) -> dict[str, str]:
     return env
 
 
-def env_fingerprint(env: dict[str, str]) -> str:
+def env_fingerprint(env: dict[str, str], variables: dict[str, str] | None = None) -> str:
     """配置指纹，用来做模型漂移归因：通过率跳变时判断是不是换了模型/配置。
 
     只哈希影响执行结果的键，不含 key 本身 —— 换 key 不该被当成配置变更。
+    环境变量只哈希**变量名**：值可能低熵，哈希进去等于给了离线爆破的入口。
     """
-    interesting = ("MIDSCENE_MODEL_NAME", "MIDSCENE_MODEL_FAMILY", "MIDSCENE_MODEL_BASE_URL")
+    interesting = (
+        "MIDSCENE_MODEL_NAME",
+        "MIDSCENE_MODEL_FAMILY",
+        "MIDSCENE_MODEL_BASE_URL",
+        "QA_ENV_NAME",
+        "QA_BASE_URL",
+    )
     parts = [f"{k}={env.get(k, '')}" for k in interesting]
     parts += [f"CACHE={env.get('MIDSCENE_CACHE', '')}"]
+    if variables:
+        parts.append("VARS=" + ",".join(sorted(variables)))
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:32]
 
 
@@ -173,10 +182,12 @@ def render_config(
     tag_exclude: list[str],
     base_url: str | None,
     timeout_ms: int,
+    variables: dict[str, str] | None = None,
 ) -> str:
-    variables: dict[str, str] = {}
+    merged: dict[str, str] = dict(variables or {})
     if base_url:
-        variables["BASE_URL"] = base_url
+        # BASE_URL 由平台注入，环境变量里不允许同名（API 层已拦）
+        merged["BASE_URL"] = base_url
     tags: dict[str, list[str]] = {}
     if tag_include:
         tags["include"] = tag_include
@@ -190,7 +201,7 @@ def render_config(
         .replace("__INCLUDE__", include_glob)
         .replace("__TAGS__", _json(tags))
         .replace("__RETRY__", str(max(0, retry)))
-        .replace("__VARIABLES__", _json(variables))
+        .replace("__VARIABLES__", _json(merged))
         .replace("__TIMEOUT__", str(timeout_ms))
     )
 
@@ -205,8 +216,12 @@ def stage(
     tag_include: list[str] | None = None,
     tag_exclude: list[str] | None = None,
     timeout_ms: int = 600_000,
+    variables: dict[str, str] | None = None,
 ) -> StagedRun:
-    """建立 run 私有目录、落盘用例 YAML、生成 config。"""
+    """建立 run 私有目录、落盘用例 YAML、生成 config。
+
+    只接受非密钥变量；密钥走子进程环境，不能落到这里的 config 文件里。
+    """
     work_dir = runner_root / ".runs" / str(run_id)
     cases_dir = work_dir / "cases"
     result_dir = work_dir / "result"
@@ -229,6 +244,7 @@ def stage(
             tag_exclude=list(tag_exclude or []),
             base_url=base_url,
             timeout_ms=timeout_ms,
+            variables=variables,
         ),
         encoding="utf-8",
     )
