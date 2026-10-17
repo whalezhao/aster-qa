@@ -13,8 +13,6 @@ Aster（星芒）取意「从一个点辐射出所有用例」—— 也是 logo
 > 用例由 AI 生成与维护，人只做审阅和签名；执行结果由 AI 读取真实产物做逐条诊断；
 > 全绿批次不调模型，直接给结论。
 
-![Aster QA 执行详情](docs/screenshot-execution.png)
-
 ---
 
 ## 功能
@@ -31,6 +29,26 @@ Aster（星芒）取意「从一个点辐射出所有用例」—— 也是 logo
 - **团队复盘**：AI 汇总一段时间内的执行情况并给优化建议。
 - **项目级模型配置与 token 限额**：不提供全局模型；每个项目自己指定模型，按月限额可拦截执行与 AI 调用。
 - **深浅色主题、AI 助手、语音朗读。**
+
+## 截图
+
+| 工作台 | AI 生成用例 |
+|:---:|:---:|
+| ![](docs/screenshots/dashboard.png) | ![](docs/screenshots/case-draft.png) |
+
+| 用例级报告 · 关键帧回放 | 合规执行报告 · 电子签章 |
+|:---:|:---:|
+| ![](docs/screenshots/keyframes.png) | ![](docs/screenshot-report.png) |
+
+| 执行详情 · 分片与 AI 结论 | 执行记录列表 |
+|:---:|:---:|
+| ![](docs/screenshot-execution.png) | ![](docs/screenshots/executions.png) |
+
+| 报告签章 · 选择执行记录 | 统计与 AI 复盘 |
+|:---:|:---:|
+| ![](docs/screenshots/signoff.png) | ![](docs/screenshots/stats.png) |
+
+更多截图和项目主页：https://whalezhao.github.io/aster-qa/
 
 ## 技术栈
 
