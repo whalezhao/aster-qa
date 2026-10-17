@@ -6,7 +6,15 @@
 
 import uuid
 
-from app.ai_case import build_reply, extract_yaml, missing_cache_steps, summarize_yaml
+import httpx
+
+from app.ai_case import (
+    _friendly_stream_error,
+    build_reply,
+    extract_yaml,
+    missing_cache_steps,
+    summarize_yaml,
+)
 from app.api.auth import _clear, _hit
 from app.api.task_common import split_shards
 from app.runner import staging
@@ -47,6 +55,16 @@ def test_split_shards():
     chunks = split_shards(ids, 2)
     assert [len(chunk) for chunk in chunks] == [2, 2, 1]
     assert [case_id for chunk in chunks for case_id in chunk] == ids
+
+
+def test_stream_error_messages_are_friendly():
+    assert "连接中断" in _friendly_stream_error(httpx.RemoteProtocolError("boom"))
+    assert "超时" in _friendly_stream_error(httpx.ReadTimeout("slow"))
+    request = httpx.Request("POST", "http://model.test/v1/chat/completions")
+    busy = httpx.Response(429, request=request)
+    assert "繁忙" in _friendly_stream_error(
+        httpx.HTTPStatusError("busy", request=request, response=busy)
+    )
 
 
 def test_yaml_validation_accepts_valid_case():

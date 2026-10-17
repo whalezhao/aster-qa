@@ -7,7 +7,9 @@
 对话历史由前端保存并整段回传，后端不存会话状态。
 """
 
+import asyncio
 import json
+import logging
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -18,6 +20,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import ProjectModelConfig
 from .yamlcheck import validate as validate_yaml
+
+log = logging.getLogger("ai_case")
+
+# 模型服务偶发主动断开（负载高、网关重连）时，在还没有吐出内容前重试
+STREAM_ATTEMPTS = 3
+STREAM_RETRY_STATUSES = {429, 500, 502, 503, 504}
 
 
 def _model_client(timeout: float) -> httpx.AsyncClient:
@@ -481,36 +489,79 @@ async def stream_model(
     url = f"{base}/chat/completions"
 
     async with _model_client(timeout) as client:
-        for attempt in range(3):
-            async with client.stream("POST", url, json=payload, headers=headers) as response:
-                if response.status_code == 400:
-                    # 有些服务端不认这两个扩展字段；逐个去掉再试
-                    for key in ("stream_options", "chat_template_kwargs"):
-                        if key in payload:
-                            payload.pop(key, None)
-                            break
-                    else:
+        for attempt in range(STREAM_ATTEMPTS):
+            yielded = False
+            try:
+                async with client.stream("POST", url, json=payload, headers=headers) as response:
+                    if response.status_code == 400:
+                        # 有些服务端不认这两个扩展字段；逐个去掉再试
+                        for key in ("stream_options", "chat_template_kwargs"):
+                            if key in payload:
+                                payload.pop(key, None)
+                                break
+                        else:
+                            response.raise_for_status()
+                        if attempt < STREAM_ATTEMPTS - 1:
+                            continue
                         response.raise_for_status()
-                    if attempt < 2:
+
+                    if (
+                        response.status_code in STREAM_RETRY_STATUSES
+                        and attempt < STREAM_ATTEMPTS - 1
+                    ):
+                        log.warning(
+                            "模型流式请求返回 %s，第 %d 次重试",
+                            response.status_code,
+                            attempt + 1,
+                        )
+                        await asyncio.sleep(1.5 * (attempt + 1))
                         continue
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line.startswith("data:"):
-                        continue
-                    data = line[5:].strip()
-                    if not data or data == "[DONE]":
-                        continue
-                    try:
-                        obj = json.loads(data)
-                    except json.JSONDecodeError:
-                        continue
-                    if usage_out is not None and isinstance(obj.get("usage"), dict):
-                        usage_out.update(obj["usage"])
-                    delta = (obj.get("choices") or [{}])[0].get("delta") or {}
-                    piece = delta.get("content")
-                    if piece:
-                        yield piece
-                return
+
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        data = line[5:].strip()
+                        if not data or data == "[DONE]":
+                            continue
+                        try:
+                            obj = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+                        if usage_out is not None and isinstance(obj.get("usage"), dict):
+                            usage_out.update(obj["usage"])
+                        delta = (obj.get("choices") or [{}])[0].get("delta") or {}
+                        piece = delta.get("content")
+                        if piece:
+                            yielded = True
+                            yield piece
+                    return
+            except httpx.TransportError as exc:
+                # 已经吐过字就不能重试，否则前端会看到重复内容；只把错误交给上层
+                if yielded or attempt >= STREAM_ATTEMPTS - 1:
+                    raise
+                log.warning(
+                    "模型流式连接中断，第 %d 次重试：%s", attempt + 1, exc
+                )
+                await asyncio.sleep(1.5 * (attempt + 1))
+
+    raise RuntimeError("模型流式请求重试耗尽")
+
+
+def _friendly_stream_error(exc: Exception) -> str:
+    """把 httpx 的英文底层错误转成用户能理解的一句话。"""
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        if status == 429:
+            return "模型服务繁忙（429），请稍后重试"
+        if status >= 500:
+            return "模型服务暂时不可用，请稍后重试"
+        return f"模型服务返回 {status}，请稍后重试"
+    if isinstance(exc, httpx.TimeoutException):
+        return "模型响应超时，请稍后重试"
+    if isinstance(exc, httpx.TransportError):
+        return "模型服务连接中断，请稍后重试"
+    return "生成失败，请稍后重试"
 
 
 async def draft_stream(
@@ -531,8 +582,14 @@ async def draft_stream(
         async for piece in stream_model(config, messages, usage_out=usage):
             parts.append(piece)
             yield {"event": "delta", "data": {"text": piece}}
-    except (httpx.HTTPError, ValueError) as exc:
-        yield {"event": "error", "data": {"message": str(exc)}}
+    except (httpx.HTTPError, ValueError, RuntimeError) as exc:
+        if isinstance(exc, ValueError):
+            message = str(exc)
+        else:
+            # 服务端日志保留真实原因，界面只给一句人话
+            log.warning("case draft stream failed: %s", exc, exc_info=True)
+            message = _friendly_stream_error(exc)
+        yield {"event": "error", "data": {"message": message}}
         return
 
     reply = "".join(parts)
