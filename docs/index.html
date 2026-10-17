@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aster QA · AI 驱动的测试用例与回归管理平台</title>
+<meta name="description" content="Aster QA：AI 生成 midscene YAML 用例，多项目/分片并行执行，用例级关键帧报告，支持电子签章的合规执行报告。FastAPI + React + Playwright。">
+<meta name="theme-color" content="#0b0f1a">
+<meta property="og:title" content="Aster QA · AI 驱动的测试用例与回归管理平台">
+<meta property="og:description" content="从需求到用例、执行、报告、AI 诊断和合规签章，一条链路走完。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://whalezhao.github.io/aster-qa/">
+<meta property="og:image" content="https://whalezhao.github.io/aster-qa/screenshot-execution.png">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #080b14;
+    --bg-soft: #0d1220;
+    --panel: rgba(16, 23, 40, 0.72);
+    --line: rgba(136, 154, 201, 0.18);
+    --line-strong: rgba(136, 154, 201, 0.3);
+    --text: #e8ecf7;
+    --muted: #8d9ab8;
+    --faint: #64708c;
+    --blue: #4f8cff;
+    --violet: #7b61ff;
+    --green: #48d597;
+    --red: #ff6b6b;
+    --amber: #ffbd59;
+    --radius: 18px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    color: var(--text);
+    background:
+      radial-gradient(900px 520px at 12% -8%, rgba(79, 140, 255, 0.18), transparent 65%),
+      radial-gradient(760px 460px at 92% 8%, rgba(123, 97, 255, 0.14), transparent 62%),
+      linear-gradient(180deg, #080b14 0%, #090d18 55%, #070a12 100%);
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    content: "";
+    background-image:
+      linear-gradient(rgba(136, 154, 201, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(136, 154, 201, 0.05) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 72%);
+  }
+
+  a { color: inherit; text-decoration: none; }
+  img { max-width: 100%; }
+  .wrap { width: min(1160px, calc(100% - 40px)); margin: 0 auto; }
+
+  /* nav */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 14px 0;
+    background: rgba(8, 11, 20, 0.74);
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(16px);
+  }
+  .nav-inner { display: flex; gap: 20px; align-items: center; }
+  .brand { display: flex; gap: 10px; align-items: center; font-weight: 700; letter-spacing: 0.3px; }
+  .brand img { width: 30px; height: 30px; filter: drop-shadow(0 0 14px rgba(79, 140, 255, 0.55)); }
+  .brand span { font-size: 17px; }
+  .brand small { padding: 2px 7px; font-family: var(--mono); font-size: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; }
+  .nav-links { display: flex; gap: 22px; align-items: center; margin-left: auto; font-size: 14px; color: var(--muted); }
+  .nav-links a:hover { color: var(--text); }
+  .nav-cta {
+    padding: 8px 14px;
+    font-size: 13px;
+    color: var(--text) !important;
+    background: rgba(79, 140, 255, 0.12);
+    border: 1px solid rgba(79, 140, 255, 0.36);
+    border-radius: 10px;
+  }
+  .nav-cta:hover { background: rgba(79, 140, 255, 0.2); }
+
+  /* hero */
+  .hero { padding: 76px 0 36px; }
+  .hero-grid { display: grid; grid-template-columns: 1.02fr 0.98fr; gap: 52px; align-items: center; }
+  .eyebrow {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    padding: 5px 10px;
+    margin-bottom: 20px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #a9c4ff;
+    letter-spacing: 0.7px;
+    background: rgba(79, 140, 255, 0.09);
+    border: 1px solid rgba(79, 140, 255, 0.22);
+    border-radius: 999px;
+  }
+  .eyebrow i { width: 7px; height: 7px; background: var(--green); border-radius: 50%; box-shadow: 0 0 10px var(--green); }
+  h1 {
+    margin: 0;
+    font-size: clamp(36px, 5vw, 62px);
+    font-weight: 750;
+    line-height: 1.08;
+    letter-spacing: -1.6px;
+  }
+  h1 .grad {
+    color: transparent;
+    background: linear-gradient(100deg, #9ec3ff 0%, #6a6bff 48%, #b79cff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+  .lede { max-width: 530px; margin: 22px 0 28px; font-size: 16px; line-height: 1.85; color: var(--muted); }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn {
+    display: inline-flex;
+    gap: 9px;
+    align-items: center;
+    padding: 12px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 11px;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-primary {
+    color: #fff;
+    background: linear-gradient(135deg, #4f8cff, #6a6bff);
+    box-shadow: 0 12px 30px rgba(79, 140, 255, 0.28);
+  }
+  .btn-ghost { color: var(--text); background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line-strong); }
+  .btn-ghost:hover { background: rgba(255, 255, 255, 0.06); }
+  .hero-facts { display: flex; flex-wrap: wrap; gap: 26px; margin-top: 34px; }
+  .fact strong { display: block; font-size: 20px; font-weight: 700; }
+  .fact span { font-size: 12px; color: var(--faint); }
+
+  .shot {
+    position: relative;
+    padding: 8px;
+    background: linear-gradient(150deg, rgba(79, 140, 255, 0.35), rgba(123, 97, 255, 0.12) 45%, rgba(136, 154, 201, 0.08));
+    border: 1px solid var(--line-strong);
+    border-radius: 20px;
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.45);
+  }
+  .shot::before {
+    position: absolute;
+    inset: 18% 12% auto;
+    z-index: -1;
+    height: 60%;
+    content: "";
+    background: rgba(79, 140, 255, 0.22);
+    filter: blur(70px);
+  }
+  .shot-bar { display: flex; gap: 6px; align-items: center; padding: 8px 10px 12px; }
+  .shot-bar i { width: 9px; height: 9px; border-radius: 50%; background: #ff6b6b; }
+  .shot-bar i:nth-child(2) { background: #ffbd59; }
+  .shot-bar i:nth-child(3) { background: #48d597; }
+  .shot-bar span { margin-left: 8px; font-family: var(--mono); font-size: 10px; color: var(--faint); }
+  .shot img { display: block; border: 1px solid var(--line); border-radius: 12px; }
+  .float-badge {
+    position: absolute;
+    right: -16px;
+    bottom: 34px;
+    padding: 10px 14px;
+    font-size: 12px;
+    background: rgba(12, 18, 32, 0.92);
+    border: 1px solid rgba(72, 213, 151, 0.35);
+    border-radius: 12px;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(10px);
+  }
+  .float-badge b { color: var(--green); }
+
+  .tech {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 26px;
+    align-items: center;
+    padding: 22px 0;
+    margin-top: 30px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--faint);
+    letter-spacing: 0.5px;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .tech b { color: var(--muted); font-weight: 500; }
+
+  /* sections */
+  section { padding: 70px 0; }
+  .section-head { max-width: 720px; margin-bottom: 34px; }
+  .kicker { margin-bottom: 10px; font-family: var(--mono); font-size: 11px; color: var(--blue); letter-spacing: 1.4px; text-transform: uppercase; }
+  h2 { margin: 0; font-size: clamp(26px, 3.2vw, 38px); font-weight: 720; letter-spacing: -0.8px; }
+  .section-head p { margin: 14px 0 0; font-size: 15px; line-height: 1.8; color: var(--muted); }
+
+  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .card {
+    position: relative;
+    padding: 22px;
+    overflow: hidden;
+    background: linear-gradient(160deg, rgba(20, 29, 50, 0.85), rgba(12, 18, 32, 0.78));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    transition: border-color 0.2s ease, transform 0.2s ease;
+  }
+  .card:hover { border-color: rgba(79, 140, 255, 0.4); transform: translateY(-2px); }
+  .card .ico {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    margin-bottom: 16px;
+    font-size: 17px;
+    background: rgba(79, 140, 255, 0.12);
+    border: 1px solid rgba(79, 140, 255, 0.24);
+    border-radius: 10px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 15px; font-weight: 650; }
+  .card p { margin: 0; font-size: 13px; line-height: 1.75; color: var(--muted); }
+  .card .tag { display: inline-block; padding: 2px 7px; margin-top: 14px; font-family: var(--mono); font-size: 10px; color: var(--faint); border: 1px solid var(--line); border-radius: 999px; }
+
+  /* report section */
+  .report-grid { display: grid; grid-template-columns: 0.86fr 1.14fr; gap: 46px; align-items: center; }
+  .checklist { display: flex; flex-direction: column; gap: 16px; padding: 0; margin: 26px 0 0; list-style: none; }
+  .checklist li { display: flex; gap: 12px; align-items: flex-start; font-size: 14px; line-height: 1.7; color: var(--muted); }
+  .checklist li::before {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin-top: 1px;
+    font-size: 11px;
+    line-height: 20px;
+    color: var(--green);
+    text-align: center;
+    content: "✓";
+    background: rgba(72, 213, 151, 0.1);
+    border: 1px solid rgba(72, 213, 151, 0.28);
+    border-radius: 50%;
+  }
+  .checklist b { color: var(--text); font-weight: 600; }
+
+  /* steps */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; counter-reset: step; }
+  .step { padding: 22px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+  .step .num { font-family: var(--mono); font-size: 11px; color: var(--blue); letter-spacing: 1px; }
+  .step h3 { margin: 14px 0 8px; font-size: 15px; }
+  .step p { margin: 0; font-size: 13px; line-height: 1.7; color: var(--muted); }
+
+  /* quickstart */
+  .quick {
+    display: grid;
+    grid-template-columns: 0.9fr 1.1fr;
+    gap: 40px;
+    align-items: center;
+    padding: 34px;
+    background: linear-gradient(145deg, rgba(20, 29, 50, 0.85), rgba(10, 15, 27, 0.85));
+    border: 1px solid var(--line-strong);
+    border-radius: 22px;
+  }
+  .quick h2 { font-size: 28px; }
+  .quick p { margin: 14px 0 0; font-size: 14px; line-height: 1.8; color: var(--muted); }
+  pre {
+    padding: 20px;
+    margin: 0;
+    overflow: auto;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.8;
+    color: #c9d6f2;
+    background: #070b14;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+  }
+  pre .c { color: #5f6d8a; }
+  pre .g { color: #7ee2b0; }
+  pre .b { color: #82b4ff; }
+
+  /* footer */
+  footer { padding: 38px 0 46px; border-top: 1px solid var(--line); }
+  .footer-inner { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: space-between; font-size: 12px; color: var(--faint); }
+  .footer-inner a { color: var(--muted); }
+  .footer-inner a:hover { color: var(--text); }
+  .footer-links { display: flex; flex-wrap: wrap; gap: 18px; }
+
+  @media (max-width: 900px) {
+    .hero-grid, .report-grid, .quick { grid-template-columns: 1fr; }
+    .features { grid-template-columns: repeat(2, 1fr); }
+    .float-badge { right: 12px; bottom: 16px; }
+    .hero { padding-top: 48px; }
+    .nav-links { display: flex; margin-left: auto; }
+    .nav-links a:not(.nav-cta) { display: none; }
+  }
+  @media (max-width: 560px) {
+    .features, .steps { grid-template-columns: 1fr; }
+    .wrap { width: calc(100% - 28px); }
+    .quick { padding: 22px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .card, .btn { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top">
+      <img src="logo.svg" alt="Aster QA">
+      <span>Aster QA</span>
+      <small>v0.1.0</small>
+    </a>
+    <div class="nav-links">
+      <a href="#features">功能</a>
+      <a href="#report">报告</a>
+      <a href="#how">工作流</a>
+      <a href="#quickstart">快速开始</a>
+      <a class="nav-cta" href="https://github.com/whalezhao/aster-qa" target="_blank" rel="noreferrer">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow"><i></i> AI-NATIVE QA PLATFORM · MIT</div>
+        <h1>让 AI 写用例，<br><span class="grad">让报告能签章。</span></h1>
+        <p class="lede">
+          Aster QA 把需求、用例、执行、报告和合规签章放进同一条链路：
+          AI 生成可执行的 midscene YAML，多项目 / 分片并行跑，执行结果按用例回放关键帧，
+          最后生成一份带编号、指纹和电子签章的执行报告。
+        </p>
+        <div class="actions">
+          <a class="btn btn-primary" href="https://github.com/whalezhao/aster-qa" target="_blank" rel="noreferrer">在 GitHub 查看 →</a>
+          <a class="btn btn-ghost" href="#quickstart">Docker 快速开始</a>
+        </div>
+        <div class="hero-facts">
+          <div class="fact"><strong>AI</strong><span>生成 / 迭代用例</span></div>
+          <div class="fact"><strong>N×</strong><span>多 worker 并行执行</span></div>
+          <div class="fact"><strong>100%</strong><span>报告可追溯</span></div>
+        </div>
+      </div>
+      <div class="shot">
+        <div class="shot-bar"><i></i><i></i><i></i><span>execution · case-centric report</span></div>
+        <img src="screenshot-execution.png" alt="Aster QA 执行详情：全部通过、功能结果和分片执行明细">
+        <div class="float-badge"><b>42 张关键帧</b> · 用例级回放</div>
+      </div>
+    </div>
+
+    <div class="tech">
+      <b>BUILT WITH</b>
+      <span>FastAPI</span><span>SQLAlchemy 2</span><span>PostgreSQL 17</span>
+      <span>React 18</span><span>Ant Design 5</span><span>Playwright</span><span>midscene</span><span>Docker Compose</span>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Capabilities</div>
+      <h2>不只生成用例，而是管到能归档。</h2>
+      <p>从「让 AI 写一条用例」到「给一次执行盖章」，中间每一步都有明确的落点和可追溯的产物。</p>
+    </div>
+    <div class="features">
+      <article class="card">
+        <div class="ico">✦</div>
+        <h3>AI 生成与迭代 YAML</h3>
+        <p>自然语言对话产出可执行的 midscene 用例，流式输出、结构化回复；AI 自己判断每一步是否启用缓存。</p>
+        <span class="tag">ai_case · streaming</span>
+      </article>
+      <article class="card">
+        <div class="ico">⌘</div>
+        <h3>项目级模型，不设全局兜底</h3>
+        <p>每个项目明确指定模型、接入地址和 Key；按月 token 限额，没配好模型就不允许执行。</p>
+        <span class="tag">quota · no global fallback</span>
+      </article>
+      <article class="card">
+        <div class="ico">⇉</div>
+        <h3>多项目 / 分片并行</h3>
+        <p>跨项目任务自动拆 run；单项目用例按数量分片。多 worker + 全局并发上限，失败 worker 的任务可被安全恢复。</p>
+        <span class="tag">worker · sharding</span>
+      </article>
+      <article class="card">
+        <div class="ico">◉</div>
+        <h3>用例级报告与关键帧</h3>
+        <p>报告以用例为第一层，步骤带关键帧时间线、回放、截图和原始参数；不再是一份看不懂的 execution dump。</p>
+        <span class="tag">report.json · keyframes</span>
+      </article>
+      <article class="card">
+        <div class="ico">✓</div>
+        <h3>合规执行报告</h3>
+        <p>报告编号、执行范围、结果汇总、失败详情、报告指纹和电子签章；一次签章只作用于当前执行记录，可打印 / 导出 PDF。</p>
+        <span class="tag">signoff · A4 print</span>
+      </article>
+      <article class="card">
+        <div class="ico">◎</div>
+        <h3>AI 诊断与统计</h3>
+        <p>AI 读取失败步骤和真实产物给出根因与责任归属；统计页提供通过率、Wilson 下界、flaky 榜单和趋势。</p>
+        <span class="tag">assessment · stats</span>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="report">
+  <div class="wrap report-grid">
+    <div>
+      <div class="kicker">Compliance-ready</div>
+      <h2>一次执行，<br>一份能签字的报告。</h2>
+      <p class="lede" style="margin-bottom:0">
+        企业留存需要的不是截图拼接，而是一份格式固定、内容可核验、责任可追溯的文档。
+      </p>
+      <ul class="checklist">
+        <li><span><b>报告编号与执行范围</b>：任务、执行人、项目、时间、耗时、执行 ID 一次写清。</span></li>
+        <li><span><b>结果汇总与失败详情</b>：功能维度通过率、用例明细、失败步骤和原始错误。</span></li>
+        <li><span><b>电子签章与指纹</b>：签章绑定报告内容，报告重新生成后旧章自动失效。</span></li>
+        <li><span><b>打印 / PDF</b>：A4 打印样式，签章和表格完整保留。</span></li>
+      </ul>
+      <div class="actions" style="margin-top:28px">
+        <a class="btn btn-ghost" href="screenshot-report.png" target="_blank" rel="noreferrer">查看完整报告示例 ↗</a>
+      </div>
+    </div>
+    <div class="shot">
+      <div class="shot-bar"><i></i><i></i><i></i><span>compliance report · signed</span></div>
+      <img src="screenshot-report.png" alt="Aster QA 测试执行报告：报告编号、执行概况、功能结果、用例明细和电子签章">
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Workflow</div>
+      <h2>三步，从测试意图到可归档结果。</h2>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="num">STEP 01</div>
+        <h3>组织测试资产</h3>
+        <p>建项目、功能和迭代，填被测地址和项目级模型配置。用例挂在功能下，任务引用功能的快照。</p>
+      </div>
+      <div class="step">
+        <div class="num">STEP 02</div>
+        <h3>用 AI 写用例</h3>
+        <p>描述要测什么，AI 产出可执行 YAML；继续对话迭代，审阅后由测试人员做内容指纹签名。</p>
+      </div>
+      <div class="step">
+        <div class="num">STEP 03</div>
+        <h3>执行、诊断、签章</h3>
+        <p>点击执行，多项目 / 分片并行；在用例级报告里回放关键帧，失败由 AI 诊断，最后对本次执行记录签章归档。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="wrap">
+    <div class="quick">
+      <div>
+        <div class="kicker">Quickstart</div>
+        <h2>一条 compose 命令跑起来。</h2>
+        <p>需要 Docker + Docker Compose v2。首次启动会构建含 Chromium 的 worker 镜像，约 1.5GB。</p>
+        <p style="margin-top:18px">
+          详细配置、模型接入和本地开发方式见
+          <a href="https://github.com/whalezhao/aster-qa#readme" style="color:var(--blue)">README</a>。
+        </p>
+      </div>
+<pre><span class="c"># 1. 克隆并配置</span>
+git clone https://github.com/whalezhao/aster-qa.git
+cd aster-qa
+cp .env.example .env
+<span class="c"># 编辑 .env：至少修改 POSTGRES_PASSWORD 和 SECRET_KEY</span>
+
+<span class="c"># 2. 启动</span>
+docker compose up -d --build
+
+<span class="c"># 3. 初始化管理员</span>
+docker compose exec api python seed.py admin admin123 默认团队
+
+<span class="c"># 打开 http://localhost:8080</span>
+</pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap footer-inner">
+    <div>© 2026 Aster QA contributors · MIT License</div>
+    <div class="footer-links">
+      <a href="https://github.com/whalezhao/aster-qa" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="https://github.com/whalezhao/aster-qa/releases" target="_blank" rel="noreferrer">Releases</a>
+      <a href="https://github.com/whalezhao/aster-qa/blob/main/CONTRIBUTING.md" target="_blank" rel="noreferrer">Contributing</a>
+      <a href="https://github.com/whalezhao/aster-qa/blob/main/SECURITY.md" target="_blank" rel="noreferrer">Security</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

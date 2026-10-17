@@ -1,9 +1,12 @@
 # Aster QA
 
 [![CI](https://github.com/whalezhao/aster-qa/actions/workflows/ci.yml/badge.svg)](https://github.com/whalezhao/aster-qa/actions/workflows/ci.yml)
+[![Website](https://img.shields.io/badge/website-live-4f8cff)](https://whalezhao.github.io/aster-qa/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **AI 驱动的测试用例与回归管理平台。** 从需求/功能到用例、执行、报告、AI 诊断，一条链路走完。
+
+> 项目主页：https://whalezhao.github.io/aster-qa/
 
 Aster（星芒）取意「从一个点辐射出所有用例」—— 也是 logo 的由来。
 

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Aster QA">
+  <circle cx="24" cy="24" r="15" fill="#4F8CFF" opacity="0.18"/>
+  <path d="M24 3.6 L25.75 20.4 L24 24 L22.25 20.4 Z" fill="#6A6BFF" opacity="1" transform="rotate(0 24 24)"/>
+  <path d="M24 9 L25.45 20.4 L24 24 L22.55 20.4 Z" fill="#4F8CFF" opacity="0.9" transform="rotate(30 24 24)"/>
+  <path d="M24 3.6 L25.75 20.4 L24 24 L22.25 20.4 Z" fill="#6A6BFF" opacity="1" transform="rotate(60 24 24)"/>
+  <path d="M24 9 L25.45 20.4 L24 24 L22.55 20.4 Z" fill="#4F8CFF" opacity="0.9" transform="rotate(90 24 24)"/>
+  <path d="M24 3.6 L25.75 20.4 L24 24 L22.25 20.4 Z" fill="#6A6BFF" opacity="1" transform="rotate(120 24 24)"/>
+  <path d="M24 9 L25.45 20.4 L24 24 L22.55 20.4 Z" fill="#4F8CFF" opacity="0.9" transform="rotate(150 24 24)"/>
+  <path d="M24 3.6 L25.75 20.4 L24 24 L22.25 20.4 Z" fill="#6A6BFF" opacity="1" transform="rotate(180 24 24)"/>
+  <path d="M24 9 L25.45 20.4 L24 24 L22.55 20.4 Z" fill="#4F8CFF" opacity="0.9" transform="rotate(210 24 24)"/>
+  <path d="M24 3.6 L25.75 20.4 L24 24 L22.25 20.4 Z" fill="#6A6BFF" opacity="1" transform="rotate(240 24 24)"/>
+  <path d="M24 9 L25.45 20.4 L24 24 L22.55 20.4 Z" fill="#4F8CFF" opacity="0.9" transform="rotate(270 24 24)"/>
+  <path d="M24 3.6 L25.75 20.4 L24 24 L22.25 20.4 Z" fill="#6A6BFF" opacity="1" transform="rotate(300 24 24)"/>
+  <path d="M24 9 L25.45 20.4 L24 24 L22.55 20.4 Z" fill="#4F8CFF" opacity="0.9" transform="rotate(330 24 24)"/>
+</svg>
