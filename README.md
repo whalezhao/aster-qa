@@ -118,6 +118,35 @@ docker compose up -d
 4. 新建功能 → 打开功能 →「用 AI 写用例」，描述要测什么。
 5. 新建测试任务，勾选功能并执行；执行记录里看结果与 AI 诊断。
 
+### Docker 镜像（Docker Hub）
+
+从 v0.2.0 起，每个发布版本同步推送三类镜像（`<version>`、`v<version>` 和 `latest`）：
+
+| 镜像 | 说明 |
+| --- | --- |
+| `whalezhao/aster-qa-api:<version>` | FastAPI |
+| `whalezhao/aster-qa-worker:<version>` | 执行器（Node + Chromium） |
+| `whalezhao/aster-qa-web:<version>` | 前端（nginx） |
+
+固定版本运行：
+
+```bash
+cp .env.example .env
+# 编辑 .env：DOCKERHUB_NAMESPACE=whalezhao，ASTER_QA_VERSION=0.2.0
+docker compose pull
+docker compose up -d
+```
+
+维护者发布：
+
+```bash
+docker login -u whalezhao
+bash scripts/docker-release.sh   # 按 pyproject 版本构建并推送版本标签 + latest
+```
+
+打 `v*` tag 时 GitHub Actions（`.github/workflows/docker-release.yml`）也会自动构建多架构镜像；
+仓库需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` 两个 secrets。
+
 ## 本地开发
 
 前置：Python 3.13 + [uv](https://docs.astral.sh/uv/)、Node 20、Docker（只用来起 PostgreSQL）。

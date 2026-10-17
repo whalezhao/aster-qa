@@ -151,6 +151,36 @@ docker compose up -d
 5. Create a test task, select the feature, and run it. Open the execution to see results
    and AI diagnosis.
 
+### Docker images (Docker Hub)
+
+Each release publishes three images under `<version>`, `v<version>` and `latest`:
+
+| Image | Purpose |
+| --- | --- |
+| `whalezhao/aster-qa-api:<version>` | FastAPI |
+| `whalezhao/aster-qa-worker:<version>` | Runner (Node + Chromium) |
+| `whalezhao/aster-qa-web:<version>` | Frontend (nginx) |
+
+Run a pinned release:
+
+```bash
+cp .env.example .env
+# set DOCKERHUB_NAMESPACE=whalezhao and ASTER_QA_VERSION=0.2.0
+docker compose pull
+docker compose up -d
+```
+
+Maintainer release:
+
+```bash
+docker login -u whalezhao
+bash scripts/docker-release.sh
+```
+
+Pushing a `v*` tag also triggers `.github/workflows/docker-release.yml`, which builds
+multi-arch images. The repository needs `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`
+secrets.
+
 ## Local development
 
 Prerequisites: Python 3.13 + [uv](https://docs.astral.sh/uv/), Node 20, and Docker (only
