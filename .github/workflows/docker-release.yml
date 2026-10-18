@@ -6,6 +6,9 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
+      version:
+        description: Version to publish (e.g. 0.2.0)
+        required: true
       platforms:
         description: Build platforms
         required: true
@@ -44,14 +47,24 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.image }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern=v{{version}}
+            type=raw,value=${{ steps.version.outputs.value }}
+            type=raw,value=v${{ steps.version.outputs.value }}
             type=raw,value=latest
 
       - name: Build and push
