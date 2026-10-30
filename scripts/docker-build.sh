@@ -49,6 +49,15 @@ if [ "${BUILD_NETWORK:-}" = "host" ]; then
   echo "==> 使用 host 网络构建"
 fi
 
+# 国内网络可选的镜像源（.env 里配 DEBIAN_MIRROR / PLAYWRIGHT_DOWNLOAD_HOST）
+MIRROR_ARGS=()
+if [ -n "${DEBIAN_MIRROR:-}" ]; then
+  MIRROR_ARGS+=(--build-arg "DEBIAN_MIRROR=${DEBIAN_MIRROR}")
+fi
+if [ -n "${PLAYWRIGHT_DOWNLOAD_HOST:-}" ]; then
+  MIRROR_ARGS+=(--build-arg "PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST}")
+fi
+
 echo "==> 版本 $VERSION，命名空间 $NAMESPACE"
 
 echo "==> api"
@@ -56,7 +65,7 @@ docker build "${NETWORK_ARGS[@]}" \
   "${TAGS_VERSION[@]}" -t "${PREFIX}-api:latest" ./backend
 
 echo "==> worker（含 Chromium，首次构建较慢）"
-docker build "${NETWORK_ARGS[@]}" \
+docker build "${NETWORK_ARGS[@]}" "${MIRROR_ARGS[@]}" \
   -f ./backend/Dockerfile.worker \
   "${TAGS_VERSION_WORKER[@]}" -t "${PREFIX}-worker:latest" ./backend
 

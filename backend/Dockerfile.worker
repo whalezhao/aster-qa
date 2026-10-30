@@ -6,8 +6,22 @@
 
 FROM python:3.13-slim-bookworm
 
+# 国内网络构建时再传镜像源；默认留空走官方源（GitHub Actions 等海外构建不受影响）
+#   --build-arg DEBIAN_MIRROR=https://mirrors.aliyun.com
+#   --build-arg PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+ARG DEBIAN_MIRROR=
+ARG PLAYWRIGHT_DOWNLOAD_HOST=
+ENV PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST}
+
 # Node 20（midscene 执行器需要）
-RUN apt-get update \
+RUN if [ -n "$DEBIAN_MIRROR" ]; then \
+        host="${DEBIAN_MIRROR#*://}"; \
+        sed -i "s|deb.debian.org|$host|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+        if [ -f /etc/apt/sources.list ]; then \
+            sed -i "s|deb.debian.org|$host|g" /etc/apt/sources.list; \
+        fi; \
+    fi \
+    && apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
