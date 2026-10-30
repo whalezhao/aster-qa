@@ -100,6 +100,7 @@ def _build_env(
     runner_root: Path,
     project_overrides: dict[str, str] | None = None,
     secret_env: dict[str, str] | None = None,
+    project_id: uuid.UUID | None = None,
 ) -> dict[str, str]:
     """组装子进程环境。
 
@@ -127,6 +128,8 @@ def _build_env(
     # 每个 run 一个独立的 MIDSCENE_RUN_DIR —— log 因此天然只含本次执行，
     # token 统计不需要记 offset、也不用按时间窗猜归属
     env["MIDSCENE_RUN_DIR"] = staging.runner_relative_run_dir(staged, runner_root)
+    # 缓存目录不能跟着 MIDSCENE_RUN_DIR 走，否则每次执行都是冷缓存
+    env["QA_CACHE_DIR"] = str(staging.shared_cache_dir(runner_root, project_id))
     env.setdefault("HEADLESS", "true")
 
     # 复刻参考实现的做法：每次执行换一个上游会话头，避免所有 run 挤在同一个会话里
@@ -552,7 +555,9 @@ async def process(run_id: uuid.UUID) -> None:
     outcome = await exec_mod.execute(
         runner_root=runner_root,
         staged=staged,
-        env=_build_env(runner_env, staged, runner_root, overrides, secret_vars),
+        env=_build_env(
+            runner_env, staged, runner_root, overrides, secret_vars, project_id=run.project_id
+        ),
         timeout_ms=timeout_ms,
         poll_cancel=poll_cancel,
     )
@@ -586,18 +591,11 @@ async def process(run_id: uuid.UUID) -> None:
         if report:
             run.report_html_path = str(report)
 
-        if outcome.cancelled:
-            run.status = "cancelled"
-        elif outcome.timed_out:
-            run.status = "timed_out"
-        elif summary.errors:
-            # 没有 summary.json 就说明执行没跑完，这是真的基础设施失败
-            run.status = "failed"
-            run.error_message = "；".join(summary.errors)
-        else:
-            # 执行完成了。有用例失败时 exitCode != 0，但那是用例失败不是执行失败 ——
-            # 「是否通过」由 passed/failed 表达，不由 status 表达
-            run.status = "succeeded"
+        run.status, error_message = parsers.run_outcome(
+            summary, cancelled=outcome.cancelled, timed_out=outcome.timed_out
+        )
+        if error_message:
+            run.error_message = error_message
         run.ended_at = datetime.now(UTC)
         if run.status in {"failed", "timed_out", "cancelled"} and outcome.stdout_tail:
             run.error_message = (run.error_message or "") + "\n" + outcome.stdout_tail[-2000:]

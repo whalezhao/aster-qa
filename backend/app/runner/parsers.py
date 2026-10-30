@@ -41,6 +41,7 @@ class SummaryData:
     first_pass_rate: float | None = None
     filtered: int | None = None
     collection_errors: int | None = None
+    collection_error_messages: list[str] = field(default_factory=list)
     project_failures: int | None = None
     report_html: str | None = None
     cases: list[CaseOutcome] = field(default_factory=list)
@@ -98,6 +99,14 @@ def parse_summary(result_dir: Path) -> SummaryData:
     data.project_failures = summary.get("projectFailures")
 
     for project in doc.get("projects") or []:
+        for entry in project.get("collectionErrors") or []:
+            source = entry.get("sourcePath")
+            message = _read_collection_error(path.parent, entry.get("errorFile"))
+            data.collection_error_messages.append(
+                f"{source}: {message}" if source else message
+            )
+
+    for project in doc.get("projects") or []:
         for case in project.get("cases") or []:
             attempts = case.get("attempts") or []
             # 有重试且最终通过 —— 这个差值就是「靠重试救回来」的部分，
@@ -115,6 +124,54 @@ def parse_summary(result_dir: Path) -> SummaryData:
                 )
             )
     return data
+
+
+def _read_collection_error(summary_dir: Path, error_file: str | None) -> str:
+    """summary.json 只记 collection-errors 的文件名，具体原因在旁边的 JSON 里。
+
+    errorFile 是执行器生成的相对路径，仍然要确认解析后没跳出结果目录。
+    """
+    if not error_file:
+        return "用例文件收集失败"
+    target = (summary_dir / error_file).resolve()
+    if not target.is_relative_to(summary_dir.resolve()):
+        return "用例文件收集失败"
+    try:
+        doc = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "用例文件收集失败"
+    error = doc.get("error") or {}
+    return str(error.get("message") or "用例文件收集失败")
+
+
+def run_outcome(
+    summary: SummaryData, *, cancelled: bool, timed_out: bool
+) -> tuple[str, str | None]:
+    """把执行器产物映射成 run 的终态与错误信息。
+
+    收集错误也算失败：YAML 在收集阶段就解析不出来时一条用例都没跑，
+    记成 succeeded 会把「什么都没测」伪装成成功。
+    """
+    if cancelled:
+        return "cancelled", None
+    if timed_out:
+        return "timed_out", None
+    if summary.errors:
+        return "failed", "；".join(summary.errors)
+    collection_errors = summary.collection_errors or 0
+    if collection_errors > 0 or (
+        (summary.total or 0) == 0
+        and (summary.midscene_status == "failed" or (summary.exit_code or 0) != 0)
+    ):
+        message = "；".join(summary.collection_error_messages)
+        if not message:
+            message = (
+                f"{collection_errors} 个用例文件收集失败"
+                if collection_errors
+                else "执行器没有产出任何用例结果"
+            )
+        return "failed", message
+    return "succeeded", None
 
 
 _EVIDENCE_TEXT_LIMIT = 500

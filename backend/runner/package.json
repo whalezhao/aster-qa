@@ -7,10 +7,10 @@
     "test": "midscene-test"
   },
   "dependencies": {
-    "@midscene/core": "1.15.4",
-    "@midscene/shared": "1.15.4",
-    "@midscene/test": "1.15.4",
-    "@midscene/web": "1.15.4",
+    "@midscene/core": "1.17.3",
+    "@midscene/shared": "1.17.3",
+    "@midscene/test": "1.17.3",
+    "@midscene/web": "1.17.3",
     "@playwright/test": "1.64.1",
     "playwright": "1.64.1"
   },

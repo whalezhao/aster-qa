@@ -12,8 +12,9 @@
           midscene.config.run.ts    # 生成的 config
           cases/<case_uuid>.yaml    # 暂存的选中用例，文件名就是 DB 用例 UUID
           result/<runId>/summary.json ...   # --result-dir
-          midscene_run/{log,report,cache}/  # MIDSCENE_RUN_DIR → 天然隔离
+          midscene_run/{log,report}/  # MIDSCENE_RUN_DIR → 天然隔离
           stdout.log
+      midscene_run/cache/<project_id>/    # 跨 run 共享的 AI 缓存，不随 run 目录删除
 """
 
 import hashlib
@@ -43,7 +44,15 @@ interface ProjectContext {
 }
 
 const getAgent = ({ context }: NodeExecutionContext<unknown, ProjectContext>) => {
-  context.agent ??= new PlaywrightAgent(context.page);
+  if (!context.agent) {
+    // 缓存目录由平台注入为跨 run 共享目录；不传的话会落在本次 run 的私有目录里，
+    // 每次执行都是冷缓存，cacheable 永远命中不了。
+    const cacheDir = process.env.QA_CACHE_DIR;
+    context.agent = new PlaywrightAgent(
+      context.page,
+      cacheDir ? { cache: { id: 'default', cacheDir } } : undefined,
+    );
+  }
   return context.agent;
 };
 
@@ -74,13 +83,20 @@ export default defineTestProject<ProjectContext>({
       tags: __TAGS__,
       retry: __RETRY__,
       variables: __VARIABLES__,
+      // 单个 run 里的用例文件串行跑：worker 已有副本级并发，这里再并发只会抢内存
+      maxConcurrentFiles: 1,
     },
   ],
   nodes: [
     ...createMidsceneNodes<ProjectContext>({ agentClass: PlaywrightAgent, getAgent }),
   ],
   // bail: 0 —— 回归要跑完所有用例拿到完整分布，不能第一个失败就停
-  test: { maxConcurrency: 1, bail: 0, testTimeout: __TIMEOUT__ },
+  test: {
+    maxConcurrentProjects: 1,
+    maxConcurrentFiles: 1,
+    bail: 0,
+    testTimeout: __TIMEOUT__,
+  },
 });
 """
 
@@ -271,6 +287,18 @@ def runner_relative_run_dir(staged: StagedRun, runner_root: Path) -> str:
     return str(staged.run_dir.relative_to(runner_root))
 
 
+def shared_cache_dir(runner_root: Path, project_id: uuid.UUID | None = None) -> Path:
+    """跨 run 共享的 AI 缓存目录。
+
+    默认缓存会落在 MIDSCENE_RUN_DIR/cache，也就是每个 run 的私有目录里，第二次执行
+    必然冷启动。按项目分目录共享：不同项目互不干扰，同一项目的多次执行能命中缓存。
+    """
+    base = runner_root / "midscene_run" / "cache"
+    path = base / str(project_id) if project_id is not None else base
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def purge_run_artifacts(
     *, runner_root: Path, work_dirs: list[str], midscene_run_ids: list[str]
 ) -> None:
@@ -317,13 +345,24 @@ def relocate_report(
     """
     if not midscene_run_id:
         return None
-    source = runner_root / "midscene_run" / "report" / f"midscene-e2e-{midscene_run_id}"
-    if not source.exists():
-        return None
-    destination = staged.report_dir / source.name
+    report_root = runner_root / "midscene_run" / "report"
+    name = f"midscene-e2e-{midscene_run_id}"
+    source_dir = report_root / name
+    source_file = report_root / f"{name}.html"
+    destination = staged.report_dir / name
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
         shutil.rmtree(destination)
-    shutil.move(str(source), str(destination))
-    index = destination / "index.html"
-    return index if index.exists() else None
+
+    if source_dir.is_dir():
+        shutil.move(str(source_dir), str(destination))
+        index = destination / "index.html"
+        return index if index.exists() else None
+    if source_file.is_file():
+        # 执行器 1.17 起报告是单文件 HTML（截图内联）。仍然摆成 <run>/index.html，
+        # 下游的托管路由、Markdown 转录都按这个约定走。
+        destination.mkdir(parents=True, exist_ok=True)
+        index = destination / "index.html"
+        shutil.move(str(source_file), str(index))
+        return index
+    return None
