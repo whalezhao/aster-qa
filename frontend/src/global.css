@@ -131,12 +131,37 @@
   animation-duration: 0.6s;
 }
 
+/* 登录页：焦点用描边表达 —— 保留键盘可见焦点，但不要在静态页面上堆一层光晕 */
+.qa-login .ant-input-affix-wrapper-focused {
+  box-shadow: none;
+  outline: 2px solid #1677ff;
+  outline-offset: -1px;
+}
+
+/* 登录页的星芒背景：整体已有自转，这里再叠一层缓慢的呼吸，别让它像张静止图 */
+.qa-login-texture-inner {
+  width: 100%;
+  height: 100%;
+  animation: qa-login-texture-breathe 16s ease-in-out infinite;
+}
+
+@keyframes qa-login-texture-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
 /* 尊重系统的「减少动态效果」偏好 */
 @media (prefers-reduced-motion: reduce) {
   .qa-mascot,
   .qa-mascot *,
   .qa-logo,
-  .qa-logo * {
+  .qa-logo *,
+  .qa-login-texture-inner {
     animation: none !important;
   }
 }

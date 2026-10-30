@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { App, Button, Form, Grid, Input, Space, Tag, theme, Typography } from 'antd';
+import { App, Button, Form, Grid, Input, theme, Typography } from 'antd';
 import { LockOutlined, MoonOutlined, SunOutlined, UserOutlined } from '@ant-design/icons';
 import { apiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
@@ -8,12 +8,49 @@ import { useTheme } from '../theme/ThemeContext';
 import AiMascot from '../components/AiMascot';
 import Logo from '../components/Logo';
 
-/** 左上角的小标志：圆角方块 + 一个「A」形的 AI 火花，纯 SVG，不依赖图片。 */
 const HIGHLIGHTS = [
   '用例由 AI 生成与维护，人只做审阅和签名',
   '一次执行穿透到每个功能、每条用例、每份报告',
   '统计口径带 Wilson 下界，不被偶发失败带偏',
 ];
+
+/** 品牌区：机器人 + 字标。登录页和卡片顶部共用，只是尺寸不同。 */
+function BrandLockup({
+  size,
+  compact = false,
+}: {
+  size: number;
+  compact?: boolean;
+}) {
+  const { token } = theme.useToken();
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 10 : 14 }}>
+      <div
+        style={{
+          width: size + 20,
+          height: size + 20,
+          flex: 'none',
+          borderRadius: compact ? 12 : 18,
+          display: 'grid',
+          placeItems: 'center',
+          background: token.colorPrimaryBg,
+        }}
+      >
+        <AiMascot size={size} state="idle" />
+      </div>
+      <Typography.Text
+        style={{
+          fontSize: compact ? 16 : 19,
+          fontWeight: 650,
+          letterSpacing: -0.2,
+          lineHeight: 1.2,
+        }}
+      >
+        Aster QA
+      </Typography.Text>
+    </div>
+  );
+}
 
 export default function Login() {
   const { login } = useAuth();
@@ -39,6 +76,7 @@ export default function Login() {
 
   return (
     <div
+      className="qa-login"
       style={{
         minHeight: '100vh',
         position: 'relative',
@@ -46,37 +84,28 @@ export default function Login() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '48px 24px',
-        background: isDark
-          ? 'radial-gradient(1100px 560px at 12% 8%, #182642 0%, #141414 58%)'
-          : 'radial-gradient(1100px 560px at 12% 8%, #e8f0ff 0%, #f4f6fb 58%)',
+        padding: wide ? '64px 48px' : '40px 20px',
+        background: token.colorBgLayout,
       }}
     >
-      {/* 两块模糊光斑，只是氛围，不承载信息 */}
+      {/* logo 放大成背景纹理：中心压在左下角，屏幕上只留星芒的右上四分之一 */}
       <div
+        aria-hidden
         style={{
           position: 'absolute',
-          width: 460,
-          height: 460,
-          borderRadius: '50%',
-          top: -160,
-          left: -120,
-          background: isDark ? 'rgba(79,140,255,0.22)' : 'rgba(79,140,255,0.16)',
-          filter: 'blur(110px)',
+          width: '200vmax',
+          height: '200vmax',
+          left: 0,
+          bottom: 0,
+          transform: 'translate(-50%, 50%)',
+          opacity: isDark ? 0.12 : 0.14,
+          pointerEvents: 'none',
         }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          width: 380,
-          height: 380,
-          borderRadius: '50%',
-          bottom: -180,
-          right: -80,
-          background: isDark ? 'rgba(124,92,255,0.20)' : 'rgba(124,92,255,0.14)',
-          filter: 'blur(120px)',
-        }}
-      />
+      >
+        <div className="qa-login-texture-inner">
+          <Logo size={48} style={{ width: '100%', height: '100%', display: 'block' }} />
+        </div>
+      </div>
 
       <Button
         shape="circle"
@@ -90,51 +119,60 @@ export default function Login() {
         style={{
           position: 'relative',
           width: '100%',
-          maxWidth: 1040,
+          maxWidth: 1160,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 72,
+          gap: 'clamp(40px, 6vw, 96px)',
         }}
       >
         {wide && (
-          <div style={{ flex: 1, maxWidth: 520 }}>
-            <Space align="center" size={12} style={{ marginBottom: 20 }}>
-              <Logo size={48} />
-              <Typography.Text style={{ fontSize: 17, fontWeight: 600 }}>
-                Aster QA
-              </Typography.Text>
-            </Space>
-            <AiMascot size={96} state="idle" style={{ marginBottom: 4 }} />
-            <Typography.Title level={1} style={{ margin: 0, fontSize: 42, lineHeight: 1.22 }}>
+          <div style={{ flex: 1, minWidth: 0, maxWidth: 560 }}>
+            <BrandLockup size={40} />
+            <Typography.Title
+              level={1}
+              style={{
+                margin: '44px 0 0',
+                fontSize: 'clamp(40px, 4.2vw, 56px)',
+                lineHeight: 1.12,
+                letterSpacing: -1.2,
+              }}
+            >
               让 AI 跑测试，
               <br />
               人只需要看结论
             </Typography.Title>
             <Typography.Paragraph
-              type="secondary"
-              style={{ marginTop: 20, marginBottom: 28, fontSize: 15, maxWidth: 460 }}
+              style={{
+                margin: '24px 0 0',
+                fontSize: 16,
+                lineHeight: 1.7,
+                maxWidth: 460,
+                color: token.colorTextSecondary,
+              }}
             >
               团队、项目、功能、用例一条链管到底：AI 生成用例、执行产生报告、人工签名背书、
               webhook 把结果送回你的工单系统。
             </Typography.Paragraph>
-            <Space direction="vertical" size={10}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 32 }}>
               {HIGHLIGHTS.map((item) => (
-                <Space key={item} align="start">
+                <div key={item} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                   <span
                     style={{
-                      display: 'inline-block',
-                      width: 6,
-                      height: 6,
-                      marginTop: 8,
-                      borderRadius: 3,
+                      width: 5,
+                      height: 5,
+                      marginTop: 9,
+                      flex: 'none',
+                      borderRadius: 1,
                       background: token.colorPrimary,
                     }}
                   />
-                  <Typography.Text type="secondary">{item}</Typography.Text>
-                </Space>
+                  <Typography.Text type="secondary" style={{ fontSize: 15 }}>
+                    {item}
+                  </Typography.Text>
+                </div>
               ))}
-            </Space>
+            </div>
           </div>
         )}
 
@@ -142,29 +180,25 @@ export default function Login() {
           style={{
             width: 400,
             maxWidth: '100%',
-            borderRadius: 18,
-            padding: 32,
-            background: token.colorBgContainer,
-            boxShadow: isDark
-              ? '0 24px 60px rgba(0,0,0,0.55)'
-              : '0 24px 60px rgba(31,56,110,0.14)',
-            border: `1px solid ${token.colorBorderSecondary}`,
+            flex: 'none',
+            borderRadius: 22,
+            padding: wide ? 36 : 26,
+            background: token.colorBgElevated,
           }}
         >
           {!wide && (
-            <Space align="center" size={10} style={{ marginBottom: 24 }}>
-              <AiMascot size={48} state="idle" />
-              <Typography.Text strong>Aster QA</Typography.Text>
-            </Space>
+            <div style={{ marginBottom: 28 }}>
+              <BrandLockup size={32} compact />
+            </div>
           )}
-          <Typography.Title level={3} style={{ marginTop: 0, marginBottom: 4 }}>
+          <Typography.Title level={2} style={{ margin: 0, fontSize: 26, letterSpacing: -0.4 }}>
             登录
           </Typography.Title>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 24 }}>
-            <Tag color="blue" style={{ marginRight: 8 }}>
-              内部系统
-            </Tag>
-            账号由团队管理员在「人员」里维护
+          <Typography.Paragraph
+            type="secondary"
+            style={{ margin: '8px 0 28px', fontSize: 13, lineHeight: 1.6 }}
+          >
+            账号由团队管理员在「人员」里维护，忘记密码也找管理员重置。
           </Typography.Paragraph>
 
           <Form layout="vertical" onFinish={onFinish} requiredMark={false} size="large">
@@ -178,14 +212,16 @@ export default function Login() {
                 autoComplete="current-password"
               />
             </Form.Item>
-            <Button type="primary" htmlType="submit" block loading={loading} style={{ marginTop: 4 }}>
+            <Button
+              type="primary"
+              htmlType="submit"
+              block
+              loading={loading}
+              style={{ marginTop: 8, boxShadow: 'none' }}
+            >
               登录
             </Button>
           </Form>
-
-          <Typography.Paragraph type="secondary" style={{ marginTop: 20, marginBottom: 0, fontSize: 12 }}>
-            忘记密码请找团队管理员重置 —— 系统不提供自助找回。
-          </Typography.Paragraph>
         </div>
       </div>
     </div>
