@@ -104,12 +104,23 @@ export async function setTaskFeatures(id: string, feature_ids: string[]): Promis
   return data;
 }
 
+export interface RunTaskResult {
+  task_id: string;
+  /** 第一个环境（兼容旧调用方）；多环境时看 batches */
+  batch_id: string;
+  run_ids: string[];
+  /** 每个环境一条执行记录 */
+  batches: { batch_id: string; environment_name: string; run_ids: string[] }[];
+}
+
+/** 不传环境则用任务自身配置的环境；传多个就是每个环境各建一条执行记录。 */
 export async function runTask(
   id: string,
-): Promise<{ task_id: string; batch_id: string; run_ids: string[] }> {
-  const { data } = await http.post<{ task_id: string; batch_id: string; run_ids: string[] }>(
-    `/api/tasks/${id}/run`,
-  );
+  environmentNames?: string[],
+): Promise<RunTaskResult> {
+  const { data } = await http.post<RunTaskResult>(`/api/tasks/${id}/run`, {
+    environment_names: environmentNames ?? [],
+  });
   return data;
 }
 

@@ -19,6 +19,7 @@ import { getFeature } from '../api/features';
 import { apiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import ModelConfigNotice from '../components/ModelConfigNotice';
+import EnvVariableHint from '../components/EnvVariableHint';
 import AiMascot from '../components/AiMascot';
 import UserAvatar from '../components/UserAvatar';
 import { clearDraft, loadDraft, saveDraft } from '../lib/draft';
@@ -387,6 +388,8 @@ export default function CaseDraft() {
                 )}
               </div>
             </div>
+
+            <EnvVariableHint projectId={feature?.project_id} style={{ marginTop: 8 }} />
 
             {yaml && (
               <>

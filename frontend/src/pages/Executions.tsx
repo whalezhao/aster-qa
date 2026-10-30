@@ -197,10 +197,20 @@ export default function Executions() {
                         }[r.trigger] ?? r.trigger
                       }`
                     : ''}
-                  {r.environment_name ? ` · 环境 ${r.environment_name}` : ''}
                 </Typography.Text>
               </Space>
             ),
+          },
+          {
+            title: '环境',
+            width: 110,
+            sorter: byText<Batch>((r) => r.environment_name ?? ''),
+            render: (_, r) =>
+              r.environment_name ? (
+                <Tag>{r.environment_name}</Tag>
+              ) : (
+                <Typography.Text type="secondary">-</Typography.Text>
+              ),
           },
           {
             title: '测试任务',

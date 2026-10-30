@@ -75,11 +75,15 @@ async def _probe_url(client: httpx.AsyncClient, url: str | None) -> tuple[bool, 
         return False, f"被测地址不可访问：{type(exc).__name__}"
 
 
-async def run_preflight(db: AsyncSession, task: TestTask) -> dict:
+async def run_preflight(
+    db: AsyncSession, task: TestTask, *, environment_name: str | None = None
+) -> dict:
     settings = get_settings()
     project_ids = set(await resolve_run_groups(db, task))
     checks: list[dict] = []
-    environment_name = (task.environment_name or "").strip() or "默认"
+    environment_name = (
+        environment_name or task.environment_name or ""
+    ).strip() or "默认"
 
     if not project_ids:
         checks.append(_check("cases", False, "任务下没有可执行的用例"))
@@ -95,20 +99,25 @@ async def run_preflight(db: AsyncSession, task: TestTask) -> dict:
 
     environments = {}
     try:
-        environments = await resolve_run_environments(db, task, project_ids)
+        environments = await resolve_run_environments(
+            db, task, project_ids, environment_name=environment_name
+        )
         checks.append(
             _check("environment", True, f"环境「{environment_name}」在所选项目下都存在")
         )
     except EnvironmentResolutionError as exc:
         checks.append(_check("environment", False, str(exc)))
 
-    project_names = dict(
-        (
-            await db.execute(
-                select(Project.id, Project.name).where(Project.id.in_(project_ids))
+    project_rows = (
+        await db.execute(
+            select(Project.id, Project.name, Project.base_url).where(
+                Project.id.in_(project_ids)
             )
-        ).all()
-    )
+        )
+    ).all()
+    project_names = {row.id: row.name for row in project_rows}
+    # 与执行时一致：环境没配地址就回落到项目地址
+    project_urls = {row.id: row.base_url for row in project_rows}
 
     # 模型配置完整性
     configs: dict = {}
@@ -209,7 +218,8 @@ async def run_preflight(db: AsyncSession, task: TestTask) -> dict:
     ) as client:
         async def probe(project_id):
             env = environments.get(project_id)
-            ok, message = await _probe_url(client, env.base_url if env else None)
+            url = (env.base_url if env is not None else None) or project_urls.get(project_id)
+            ok, message = await _probe_url(client, url)
             checks.append(
                 _check(
                     "base_url",

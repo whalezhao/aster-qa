@@ -15,12 +15,14 @@ export default function FeatureTreeSelect({
   onChange,
   placeholder = '按项目选择功能',
   style,
+  disabled = false,
 }: {
   teamId: string | null;
   value?: string[];
   onChange?: (ids: string[]) => void;
   placeholder?: string;
   style?: React.CSSProperties;
+  disabled?: boolean;
 }) {
   const { data: projects = [] } = useQuery({
     queryKey: ['projects', teamId],
@@ -64,6 +66,7 @@ export default function FeatureTreeSelect({
         showCheckedStrategy={TreeSelect.SHOW_CHILD}
         treeDefaultExpandAll
         allowClear
+        disabled={disabled}
         placeholder={placeholder}
         style={{ width: '100%', ...style }}
       />

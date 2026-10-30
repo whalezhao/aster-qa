@@ -19,6 +19,7 @@ from ..models import (
     CaseResult,
     Feature,
     Iteration,
+    Project,
     ProjectModelConfig,
     Run,
     RunBatch,
@@ -116,6 +117,51 @@ def split_shards(case_ids: list[uuid.UUID], shard_size: int) -> list[list[uuid.U
     ]
 
 
+async def _ensure_base_url_available(
+    db, environments: dict, cases_by_project: dict[uuid.UUID, list[uuid.UUID]]
+) -> None:
+    """用例引用 ${BASE_URL} 时，环境或项目必须给得出地址。
+
+    否则 midscene 在收集阶段就报 Undefined project variable，整批用例一条都不跑；
+    拦在入队前，用户才能看到一句能照着改的提示。
+    """
+    project_ids = set(cases_by_project)
+    projects = {
+        row.id: row
+        for row in (
+            await db.execute(select(Project).where(Project.id.in_(project_ids)))
+        ).scalars()
+    }
+    case_ids = [cid for ids in cases_by_project.values() for cid in ids]
+    yaml_by_id = dict(
+        (
+            await db.execute(
+                select(TestCase.id, TestCase.yaml_content).where(TestCase.id.in_(case_ids))
+            )
+        ).all()
+    )
+
+    problems: list[str] = []
+    for project_id, ids in cases_by_project.items():
+        env = environments.get(project_id)
+        project = projects.get(project_id)
+        effective = (env.base_url if env is not None else None) or (
+            project.base_url if project is not None else None
+        )
+        if effective:
+            continue
+        if any("${BASE_URL}" in (yaml_by_id.get(cid) or "") for cid in ids):
+            project_name = project.name if project is not None else str(project_id)
+            env_name = env.name if env is not None else DEFAULT_ENVIRONMENT
+            problems.append(f"项目「{project_name}」的环境「{env_name}」没有配置被测地址")
+    if problems:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "；".join(problems)
+            + "，但用例里引用了 ${BASE_URL}；请到项目环境里补上地址后再执行",
+        )
+
+
 async def spawn_runs(
     db,
     task: TestTask,
@@ -162,6 +208,7 @@ async def spawn_runs(
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    await _ensure_base_url_available(db, environments, cases_by_project)
 
     batch = RunBatch(
         task_id=task.id,

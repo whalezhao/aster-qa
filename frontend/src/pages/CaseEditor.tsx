@@ -17,6 +17,7 @@ import { PAGE, byDate, byNumber, byRank, byText } from '../lib/table';
 import type { CaseHistoryItem, FeatureStage, Priority, ValidateResult } from '../api/types';
 import QaTable from '../components/QaTable';
 import CaseVersionsTab from '../components/CaseVersionsTab';
+import EnvVariableHint from '../components/EnvVariableHint';
 
 interface CaseFormValues {
   name: string;
@@ -100,6 +101,7 @@ export default function CaseEditor() {
     <div style={{ padding: 20 }}>
       {/* 放在 Card 外面：Card 的 loading 态会卸载子节点，放里面提示会闪 */}
       <ModelConfigNotice projectId={testCase?.project_id} action="执行用例" />
+      <EnvVariableHint projectId={testCase?.project_id} style={{ marginBottom: 12 }} />
       <ProCard
         title={testCase ? `用例：${testCase.name}` : '用例'}
         extra={

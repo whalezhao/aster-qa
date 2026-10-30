@@ -466,6 +466,16 @@ class TaskUpdate(In):
     gate_fail_on_p0: bool | None = None
 
 
+class TaskRunIn(In):
+    """勾选多个环境时，每个环境各建一条执行记录。"""
+
+    environment_names: list[str] = []
+
+
+class TaskPreflightIn(In):
+    environment_name: str | None = Field(default=None, max_length=64)
+
+
 class CaseIdList(In):
     case_ids: list[uuid.UUID] = []
 

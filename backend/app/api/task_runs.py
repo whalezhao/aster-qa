@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from ..deps import CurrentUser, DbSession, require_team_role
 from ..models import Feature, Project, Tag, TaskTag, TestCase, TestTask
-from ..schemas import RegressionCreate
+from ..schemas import RegressionCreate, TaskRunIn
 from .task_common import attach_features, check_iteration, require_task, spawn_runs
 
 router = APIRouter(tags=["tasks"])
@@ -17,16 +17,39 @@ router = APIRouter(tags=["tasks"])
 
 
 @router.post("/api/tasks/{task_id}/run")
-async def run_task(task_id: uuid.UUID, user: CurrentUser, db: DbSession) -> dict:
+async def run_task(
+    task_id: uuid.UUID,
+    user: CurrentUser,
+    db: DbSession,
+    body: TaskRunIn | None = None,
+) -> dict:
     task = await require_task(db, task_id, user)
     if task.status in {"queued", "running"}:
         raise HTTPException(status.HTTP_409_CONFLICT, "该任务已有执行在进行中")
-    batch, runs = await spawn_runs(db, task, user, trigger="manual")
+    # 一个环境一条执行记录（批次）：批次是用户视角的一次执行，环境不同就是两件事
+    names: list[str | None] = []
+    for name in (body.environment_names if body else []):
+        cleaned = name.strip()
+        if cleaned and cleaned not in names:
+            names.append(cleaned)
+    batches = []
+    for env_name in names or [None]:
+        batch, runs = await spawn_runs(
+            db, task, user, trigger="manual", environment_name=env_name
+        )
+        batches.append(
+            {
+                "batch_id": str(batch.id),
+                "environment_name": batch.environment_name,
+                "run_ids": [str(r.id) for r in runs],
+            }
+        )
     await db.commit()
     return {
         "task_id": str(task.id),
-        "batch_id": str(batch.id),
-        "run_ids": [str(r.id) for r in runs],
+        "batch_id": batches[0]["batch_id"],
+        "run_ids": batches[0]["run_ids"],
+        "batches": batches,
     }
 
 

@@ -111,12 +111,18 @@ export default function TaskDetail() {
   });
 
   const runMutation = useMutation({
-    mutationFn: () => runTask(tid),
+    mutationFn: (environmentNames: string[]) => runTask(tid, environmentNames),
     onSuccess: (res) => {
+      const envs = res.batches.map((b) => b.environment_name).join('、');
+      if (res.batches.length > 1) {
+        message.success(`已提交执行：${res.batches.length} 个环境（${envs}）各一条执行记录`);
+        navigate(`/executions?task_id=${tid}`);
+        return;
+      }
       message.success(
         res.run_ids.length > 1
           ? `已提交执行：拆成 ${res.run_ids.length} 次运行（跨项目 / 用例分片）`
-          : '已提交执行',
+          : `已提交执行（环境 ${envs}）`,
       );
       navigate(`/executions/${res.batch_id}`);
     },
@@ -250,10 +256,11 @@ export default function TaskDetail() {
         open={preflightOpen}
         taskId={tid}
         taskName={task?.name}
+        defaultEnvironmentName={task?.environment_name ?? undefined}
         onCancel={() => setPreflightOpen(false)}
-        onRun={() => {
+        onRun={(environmentNames) => {
           setPreflightOpen(false);
-          runMutation.mutate();
+          runMutation.mutate(environmentNames);
         }}
       />
 
@@ -588,6 +595,13 @@ function BatchesTab({ tid }: { tid: string }) {
           width: 170,
           sorter: byDate<Batch>((r) => r.started_at ?? r.created_at),
           render: (_, r) => fmtDateTime(r.started_at ?? r.created_at),
+        },
+        {
+          title: '环境',
+          width: 100,
+          sorter: byText<Batch>((r) => r.environment_name ?? ''),
+          render: (_, r) =>
+            r.environment_name ? <Tag>{r.environment_name}</Tag> : '-',
         },
         {
           title: '状态',

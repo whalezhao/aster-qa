@@ -12,7 +12,6 @@ import {
   getTasks,
   runTask,
   updateTask,
-  type TaskInput,
   type TaskListParams,
 } from '../api/tasks';
 import { getProjects } from '../api/projects';
@@ -173,9 +172,20 @@ export default function Tasks() {
         // 表单里填百分数，接口收 0..1
         payload.gate_min_pass_rate = payload.gate_min_pass_rate / 100;
       }
-      return editing
-        ? updateTask(editing.id, payload as TaskInput)
-        : createTask(teamId as string, { ...payload, name: payload.name });
+      if (editing) {
+        // 类型/功能/项目在创建时就固化了（用例是快照），PATCH 不接受这些字段
+        return updateTask(editing.id, {
+          name: payload.name,
+          description: payload.description,
+          iteration_id: payload.iteration_id ?? null,
+          retry_count: payload.retry_count,
+          environment_name: payload.environment_name ?? null,
+          gate_enabled: payload.gate_enabled,
+          gate_min_pass_rate: payload.gate_min_pass_rate,
+          gate_fail_on_p0: payload.gate_fail_on_p0,
+        });
+      }
+      return createTask(teamId as string, { ...payload, name: payload.name });
     },
     onSuccess: (res) => {
       setOpen(false);
@@ -196,10 +206,19 @@ export default function Tasks() {
   });
 
   const runMutation = useMutation({
-    mutationFn: (id: string) => runTask(id),
+    mutationFn: ({ id, environmentNames }: { id: string; environmentNames: string[] }) =>
+      runTask(id, environmentNames),
     onSuccess: (res) => {
-      message.success('已触发执行');
+      message.success(
+        res.batches.length > 1
+          ? `已触发执行：${res.batches.length} 个环境各一条执行记录`
+          : '已触发执行',
+      );
       invalidate();
+      if (res.batches.length > 1) {
+        navigate(`/executions?task_id=${res.task_id}`);
+        return;
+      }
       navigate(`/executions/${res.batch_id}`);
     },
     onError: (e) => message.error(apiError(e)),
@@ -585,7 +604,7 @@ export default function Tasks() {
                   type="primary"
                   ghost
                   icon={<ThunderboltOutlined />}
-                  loading={runMutation.isPending && runMutation.variables === r.id}
+                  loading={runMutation.isPending && runMutation.variables?.id === r.id}
                   disabled={r.status === 'queued' || r.status === 'running'}
                   onClick={() => setPreflightTaskId(r.id)}
                 >
@@ -648,15 +667,19 @@ export default function Tasks() {
           </Form.Item>
 
           <Form.Item name="type" label="类型" rules={[{ required: true }]}>
-            <Select options={typeOptions} />
+            <Select options={typeOptions} disabled={Boolean(editing)} />
           </Form.Item>
 
           <Form.Item
             name="feature_ids"
             label="包含的功能"
-            tooltip="任务就是一堆功能的组合。选中后会把功能下启用中的用例快照进任务 —— 之后再给功能加用例，不会影响这个已定稿的任务。"
+            tooltip={
+              editing
+                ? '功能与用例在创建任务时就已快照固定，不能再改；需要新组合请新建任务。'
+                : '任务就是一堆功能的组合。选中后会把功能下启用中的用例快照进任务 —— 之后再给功能加用例，不会影响这个已定稿的任务。'
+            }
           >
-            <FeatureTreeSelect teamId={teamId} />
+            <FeatureTreeSelect teamId={teamId} disabled={Boolean(editing)} />
           </Form.Item>
 
           {!editing && (
@@ -674,6 +697,7 @@ export default function Tasks() {
               <Select
                 allowClear
                 placeholder="跨项目可留空"
+                disabled={Boolean(editing)}
                 options={projects.map((p) => ({ value: p.id, label: p.name }))}
               />
             </Form.Item>
@@ -728,11 +752,14 @@ export default function Tasks() {
         open={Boolean(preflightTaskId)}
         taskId={preflightTaskId ?? ''}
         taskName={tasks.find((task) => task.id === preflightTaskId)?.name}
+        defaultEnvironmentName={
+          tasks.find((task) => task.id === preflightTaskId)?.environment_name ?? undefined
+        }
         onCancel={() => setPreflightTaskId(null)}
-        onRun={() => {
+        onRun={(environmentNames) => {
           const id = preflightTaskId;
           setPreflightTaskId(null);
-          if (id) runMutation.mutate(id);
+          if (id) runMutation.mutate({ id, environmentNames });
         }}
       />
     </PageContainer>
