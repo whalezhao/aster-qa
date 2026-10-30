@@ -314,18 +314,3 @@ docker-compose.yml
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development and pull-request guidance. For
 security issues, follow [SECURITY.md](SECURITY.md) and report privately instead of
 opening a public issue.
-
-## Support the project
-
-Aster QA is an MIT-licensed open-source project. The code is free to use and modify.
-If it helps your work, you are welcome to make a voluntary contribution to support
-maintenance.
-
-> Contributions are voluntary gifts. They are not payment for services or a commercial
-> contract, and come with no feature, support, or invoice commitments.
-
-<p align="center">
-  <img src="docs/wechat-reward.png" width="260" alt="WeChat QR code to support Aster QA">
-</p>
-
-<p align="center"><sub>Scan with WeChat · voluntary contribution</sub></p>
