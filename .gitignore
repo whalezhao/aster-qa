@@ -30,3 +30,4 @@ backend/runner/midscene_run/
 *.tsbuildinfo
 .qa-auth.json
 .tmp*
+frontend/.taste-skill/
