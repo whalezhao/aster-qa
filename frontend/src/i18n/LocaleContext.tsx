@@ -1,6 +1,6 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import dayjs from 'dayjs';
-import { getLocale, setLocale, t, type Locale } from './index';
+import { getLocale, setLocale as applyLocale, t, type Locale } from './index';
 
 interface LocaleValue {
   locale: Locale;
@@ -13,18 +13,20 @@ const LocaleContext = createContext<LocaleValue | null>(null);
 export function LocaleProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(getLocale);
 
+  // 模块级 current 的初值由 i18n/index 在 import 时写入，这里只对齐 dayjs
   useEffect(() => {
-    setLocale(locale);
     dayjs.locale(locale === 'en' ? 'en' : 'zh-cn');
-  }, [locale]);
+  }, []);
 
-  const value = useMemo<LocaleValue>(
-    () => ({
-      locale,
-      setLocale: setLocaleState,
-    }),
-    [locale],
-  );
+  // t() 读的是模块级 current，必须在触发重渲染之前就位：
+  // 放进 useEffect 的话这一帧子树已经按旧语言渲染完了，界面上只有按钮会变。
+  const setLocale = useCallback((next: Locale) => {
+    applyLocale(next);
+    dayjs.locale(next === 'en' ? 'en' : 'zh-cn');
+    setLocaleState(next);
+  }, []);
+
+  const value = useMemo<LocaleValue>(() => ({ locale, setLocale }), [locale, setLocale]);
 
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
 }
