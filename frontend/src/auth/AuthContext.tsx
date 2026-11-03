@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { getMe, login as apiLogin, logout as apiLogout } from '../api/auth';
 import { TOKEN_KEY } from '../api/client';
 import type { CurrentUser } from '../api/types';
+import { t } from '../i18n';
 
 interface AuthContextValue {
   user: CurrentUser | null;
@@ -61,6 +62,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth 必须在 AuthProvider 内使用');
+  if (!ctx) throw new Error(t('useAuth 必须在 AuthProvider 内使用'));
   return ctx;
 }

@@ -25,6 +25,11 @@
           document.documentElement.dataset.theme = mode;
           document.documentElement.style.colorScheme = mode;
         } catch (e) {}
+        // 与 src/i18n/index.ts 的 readStored 保持同一套规则：英文用户首屏别闪中文 lang
+        try {
+          document.documentElement.lang =
+            localStorage.getItem('qa_locale') === 'en' ? 'en' : 'zh-CN';
+        } catch (e) {}
       })();
     </script>
   </head>

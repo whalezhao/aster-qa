@@ -18,6 +18,7 @@ import {
 import { clearModelConfig, getModelConfig, getProject, setModelConfig, testModelConfig } from '../api/projects';
 import { getIterationsByTeam } from '../api/iterations';
 import { apiError } from '../api/client';
+import { t } from '../i18n';
 import { PAGE, byNumber, byRank, byText } from '../lib/table';
 import { fmtTokens } from '../lib/format';
 import type { BulkReleaseResult, Feature, FeatureStage } from '../api/types';
@@ -62,17 +63,17 @@ const MODEL_FAMILY_SUGGESTIONS = [
   { value: 'xiaomi-mimo' },
 ];
 
-const REASONING_OPTIONS = [
-  { value: 'inherit', label: '跟随全局' },
-  { value: 'off', label: '关闭思考' },
-  { value: 'on', label: '开启思考' },
-];
-
 function ModelConfigCard({ projectId }: { projectId: string }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const reasoningOptions = [
+    { value: 'inherit', label: t('跟随全局') },
+    { value: 'off', label: t('关闭思考') },
+    { value: 'on', label: t('开启思考') },
+  ];
 
   const { data: config, isLoading } = useQuery({
     queryKey: ['model-config', projectId],
@@ -124,7 +125,7 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
     },
     onSuccess: () => {
       setTestResult(null);
-      message.success('已保存，该项目下次执行起生效');
+      message.success(t('已保存，该项目下次执行起生效'));
       queryClient.invalidateQueries({ queryKey: ['model-config', projectId] });
       // 项目列表上的「已配置/未配置」标记、以及各处提示都依赖它，一并刷新
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
@@ -152,7 +153,7 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
   const clearKey = useMutation({
     mutationFn: () => setModelConfig(projectId, { clear_api_key: true }),
     onSuccess: () => {
-      message.success('已清除该项目的 API Key');
+      message.success(t('已清除该项目的 API Key'));
       queryClient.invalidateQueries({ queryKey: ['model-config', projectId] });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
@@ -162,7 +163,7 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
   const reset = useMutation({
     mutationFn: () => clearModelConfig(projectId),
     onSuccess: () => {
-      message.success('已清空模型配置，该项目下用例将无法执行');
+      message.success(t('已清空模型配置，该项目下用例将无法执行'));
       // 不用 resetFields()：那会重置回陈旧值，交给上面那个 useEffect 从新数据驱动
       queryClient.invalidateQueries({ queryKey: ['model-config', projectId] });
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
@@ -177,11 +178,11 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
       loading={isLoading}
       title={
         <Space>
-          <span>大模型配置</span>
+          <span>{t('大模型配置')}</span>
           {config?.configured ? (
-            <Tag color="success">已配置</Tag>
+            <Tag color="success">{t('已配置')}</Tag>
           ) : (
-            <Tag color="warning">未配置 · 该项目无法执行</Tag>
+            <Tag color="warning">{t('未配置 · 该项目无法执行')}</Tag>
           )}
           {config?.model_health && (
             <Tag
@@ -193,7 +194,13 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
                     : 'default'
               }
             >
-              模型{config.model_health.status === 'healthy' ? '正常' : config.model_health.status === 'unhealthy' ? '异常' : '未检测'}
+              {t(
+                config.model_health.status === 'healthy'
+                  ? '模型正常'
+                  : config.model_health.status === 'unhealthy'
+                    ? '模型异常'
+                    : '未检测',
+              )}
             </Tag>
           )}
         </Space>
@@ -201,12 +208,12 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
       extra={
         config?.configured ? (
           <Popconfirm
-            title="清空该项目的模型配置？"
-            description="清空后该项目下所有用例都无法执行，直到重新配置。"
+            title={t('清空该项目的模型配置？')}
+            description={t('清空后该项目下所有用例都无法执行，直到重新配置。')}
             onConfirm={() => reset.mutate()}
           >
             <Button size="small" danger loading={reset.isPending}>
-              清空配置
+              {t('清空配置')}
             </Button>
           </Popconfirm>
         ) : null
@@ -217,18 +224,20 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
           type="success"
           showIcon
           style={{ marginBottom: 16 }}
-          message="配置完整，该项目下的用例可以执行"
-          description={`模型族、额外请求配置、思考模式可以留空；模型名为 ${
-            config.model_name ?? '-'
-          }。`}
+          message={t('配置完整，该项目下的用例可以执行')}
+          description={t('模型族、额外请求配置、思考模式可以留空；模型名为 {model}。', {
+            model: config.model_name ?? '-',
+          })}
         />
       ) : (
         <Alert
           type="warning"
           showIcon
           style={{ marginBottom: 16 }}
-          message={`还差：${(config?.missing ?? []).join('、') || '配置'}`}
-          description="平台不提供全局大模型，每个项目必须自己指定。三项补齐后该项目下的用例才能执行。"
+          message={t('还差：{items}', {
+            items: (config?.missing ?? []).join('、') || t('配置'),
+          })}
+          description={t('平台不提供全局大模型，每个项目必须自己指定。三项补齐后该项目下的用例才能执行。')}
         />
       )}
       <Form
@@ -239,22 +248,22 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
         <Space style={{ display: 'flex' }} align="start" wrap>
           <Form.Item
             name="model_name"
-            label="模型名"
+            label={t('模型名')}
             style={{ width: 260 }}
-            rules={[{ required: true, message: '必填' }]}
-            tooltip="执行该项目的用例时用这个模型名"
+            rules={[{ required: true, message: t('必填') }]}
+            tooltip={t('执行该项目的用例时用这个模型名')}
           >
-            <Input placeholder="如 qwen-vl-max" allowClear />
+            <Input placeholder={t('如 qwen-vl-max')} allowClear />
           </Form.Item>
           <Form.Item
             name="model_family"
-            label="模型族"
+            label={t('模型族')}
             style={{ width: 260 }}
-            tooltip="执行器会校验这个取值，填错会直接执行失败。"
+            tooltip={t('执行器会校验这个取值，填错会直接执行失败。')}
           >
             <AutoComplete
               options={MODEL_FAMILY_SUGGESTIONS}
-              placeholder="如 qwen2.5-vl"
+              placeholder={t('如 qwen2.5-vl')}
               allowClear
               filterOption={(input, option) =>
                 String(option?.value ?? '').toLowerCase().includes(input.toLowerCase())
@@ -263,93 +272,93 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
           </Form.Item>
           <Form.Item
             name="base_url"
-            label="接入地址"
+            label={t('接入地址')}
             style={{ width: 340 }}
-            rules={[{ required: true, message: '必填' }]}
-            tooltip="兼容 OpenAI 协议的服务地址（一般形如 …/v1）"
+            rules={[{ required: true, message: t('必填') }]}
+            tooltip={t('兼容 OpenAI 协议的服务地址（一般形如 …/v1）')}
           >
-            <Input placeholder="如 https://api.example.com/v1" allowClear />
+            <Input placeholder={t('如 https://api.example.com/v1')} allowClear />
           </Form.Item>
           <Form.Item
             name="api_key"
             label="API Key"
             style={{ width: 300 }}
-            tooltip="存进数据库。接口不会回显密钥，只告诉你配没配。"
+            tooltip={t('存进数据库。接口不会回显密钥，只告诉你配没配。')}
             rules={[
               {
                 // 已经存过密钥时输入框是空的（不回显），这时候不算缺失
                 validator: (_, v) =>
                   config?.api_key_set || (typeof v === 'string' && v.trim())
                     ? Promise.resolve()
-                    : Promise.reject(new Error('必填')),
+                    : Promise.reject(new Error(t('必填'))),
               },
             ]}
           >
             <Input.Password
               autoComplete="new-password"
               placeholder={
-                config?.api_key_set ? '已配置（留空则不修改）' : '必填'
+                config?.api_key_set ? t('已配置（留空则不修改）') : t('必填')
               }
             />
           </Form.Item>
           <Form.Item
             name="reasoning"
-            label="模型思考模式"
+            label={t('模型思考模式')}
             style={{ width: 180 }}
-            tooltip="推理模型（Qwen3.x 这类）默认会把 token 大量花在思考上，一次小请求就可能烧光 max_tokens 并返回空内容，执行器直接解析不到结果。跑不通时先关掉它。"
+            tooltip={t('推理模型（Qwen3.x 这类）默认会把 token 大量花在思考上，一次小请求就可能烧光 max_tokens 并返回空内容，执行器直接解析不到结果。跑不通时先关掉它。')}
           >
-            <Select options={REASONING_OPTIONS} />
+            <Select options={reasoningOptions} />
           </Form.Item>
           <Form.Item
             name="token_quota"
-            label="每月 token 限额"
+            label={t('每月 token 限额')}
             style={{ width: 200 }}
-            tooltip="执行器消耗 + 平台 AI 调用（生成用例/评估/复盘）合计。留空 = 不限；超出后不再发起新执行和 AI 调用。"
+            tooltip={t('执行器消耗 + 平台 AI 调用（生成用例/评估/复盘）合计。留空 = 不限；超出后不再发起新执行和 AI 调用。')}
           >
             <InputNumber
               min={0}
               step={100000}
               style={{ width: '100%' }}
-              placeholder="不限"
+              placeholder={t('不限')}
             />
           </Form.Item>
         </Space>
 
         <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-          本月已用 {fmtTokens(config?.month_tokens_used ?? 0)} tokens
+          {t('本月已用 {used} tokens', { used: fmtTokens(config?.month_tokens_used ?? 0) })}
           {config?.token_quota
-            ? `（限额 ${fmtTokens(config.token_quota)}）`
-            : '（未设限额）'}
-          ，按自然月统计，下月 1 日归零。
+            ? t('（限额 {quota}）', { quota: fmtTokens(config.token_quota) })
+            : t('（未设限额）')}
+          {t('，按自然月统计，下月 1 日归零。')}
         </Typography.Text>
 
         <Form.Item
           name="init_config_json"
-          label="额外请求配置（JSON，可选）"
-          tooltip="用于自定义请求头、额外请求参数等。"
+          label={t('额外请求配置（JSON，可选）')}
+          tooltip={t('用于自定义请求头、额外请求参数等。')}
         >
-          <Input.TextArea rows={2} placeholder='如 {"defaultHeaders":{"x-foo":"bar"}}' />
+          <Input.TextArea rows={2} placeholder={t('如 {"defaultHeaders":{"x-foo":"bar"}}')} />
         </Form.Item>
 
         <Space>
           <Button type="primary" htmlType="submit" loading={save.isPending}>
-            保存
+            {t('保存')}
           </Button>
           <Button
             onClick={() => test.mutate()}
             loading={test.isPending}
-            title="用当前表单里的值实际请求一次模型"
+            title={t('用当前表单里的值实际请求一次模型')}
           >
-            测试连接
+            {t('测试连接')}
           </Button>
           {config?.api_key_set && (
             <Popconfirm
-              title="清除该项目的 API Key？"
-              description="清除后配置就不完整了，该项目下的用例将无法执行，直到重新填入。"
+              title={t('清除该项目的 API Key？')}
+              description={t('清除后配置就不完整了，该项目下的用例将无法执行，直到重新填入。')}
               onConfirm={() => clearKey.mutate()}
             >
               <Button danger loading={clearKey.isPending}>
-                清除密钥
+                {t('清除密钥')}
               </Button>
             </Popconfirm>
           )}
@@ -362,7 +371,7 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
             showIcon
             closable
             onClose={() => setTestResult(null)}
-            message={testResult.ok ? '连接成功' : '连接失败'}
+            message={testResult.ok ? t('连接成功') : t('连接失败')}
             description={testResult.message}
           />
         )}
@@ -413,7 +422,7 @@ export default function ProjectDetail() {
         : createFeature(pid, payload);
     },
     onSuccess: () => {
-      message.success(editing ? '功能已更新' : '功能已创建');
+      message.success(editing ? t('功能已更新') : t('功能已创建'));
       setFormOpen(false);
       invalidate();
     },
@@ -423,7 +432,7 @@ export default function ProjectDetail() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteFeature(id),
     onSuccess: () => {
-      message.success('功能已删除');
+      message.success(t('功能已删除'));
       invalidate();
     },
     onError: (e) => message.error(apiError(e)),
@@ -434,9 +443,14 @@ export default function ProjectDetail() {
       ids.length === 1 ? releaseFeature(ids[0], cascade) : bulkReleaseFeatures(ids, cascade),
     onSuccess: (result) => {
       if ('released' in result) {
-        message.success(`已转正式 ${result.released.length} 个，跳过 ${result.skipped.length} 个`);
+        message.success(
+          t('已转正式 {released} 个，跳过 {skipped} 个', {
+            released: result.released.length,
+            skipped: result.skipped.length,
+          }),
+        );
       } else {
-        message.success('已转为正式');
+        message.success(t('已转为正式'));
       }
       setReleaseIds(null);
       setSelectedIds([]);
@@ -448,7 +462,7 @@ export default function ProjectDetail() {
   const reopenMutation = useMutation({
     mutationFn: (id: string) => reopenFeature(id),
     onSuccess: () => {
-      message.success('已退回迭代');
+      message.success(t('已退回迭代'));
       invalidate();
     },
     onError: (e) => message.error(apiError(e)),
@@ -463,12 +477,12 @@ export default function ProjectDetail() {
 
   return (
     <div style={{ padding: 20 }}>
-      <ProCard title={project ? project.name : '项目'} extra={<Link to={`/teams/${project?.team_id ?? ''}`}>返回团队</Link>}>
+      <ProCard title={project ? project.name : t('项目')} extra={<Link to={`/teams/${project?.team_id ?? ''}`}>{t('返回团队')}</Link>}>
         {project && (
           <ProDescriptions column={2} size="small">
-            <ProDescriptions.Item label="编码">{project.code || '-'}</ProDescriptions.Item>
+            <ProDescriptions.Item label={t('编码')}>{project.code || '-'}</ProDescriptions.Item>
             <ProDescriptions.Item label="Base URL">{project.base_url || '-'}</ProDescriptions.Item>
-            <ProDescriptions.Item label="描述" span={2}>
+            <ProDescriptions.Item label={t('描述')} span={2}>
               {project.description || '-'}
             </ProDescriptions.Item>
           </ProDescriptions>
@@ -477,11 +491,11 @@ export default function ProjectDetail() {
 
       <ModelConfigCard projectId={pid} />
 
-      <ProCard style={{ marginTop: 16 }} title="环境与变量">
+      <ProCard style={{ marginTop: 16 }} title={t('环境与变量')}>
         <EnvironmentsCard projectId={pid} />
       </ProCard>
 
-      <ProCard style={{ marginTop: 16 }} title="功能列表">
+      <ProCard style={{ marginTop: 16 }} title={t('功能列表')}>
         <Space style={{ marginBottom: 16 }} wrap>
           <Segmented
             value={stage}
@@ -490,9 +504,9 @@ export default function ProjectDetail() {
               setSelectedIds([]);
             }}
             options={[
-              { label: '全部', value: 'all' },
-              { label: '当前迭代', value: 'in_iteration' },
-              { label: '正式', value: 'released' },
+              { label: t('全部'), value: 'all' },
+              { label: t('当前迭代'), value: 'in_iteration' },
+              { label: t('正式'), value: 'released' },
             ]}
           />
           <Button
@@ -504,7 +518,7 @@ export default function ProjectDetail() {
               setFormOpen(true);
             }}
           >
-            新建功能
+            {t('新建功能')}
           </Button>
           <Button
             disabled={selectedIds.length === 0}
@@ -513,7 +527,7 @@ export default function ProjectDetail() {
               setReleaseIds(selectedIds);
             }}
           >
-            批量转正式（{selectedIds.length}）
+            {t('批量转正式（{n}）', { n: selectedIds.length })}
           </Button>
         </Space>
 
@@ -528,13 +542,13 @@ export default function ProjectDetail() {
           }}
           columns={[
             {
-              title: '名称',
+              title: t('名称'),
               dataIndex: 'name',
               sorter: byText<Feature>((r) => r.name),
               render: (name: string, r) => <Link to={`/features/${r.id}`}>{name}</Link>,
             },
             {
-              title: '需求编号',
+              title: t('需求编号'),
               dataIndex: 'requirement_ids',
               width: 160,
               sorter: byText<Feature>((r) => r.requirement_ids),
@@ -550,27 +564,27 @@ export default function ProjectDetail() {
                 ),
             },
             {
-              title: '分期',
+              title: t('分期'),
               dataIndex: 'stage',
               width: 110,
               sorter: byRank<Feature>((r) => r.stage, ['in_iteration', 'released']),
               render: (s: FeatureStage) =>
-                s === 'released' ? <Tag color="success">正式</Tag> : <Tag color="processing">当前迭代</Tag>,
+                s === 'released' ? <Tag color="success">{t('正式')}</Tag> : <Tag color="processing">{t('当前迭代')}</Tag>,
             },
             {
-              title: '迭代',
+              title: t('迭代'),
               dataIndex: 'iteration_id',
               sorter: byText<Feature>((r) => iterationName(r.iteration_id)),
               render: (v: string | null) => iterationName(v) ?? '-',
             },
             {
-              title: '用例数',
+              title: t('用例数'),
               width: 90,
               sorter: byNumber<Feature>((r) => caseCounts[r.id] ?? 0),
               render: (_, r) => caseCounts[r.id] ?? 0,
             },
             {
-              title: '操作',
+              title: t('操作'),
               width: 260,
               render: (_, r) => (
                 <Space>
@@ -587,20 +601,20 @@ export default function ProjectDetail() {
                       setFormOpen(true);
                     }}
                   >
-                    编辑
+                    {t('编辑')}
                   </Button>
                   {r.stage === 'released' ? (
-                    <Popconfirm title="退回迭代？" onConfirm={() => reopenMutation.mutate(r.id)}>
-                      <Button size="small">退回迭代</Button>
+                    <Popconfirm title={t('退回迭代？')} onConfirm={() => reopenMutation.mutate(r.id)}>
+                      <Button size="small">{t('退回迭代')}</Button>
                     </Popconfirm>
                   ) : (
                     <Button size="small" type="link" onClick={() => releaseSingle(r.id)}>
-                      转为正式
+                      {t('转为正式')}
                     </Button>
                   )}
-                  <Popconfirm title="确定删除该功能？" onConfirm={() => deleteMutation.mutate(r.id)}>
+                  <Popconfirm title={t('确定删除该功能？')} onConfirm={() => deleteMutation.mutate(r.id)}>
                     <Button size="small" danger>
-                      删除
+                      {t('删除')}
                     </Button>
                   </Popconfirm>
                 </Space>
@@ -609,12 +623,12 @@ export default function ProjectDetail() {
           ]}
         />
         <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>
-          已是正式的功能再次转正会返回 409，会被跳过。
+          {t('已是正式的功能再次转正会返回 409，会被跳过。')}
         </Typography.Paragraph>
       </ProCard>
 
       <Modal
-        title={editing ? '编辑功能' : '新建功能'}
+        title={editing ? t('编辑功能') : t('新建功能')}
         open={formOpen}
         onCancel={() => setFormOpen(false)}
         onOk={() => form.submit()}
@@ -622,41 +636,41 @@ export default function ProjectDetail() {
         forceRender
       >
         <Form form={form} layout="vertical" onFinish={(v) => saveMutation.mutate(v)} preserve={false}>
-          <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入功能名称' }]}>
+          <Form.Item name="name" label={t('名称')} rules={[{ required: true, message: t('请输入功能名称') }]}>
             <Input />
           </Form.Item>
           <Form.Item
             name="requirement_ids"
-            label="需求编号"
-            tooltip="禅道/Jira 里的需求编号。一个功能对应多个需求时用逗号分隔，例如 ZENTAO-1234, PROJ-88"
+            label={t('需求编号')}
+            tooltip={t('禅道/Jira 里的需求编号。一个功能对应多个需求时用逗号分隔，例如 ZENTAO-1234, PROJ-88')}
           >
-            <Input placeholder="可留空；多个用逗号分隔" allowClear />
+            <Input placeholder={t('可留空；多个用逗号分隔')} allowClear />
           </Form.Item>
-          <Form.Item name="iteration_id" label="所属迭代">
+          <Form.Item name="iteration_id" label={t('所属迭代')}>
             <Select
               allowClear
-              placeholder="可不选"
+              placeholder={t('可不选')}
               options={iterations.map((i) => ({ value: i.id, label: i.name }))}
             />
           </Form.Item>
-          <Form.Item name="description" label="描述">
+          <Form.Item name="description" label={t('描述')}>
             <Input.TextArea rows={3} />
           </Form.Item>
         </Form>
       </Modal>
 
       <Modal
-        title={releaseIds && releaseIds.length > 1 ? `批量转正式（${releaseIds.length} 个）` : '转为正式'}
+        title={releaseIds && releaseIds.length > 1 ? t('批量转正式（{n} 个）', { n: releaseIds.length }) : t('转为正式')}
         open={releaseIds !== null}
         onCancel={() => setReleaseIds(null)}
         onOk={() => releaseIds && releaseMutation.mutate(releaseIds)}
         confirmLoading={releaseMutation.isPending}
       >
         <Space direction="vertical">
-          <Typography.Text>将功能从「当前迭代」转为「正式」。</Typography.Text>
+          <Typography.Text>{t('将功能从「当前迭代」转为「正式」。')}</Typography.Text>
           <Space>
             <Switch checked={cascade} onChange={setCascade} />
-            <span>级联转正其下用例</span>
+            <span>{t('级联转正其下用例')}</span>
           </Space>
         </Space>
       </Modal>

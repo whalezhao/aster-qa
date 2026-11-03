@@ -6,6 +6,7 @@ import { aiFixCase, updateCase } from '../api/cases';
 import { apiError } from '../api/client';
 import type { AiFixResult } from '../api/types';
 import UnifiedDiff from './UnifiedDiff';
+import { t } from '../i18n';
 
 interface Props {
   open: boolean;
@@ -42,10 +43,10 @@ export default function AiFixModal({ open, caseId, caseName, onClose }: Props) {
       updateCase(caseId, {
         yaml_content: result?.proposed_yaml,
         change_source: 'ai_fix',
-        change_note: 'AI 根据失败记录修复',
+        change_note: t('AI 根据失败记录修复'),
       }),
     onSuccess: () => {
-      message.success('已保存为新的用例版本');
+      message.success(t('已保存为新的用例版本'));
       queryClient.invalidateQueries({ queryKey: ['case', caseId] });
       queryClient.invalidateQueries({ queryKey: ['case-versions', caseId] });
       queryClient.invalidateQueries({ queryKey: ['case-history', caseId] });
@@ -58,14 +59,14 @@ export default function AiFixModal({ open, caseId, caseName, onClose }: Props) {
   return (
     <Modal
       open={open}
-      title={`AI 修复用例${caseName ? ` · ${caseName}` : ''}`}
+      title={caseName ? t('AI 修复用例 · {name}', { name: caseName }) : t('AI 修复用例')}
       width={820}
       onCancel={onClose}
       footer={
         <Space>
-          <Button onClick={onClose}>取消</Button>
+          <Button onClick={onClose}>{t('取消')}</Button>
           <Button onClick={() => generate.mutate()} loading={generate.isPending}>
-            重新生成
+            {t('重新生成')}
           </Button>
           <Button
             type="primary"
@@ -73,7 +74,7 @@ export default function AiFixModal({ open, caseId, caseName, onClose }: Props) {
             loading={apply.isPending}
             onClick={() => apply.mutate()}
           >
-            应用并保存
+            {t('应用并保存')}
           </Button>
         </Space>
       }
@@ -83,7 +84,7 @@ export default function AiFixModal({ open, caseId, caseName, onClose }: Props) {
           <Spin />
           <div style={{ marginTop: 12 }}>
             <Typography.Text type="secondary">
-              正在读取失败步骤并让模型生成修复建议…
+              {t('正在读取失败步骤并让模型生成修复建议…')}
             </Typography.Text>
           </div>
         </div>
@@ -92,22 +93,22 @@ export default function AiFixModal({ open, caseId, caseName, onClose }: Props) {
         <Alert
           type="error"
           showIcon
-          message="生成失败"
+          message={t('生成失败')}
           description={apiError(generate.error)}
         />
       )}
       {result && (
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           <Space wrap>
-            <Tag color="processing">模型：{result.model_name ?? '-'}</Tag>
+            <Tag color="processing">{t('模型：{name}', { name: result.model_name ?? '-' })}</Tag>
             <Tag color={result.yaml_ok ? 'success' : 'error'}>
-              YAML {result.yaml_ok ? '校验通过' : '校验未通过'}
+              {t(result.yaml_ok ? '校验通过' : '校验未通过')}
             </Tag>
           </Space>
           <Alert
             type="info"
             showIcon
-            message="AI 建议"
+            message={t('AI 建议')}
             description={<XMarkdown content={result.explanation} />}
           />
           <UnifiedDiff diff={result.diff} />
@@ -115,15 +116,15 @@ export default function AiFixModal({ open, caseId, caseName, onClose }: Props) {
             <Alert
               type="info"
               showIcon
-              message="AI 没有修改用例"
-              description="这次失败更像是环境或产品问题；建议先修复环境或提交缺陷，而不是硬改用例。"
+              message={t('AI 没有修改用例')}
+              description={t('这次失败更像是环境或产品问题；建议先修复环境或提交缺陷，而不是硬改用例。')}
             />
           )}
           <Collapse
             items={[
               {
                 key: 'yaml',
-                label: '查看建议后的完整 YAML',
+                label: t('查看建议后的完整 YAML'),
                 children: (
                   <pre
                     style={{
@@ -144,7 +145,7 @@ export default function AiFixModal({ open, caseId, caseName, onClose }: Props) {
             <Alert
               type="warning"
               showIcon
-              message="该建议没有通过 YAML 校验，不能直接应用"
+              message={t('该建议没有通过 YAML 校验，不能直接应用')}
               description={result.yaml_errors.join('；')}
             />
           )}

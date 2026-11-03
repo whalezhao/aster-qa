@@ -1,10 +1,11 @@
 import { useMemo, type ReactNode } from 'react';
 import { theme, Typography } from 'antd';
+import { t } from '../i18n';
 
 /** 渲染后端返回的 unified diff 文本。 */
 export default function UnifiedDiff({ diff }: { diff: string }) {
   const { token } = theme.useToken();
-  const lines = useMemo(() => (diff || '(没有差异)').split('\n'), [diff]);
+  const lines = useMemo(() => (diff || t('(没有差异)')).split('\n'), [diff]);
   return (
     <pre
       style={{

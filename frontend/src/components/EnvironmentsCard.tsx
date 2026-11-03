@@ -23,6 +23,7 @@ import {
   updateEnvironment,
 } from '../api/environments';
 import { apiError } from '../api/client';
+import { t } from '../i18n';
 import type { Environment, EnvironmentVariableInput } from '../api/types';
 
 interface VariableRow {
@@ -75,7 +76,7 @@ function VariablesModal({
       return setEnvironmentVariables(env!.id, variables);
     },
     onSuccess: () => {
-      message.success('变量已保存');
+      message.success(t('变量已保存'));
       queryClient.invalidateQueries({ queryKey: ['environments', env?.project_id] });
       onClose();
     },
@@ -88,22 +89,22 @@ function VariablesModal({
   return (
     <Modal
       open={Boolean(env)}
-      title={`环境变量 · ${env?.name ?? ''}`}
+      title={t('环境变量 · {name}', { name: env?.name ?? '' })}
       width={760}
       onCancel={onClose}
       footer={
         <Space>
-          <Button onClick={onClose}>取消</Button>
+          <Button onClick={onClose}>{t('取消')}</Button>
           <Button type="primary" loading={save.isPending} onClick={() => save.mutate()}>
-            保存变量
+            {t('保存变量')}
           </Button>
         </Space>
       }
     >
       <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-        普通变量在 YAML 里用 <Typography.Text code>{'${KEY}'}</Typography.Text> 引用；
-        密钥用 <Typography.Text code>{'${{KEY}}'}</Typography.Text> 引用，只注入进程环境，不写进配置文件。
-        密钥留空表示不修改。
+        {t('普通变量在 YAML 里用')} <Typography.Text code>{'${KEY}'}</Typography.Text>{' '}
+        {t('引用；密钥用')} <Typography.Text code>{'${{KEY}}'}</Typography.Text>{' '}
+        {t('引用，只注入进程环境，不写进配置文件。密钥留空表示不修改。')}
       </Typography.Paragraph>
       <Table
         size="small"
@@ -112,7 +113,7 @@ function VariablesModal({
         dataSource={rows}
         columns={[
           {
-            title: '变量名',
+            title: t('变量名'),
             width: 180,
             render: (_value, row, index) => (
               <Input
@@ -123,18 +124,18 @@ function VariablesModal({
             ),
           },
           {
-            title: '值',
+            title: t('值'),
             render: (_value, row, index) => (
               <Input
                 value={row.value}
                 disabled={row.clear}
-                placeholder={row.existing && row.is_secret ? '留空 = 不修改' : ''}
+                placeholder={row.existing && row.is_secret ? t('留空 = 不修改') : ''}
                 onChange={(e) => update(index, { value: e.target.value })}
               />
             ),
           },
           {
-            title: '密钥',
+            title: t('密钥'),
             width: 90,
             render: (_value, row, index) => (
               <Switch
@@ -146,7 +147,7 @@ function VariablesModal({
             ),
           },
           {
-            title: '操作',
+            title: t('操作'),
             width: 120,
             render: (_value, row, index) =>
               row.existing ? (
@@ -154,7 +155,7 @@ function VariablesModal({
                   checked={row.clear}
                   onChange={(e) => update(index, { clear: e.target.checked })}
                 >
-                  删除
+                  {t('删除')}
                 </Checkbox>
               ) : (
                 <Button
@@ -162,7 +163,7 @@ function VariablesModal({
                   danger
                   onClick={() => setRows((prev) => prev.filter((_, i) => i !== index))}
                 >
-                  移除
+                  {t('移除')}
                 </Button>
               ),
           },
@@ -178,7 +179,7 @@ function VariablesModal({
           ])
         }
       >
-        添加变量
+        {t('添加变量')}
       </Button>
     </Modal>
   );
@@ -217,7 +218,7 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
         ? updateEnvironment(editing.id, values)
         : createEnvironment(projectId, values),
     onSuccess: () => {
-      message.success(editing ? '环境已更新' : '环境已创建');
+      message.success(editing ? t('环境已更新') : t('环境已创建'));
       setFormOpen(false);
       queryClient.invalidateQueries({ queryKey: ['environments', projectId] });
       queryClient.invalidateQueries({ queryKey: ['team-environments'] });
@@ -228,7 +229,7 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
   const remove = useMutation({
     mutationFn: (id: string) => deleteEnvironment(id),
     onSuccess: () => {
-      message.success('环境已删除');
+      message.success(t('环境已删除'));
       queryClient.invalidateQueries({ queryKey: ['environments', projectId] });
       queryClient.invalidateQueries({ queryKey: ['team-environments'] });
     },
@@ -239,10 +240,10 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
     <div>
       <Space style={{ marginBottom: 12 }}>
         <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          新建环境
+          {t('新建环境')}
         </Button>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          任务按环境名执行；跨项目任务要求每个项目都有同名环境。
+          {t('任务按环境名执行；跨项目任务要求每个项目都有同名环境。')}
         </Typography.Text>
       </Space>
       <Table
@@ -253,12 +254,12 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
         dataSource={environments}
         columns={[
           {
-            title: '名称',
+            title: t('名称'),
             dataIndex: 'name',
             render: (name: string, row) => (
               <Space>
                 <Typography.Text strong>{name}</Typography.Text>
-                {row.is_default && <Tag color="blue">默认</Tag>}
+                {row.is_default && <Tag color="blue">{t('默认')}</Tag>}
               </Space>
             ),
           },
@@ -268,30 +269,30 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
             render: (value: string | null) => value || '-',
           },
           {
-            title: '变量',
+            title: t('变量'),
             dataIndex: 'variables',
             width: 90,
             render: (value: Environment['variables']) => value.length,
           },
           {
-            title: '操作',
+            title: t('操作'),
             width: 220,
             render: (_value, row) => (
               <Space>
                 <Button size="small" onClick={() => setVariablesFor(row)}>
-                  变量
+                  {t('变量')}
                 </Button>
                 <Button size="small" onClick={() => openEdit(row)}>
-                  编辑
+                  {t('编辑')}
                 </Button>
                 {!row.is_default && (
                   <Popconfirm
-                    title="删除这个环境？"
-                    description="仍有任务使用该环境名时会被拒绝。"
+                    title={t('删除这个环境？')}
+                    description={t('仍有任务使用该环境名时会被拒绝。')}
                     onConfirm={() => remove.mutate(row.id)}
                   >
                     <Button size="small" danger loading={remove.isPending}>
-                      删除
+                      {t('删除')}
                     </Button>
                   </Popconfirm>
                 )}
@@ -302,7 +303,7 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
       />
       <Modal
         open={formOpen}
-        title={editing ? '编辑环境' : '新建环境'}
+        title={editing ? t('编辑环境') : t('新建环境')}
         onCancel={() => setFormOpen(false)}
         onOk={() => form.submit()}
         confirmLoading={save.isPending}
@@ -311,16 +312,16 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
         <Form form={form} layout="vertical" onFinish={(values) => save.mutate(values)}>
           <Form.Item
             name="name"
-            label="环境名"
-            rules={[{ required: true, message: '必填' }]}
-            extra={editing?.is_default ? '默认环境不能改名' : undefined}
+            label={t('环境名')}
+            rules={[{ required: true, message: t('必填') }]}
+            extra={editing?.is_default ? t('默认环境不能改名') : undefined}
           >
-            <Input disabled={editing?.is_default} placeholder="如 staging" />
+            <Input disabled={editing?.is_default} placeholder={t('如 staging')} />
           </Form.Item>
           <Form.Item
             name="base_url"
             label="Base URL"
-            extra={editing?.is_default ? '默认环境地址跟随项目 Base URL' : undefined}
+            extra={editing?.is_default ? t('默认环境地址跟随项目 Base URL') : undefined}
           >
             <Input disabled={editing?.is_default} placeholder="https://staging.example.com" />
           </Form.Item>

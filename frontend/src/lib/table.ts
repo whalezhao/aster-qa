@@ -1,4 +1,5 @@
 import type { TablePaginationConfig } from 'antd';
+import { getLocale, t } from '../i18n';
 
 /**
  * 全站表格统一的分页配置：每页 20 条、可切页大小、底部显示总数。
@@ -10,12 +11,13 @@ export const PAGE: TablePaginationConfig = {
   pageSize: 20,
   showSizeChanger: true,
   pageSizeOptions: [10, 20, 50, 100],
-  showTotal: (total) => `共 ${total} 条`,
+  showTotal: (total) => t('共 {n} 条', { n: total }),
 };
 
 /** 字符串列排序：按本地规则（中文按拼音），空值排最后 */
 export function byText<T>(get: (r: T) => string | null | undefined) {
-  return (a: T, b: T) => (get(a) ?? '').localeCompare(get(b) ?? '', 'zh');
+  return (a: T, b: T) =>
+    (get(a) ?? '').localeCompare(get(b) ?? '', getLocale() === 'en' ? 'en' : 'zh');
 }
 
 /** 数字列排序：空值当 0 */

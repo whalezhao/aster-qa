@@ -2,6 +2,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { TreeSelect, Typography } from 'antd';
 import { getFeatures } from '../api/features';
 import { getProjects } from '../api/projects';
+import { t } from '../i18n';
 
 /**
  * 「项目 → 功能」两级多选。新建任务和新建回归都用它。
@@ -41,13 +42,16 @@ export default function FeatureTreeSelect({
   const treeData = projects.map((p, i) => {
     const ready = p.has_model_config;
     return {
-      title: ready ? p.name : `${p.name}（未配大模型，不可选）`,
+      title: ready ? p.name : t('{name}（未配大模型，不可选）', { name: p.name }),
       // 父节点要有 value，否则 antd 报 "TreeNode value is invalidate"；但它是项目不是功能，
       // 所以标成不可选，配合 SHOW_CHILD 策略，选中值里只会出现功能的 id
       value: `project:${p.id}`,
       selectable: false,
       children: (featureQueries[i]?.data ?? []).map((f) => ({
-        title: `${f.name}（${f.stage === 'released' ? '正式' : '迭代中'}）`,
+        title: t('{name}（{stage}）', {
+          name: f.name,
+          stage: f.stage === 'released' ? t('正式') : t('迭代中'),
+        }),
         value: f.id,
         disabled: !ready,
       })),
@@ -67,12 +71,15 @@ export default function FeatureTreeSelect({
         treeDefaultExpandAll
         allowClear
         disabled={disabled}
-        placeholder={placeholder}
+        placeholder={t(placeholder)}
         style={{ width: '100%', ...style }}
       />
       {blocked.length > 0 && (
         <Typography.Text type="warning" style={{ display: 'block', marginTop: 4 }}>
-          有 {blocked.length} 个项目未配大模型，其下功能已禁选：{blocked.map((p) => p.name).join('、')}
+          {t('有 {count} 个项目未配大模型，其下功能已禁选：{names}', {
+            count: blocked.length,
+            names: blocked.map((p) => p.name).join(t('、')),
+          })}
         </Typography.Text>
       )}
     </>

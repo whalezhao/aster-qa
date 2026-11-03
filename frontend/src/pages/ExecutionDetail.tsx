@@ -5,14 +5,15 @@ import { ProCard, ProDescriptions } from '@ant-design/pro-components';
 import { FileTextOutlined, TrophyOutlined } from '@ant-design/icons';
 import { getBatch, rerunFailedBatch, type BatchDetail, type BatchFeature, type BatchRun } from '../api/batches';
 import { useActiveTeam } from '../team/TeamContext';
+import { t } from '../i18n';
 import {
   BATCH_STATUS_COLORS,
-  BATCH_STATUS_LABELS,
+  batchStatusLabel,
   fmtDateTime,
   fmtDuration,
   fmtPercent,
   runStatusView,
-  TASK_TYPE_LABELS,
+  taskTypeLabel,
 } from '../lib/format';
 import { PAGE, byNumber, byRank, byText } from '../lib/table';
 import { getBatchCheck, rerunBatchCheck } from '../api/ai';
@@ -46,7 +47,7 @@ export default function ExecutionDetail() {
     onSuccess: (check) => {
       // 写回 pending 状态，上面的轮询会自动接着跑
       queryClient.setQueryData(['batch-ai-check', bid], check);
-      message.success('已提交重新评估');
+      message.success(t('已提交重新评估'));
     },
     onError: (e) => message.error(apiError(e)),
   });
@@ -54,7 +55,7 @@ export default function ExecutionDetail() {
   const rerunFailed = useMutation({
     mutationFn: () => rerunFailedBatch(bid),
     onSuccess: (res) => {
-      message.success(`已提交重跑 ${res.case_count} 个失败用例`);
+      message.success(t('已提交重跑 {n} 个失败用例', { n: res.case_count }));
       queryClient.invalidateQueries({ queryKey: ['batch', bid] });
       queryClient.invalidateQueries({ queryKey: ['batches'] });
       navigate(`/executions/${res.batch_id}`);
@@ -76,7 +77,7 @@ export default function ExecutionDetail() {
       <Breadcrumb
         style={{ marginBottom: 12 }}
         items={[
-          { title: <Link to="/executions">执行记录</Link> },
+          { title: <Link to="/executions">{t('执行记录')}</Link> },
           { title: batch.name },
         ]}
       />
@@ -86,11 +87,11 @@ export default function ExecutionDetail() {
           <Space>
             <span>{batch.name}</span>
             <Tag color={BATCH_STATUS_COLORS[batch.status] ?? 'default'}>
-              {BATCH_STATUS_LABELS[batch.status] ?? batch.status}
+              {batchStatusLabel(batch.status)}
             </Tag>
             {batch.excluded_runs > 0 && (
-              <Tooltip title="这些执行里的用例失败不是用例本身的问题（模型额度/配置/网络），不计入通过率">
-                <Tag>{batch.excluded_runs} 次未计入统计</Tag>
+              <Tooltip title={t('这些执行里的用例失败不是用例本身的问题（模型额度/配置/网络），不计入通过率')}>
+                <Tag>{t('{n} 次未计入统计', { n: batch.excluded_runs })}</Tag>
               </Tooltip>
             )}
           </Space>
@@ -102,59 +103,57 @@ export default function ExecutionDetail() {
                 loading={rerunFailed.isPending}
                 onClick={() =>
                   modal.confirm({
-                    title: `只重跑 ${batch.failed} 个失败用例？`,
-                    content:
-                      '会创建一个新批次，并沿用本次执行的环境；一个 YAML 里的其他用例也会一起再跑。',
+                    title: t('只重跑 {n} 个失败用例？', { n: batch.failed }),
+                    content: t('会创建一个新批次，并沿用本次执行的环境；一个 YAML 里的其他用例也会一起再跑。'),
                     onOk: () => rerunFailed.mutateAsync(),
                   })
                 }
               >
-                仅重跑失败用例
+                {t('仅重跑失败用例')}
               </Button>
             )}
             <Button
               icon={<FileTextOutlined />}
               onClick={() => navigate(`/executions/${bid}/report`)}
             >
-              测试报告
+              {t('测试报告')}
             </Button>
-            {batch.task_id ? <Link to={`/tasks/${batch.task_id}`}>查看任务</Link> : null}
+            {batch.task_id ? <Link to={`/tasks/${batch.task_id}`}>{t('查看任务')}</Link> : null}
           </Space>
         }
       >
         <ProDescriptions column={3} size="small">
-          <ProDescriptions.Item label="测试任务">
+          <ProDescriptions.Item label={t('测试任务')}>
             {batch.task_id && batch.task_name ? (
               <Space direction="vertical" size={0}>
                 <Link to={`/tasks/${batch.task_id}`}>{batch.task_name}</Link>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {(TASK_TYPE_LABELS as Record<string, string>)[batch.task_type ?? ''] ??
-                    batch.task_type}
-                  {batch.task_case_count ? ` · ${batch.task_case_count} 个用例` : ''}
-                  {batch.task_feature_count ? ` · ${batch.task_feature_count} 个功能` : ''}
+                  {taskTypeLabel(batch.task_type ?? '')}
+                  {batch.task_case_count ? t(' · {n} 个用例', { n: batch.task_case_count }) : ''}
+                  {batch.task_feature_count ? t(' · {n} 个功能', { n: batch.task_feature_count }) : ''}
                 </Typography.Text>
               </Space>
             ) : (
               <Typography.Text type="secondary">-</Typography.Text>
             )}
           </ProDescriptions.Item>
-          <ProDescriptions.Item label="开始">{fmtDateTime(batch.started_at)}</ProDescriptions.Item>
-          <ProDescriptions.Item label="结束">{fmtDateTime(batch.ended_at)}</ProDescriptions.Item>
-          <ProDescriptions.Item label="耗时">{fmtDuration(batch.duration_ms)}</ProDescriptions.Item>
-          <ProDescriptions.Item label="项目数">{batch.project_count}</ProDescriptions.Item>
-          <ProDescriptions.Item label="触发方式">
-            {
+          <ProDescriptions.Item label={t('开始')}>{fmtDateTime(batch.started_at)}</ProDescriptions.Item>
+          <ProDescriptions.Item label={t('结束')}>{fmtDateTime(batch.ended_at)}</ProDescriptions.Item>
+          <ProDescriptions.Item label={t('耗时')}>{fmtDuration(batch.duration_ms)}</ProDescriptions.Item>
+          <ProDescriptions.Item label={t('项目数')}>{batch.project_count}</ProDescriptions.Item>
+          <ProDescriptions.Item label={t('触发方式')}>
+            {t(
               {
                 manual: '手动',
                 regression: '回归',
                 rerun: '重跑失败',
                 schedule: '定时',
                 ci: 'CI',
-              }[batch.trigger] ?? batch.trigger
-            }
+              }[batch.trigger] ?? batch.trigger,
+            )}
           </ProDescriptions.Item>
-          <ProDescriptions.Item label="环境">{batch.environment_name || '默认'}</ProDescriptions.Item>
-          <ProDescriptions.Item label="执行 ID">
+          <ProDescriptions.Item label={t('环境')}>{batch.environment_name || t('默认')}</ProDescriptions.Item>
+          <ProDescriptions.Item label={t('执行 ID')}>
             <Typography.Text copyable style={{ fontSize: 12 }}>
               {batch.id}
             </Typography.Text>
@@ -176,17 +175,17 @@ export default function ExecutionDetail() {
             showIcon
             message={
               batch.gate_detail.status === 'failed'
-                ? '质量门禁未通过'
+                ? t('质量门禁未通过')
                 : batch.gate_detail.status === 'pending'
-                  ? '质量门禁待执行完成'
+                  ? t('质量门禁待执行完成')
                   : batch.gate_detail.status === 'no_data'
-                    ? '质量门禁无有效执行'
-                    : '质量门禁通过'
+                    ? t('质量门禁无有效执行')
+                    : t('质量门禁通过')
             }
             description={
               batch.gate_detail.reasons.length
                 ? batch.gate_detail.reasons.join('；')
-                : `通过率 ${fmtPercent((batch.gate_detail.pass_rate ?? 0) * 100)}`
+                : t('通过率 {rate}', { rate: fmtPercent((batch.gate_detail.pass_rate ?? 0) * 100) })
             }
           />
         )}
@@ -195,27 +194,27 @@ export default function ExecutionDetail() {
           <>
             <Progress percent={percent} status="active" style={{ marginTop: 16 }} />
             <Typography.Text type="secondary">
-              执行中，页面每 3 秒自动刷新。单用例通常要 40 秒到几分钟。
+              {t('执行中，页面每 3 秒自动刷新。单用例通常要 40 秒到几分钟。')}
             </Typography.Text>
           </>
         )}
 
         <Row gutter={16} style={{ marginTop: 16 }}>
           <Col span={6}>
-            <Statistic title="用例通过" value={`${batch.passed}/${batch.total}`} />
+            <Statistic title={t('用例通过')} value={`${batch.passed}/${batch.total}`} />
           </Col>
           <Col span={6}>
             <Statistic
-              title="失败"
+              title={t('失败')}
               value={batch.failed}
               valueStyle={{ color: batch.failed > 0 ? '#faad14' : undefined }}
             />
           </Col>
           <Col span={6}>
-            <Statistic title="通过率" value={fmtPercent(batch.total ? batch.passed / batch.total : null)} />
+            <Statistic title={t('通过率')} value={fmtPercent(batch.total ? batch.passed / batch.total : null)} />
           </Col>
           <Col span={6}>
-            <Statistic title="涉及项目" value={batch.project_count} />
+            <Statistic title={t('涉及项目')} value={batch.project_count} />
           </Col>
         </Row>
       </ProCard>
@@ -225,22 +224,22 @@ export default function ExecutionDetail() {
           <AllPassedCard batch={batch} />
         ) : (
           <AiInsightCard
-            title="AI 评估"
+            title={t('AI 评估')}
             check={aiCheck}
-            pendingText="AI 正在读这次执行的产物和失败步骤…"
-            emptyText="这次执行完成后会自动生成 AI 评估"
+            pendingText={t('AI 正在读这次执行的产物和失败步骤…')}
+            emptyText={t('这次执行完成后会自动生成 AI 评估')}
             extra={
               <Button size="small" loading={rerun.isPending} onClick={() => rerun.mutate()}>
-                重新评估
+                {t('重新评估')}
               </Button>
             }
           />
         )}
       </div>
 
-      <ProCard title="各功能结果" style={{ marginTop: 16 }}>
+      <ProCard title={t('各功能结果')} style={{ marginTop: 16 }}>
         {batch.features.length === 0 ? (
-          <Empty description="这次执行没有产生功能维度的结果" />
+          <Empty description={t('这次执行没有产生功能维度的结果')} />
         ) : (
           <QaTable<BatchFeature>
             rowKey="feature_id"
@@ -249,20 +248,20 @@ export default function ExecutionDetail() {
             size="small"
             columns={[
               {
-                title: '功能',
+                title: t('功能'),
                 dataIndex: 'name',
                 sorter: byText<BatchFeature>((f) => f.name),
               },
               {
-                title: '分期',
+                title: t('分期'),
                 dataIndex: 'stage',
                 width: 100,
                 sorter: byRank<BatchFeature>((f) => f.stage, ['in_iteration', 'released']),
                 render: (s: string) =>
-                  s === 'released' ? <Tag color="success">正式</Tag> : <Tag color="processing">当前迭代</Tag>,
+                  s === 'released' ? <Tag color="success">{t('正式')}</Tag> : <Tag color="processing">{t('当前迭代')}</Tag>,
               },
               {
-                title: '通过',
+                title: t('通过'),
                 width: 160,
                 sorter: byNumber<BatchFeature>((f) => (f.total ? f.passed / f.total : 0)),
                 render: (_, f) => (
@@ -284,13 +283,12 @@ export default function ExecutionDetail() {
         )}
       </ProCard>
 
-      <ProCard title="各项目的执行明细" style={{ marginTop: 16 }}>
+      <ProCard title={t('各项目的执行明细')} style={{ marginTop: 16 }}>
         <Typography.Paragraph type="secondary">
-          跨项目或用例分片的任务会拆成多次运行（一个 run 只跑一个项目的一部分用例），
-          下面是每一份运行的结果。点「报告」查看该项目报告；需要归档签章时用右上角的「测试报告」。
+          {t('跨项目或用例分片的任务会拆成多次运行（一个 run 只跑一个项目的一部分用例），下面是每一份运行的结果。点「报告」查看该项目报告；需要归档签章时用右上角的「测试报告」。')}
         </Typography.Paragraph>
         {batch.run_items.length === 0 ? (
-          <Empty description="没有运行明细" />
+          <Empty description={t('没有运行明细')} />
         ) : (
           <QaTable<BatchRun>
             rowKey="id"
@@ -299,7 +297,7 @@ export default function ExecutionDetail() {
             size="small"
             columns={[
               {
-                title: '项目',
+                title: t('项目'),
                 dataIndex: 'project_name',
                 sorter: byText<BatchRun>((r) => r.project_name),
                 render: (v: string | null, r) => (
@@ -307,14 +305,14 @@ export default function ExecutionDetail() {
                     {v ? <Link to={`/projects/${r.project_id}`}>{v}</Link> : '-'}
                     {r.shard_count !== null && r.shard_count > 1 && (
                       <Tag>
-                        分片 {r.shard_index}/{r.shard_count}
+                        {t('分片 {index}/{count}', { index: r.shard_index ?? 0, count: r.shard_count })}
                       </Tag>
                     )}
                   </Space>
                 ),
               },
               {
-                title: '状态',
+                title: t('状态'),
                 width: 150,
                 sorter: byRank<BatchRun>((r) => r.status, [
                   'queued',
@@ -334,25 +332,25 @@ export default function ExecutionDetail() {
                 },
               },
               {
-                title: '通过 / 总数',
+                title: t('通过 / 总数'),
                 width: 110,
                 sorter: byNumber<BatchRun>((r) => (r.total ? (r.passed ?? 0) / r.total : -1)),
                 render: (_, r) => (r.total === null ? '-' : `${r.passed ?? 0}/${r.total}`),
               },
               {
-                title: '耗时',
+                title: t('耗时'),
                 width: 90,
                 sorter: byNumber<BatchRun>((r) => r.duration_ms),
                 render: (_, r) => fmtDuration(r.duration_ms),
               },
               {
-                title: '模型',
+                title: t('模型'),
                 width: 150,
                 sorter: byText<BatchRun>((r) => r.model_name),
                 render: (_, r) => r.model_name || '-',
               },
               {
-                title: '操作',
+                title: t('操作'),
                 width: 200,
                 render: (_, r) => (
                   <Space>
@@ -362,10 +360,10 @@ export default function ExecutionDetail() {
                       disabled={!r.report_available}
                       onClick={() => navigate(`/runs/${r.id}?tab=report`)}
                     >
-                      报告
+                      {t('报告')}
                     </Button>
                     <Button size="small" onClick={() => navigate(`/runs/${r.id}`)}>
-                      用例结果
+                      {t('用例结果')}
                     </Button>
                   </Space>
                 ),
@@ -380,8 +378,8 @@ export default function ExecutionDetail() {
           type="warning"
           showIcon
           style={{ marginTop: 16 }}
-          message="有用例失败"
-          description="用例由 AI 驱动执行，同一个用例时过时不过属于常态，单次失败不等价于缺陷。建议结合「用例历史执行结果」判断是否稳定复现。"
+          message={t('有用例失败')}
+          description={t('用例由 AI 驱动执行，同一个用例时过时不过属于常态，单次失败不等价于缺陷。建议结合「用例历史执行结果」判断是否稳定复现。')}
         />
       )}
     </div>
@@ -412,14 +410,18 @@ function AllPassedCard({ batch }: { batch: BatchDetail }) {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          全部通过
+          {t('全部通过')}
         </Typography.Title>
         <Typography.Text type="secondary">
-          {batch.passed}/{batch.total} 个用例通过 · 耗时 {fmtDuration(batch.duration_ms)}
+          {t('{passed}/{total} 个用例通过 · 耗时 {duration}', {
+            passed: batch.passed,
+            total: batch.total,
+            duration: fmtDuration(batch.duration_ms),
+          })}
         </Typography.Text>
         <div style={{ marginTop: 6 }}>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            全绿批次不调用 AI 评估；出现失败时才会生成逐条诊断。
+            {t('全绿批次不调用 AI 评估；出现失败时才会生成逐条诊断。')}
           </Typography.Text>
         </div>
       </div>

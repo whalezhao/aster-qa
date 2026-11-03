@@ -36,6 +36,7 @@ import type {
   ReportTask,
 } from '../../api/runs';
 import { fmtDuration, fmtTokens } from '../../lib/format';
+import { t } from '../../i18n';
 import AiFixModal from '../AiFixModal';
 import KeyframePlayer from './KeyframePlayer';
 
@@ -72,10 +73,10 @@ function StatusDot({ status }: { status: string }) {
 }
 
 function statusText(status: string): string {
-  if (status === 'passed' || status === 'success' || status === 'succeeded') return '通过';
-  if (status === 'failed') return '失败';
-  if (status === 'warning') return '需留意';
-  if (status === 'not-run') return '未执行';
+  if (status === 'passed' || status === 'success' || status === 'succeeded') return t('通过');
+  if (status === 'failed') return t('失败');
+  if (status === 'warning') return t('需留意');
+  if (status === 'not-run') return t('未执行');
   return status;
 }
 
@@ -105,7 +106,7 @@ export function RunReportView({ runId, available = true }: { runId: string; avai
     staleTime: 60_000,
   });
 
-  if (!available) return <Empty description="本次执行没有可用报告" />;
+  if (!available) return <Empty description={t('本次执行没有可用报告')} />;
   if (structured.isLoading) {
     return (
       <div style={{ textAlign: 'center', padding: 48 }}>
@@ -114,14 +115,14 @@ export function RunReportView({ runId, available = true }: { runId: string; avai
     );
   }
   if (structured.isError || !structured.data) {
-    return <Alert type="info" showIcon message="报告不可用（可能已被清理）" />;
+    return <Alert type="info" showIcon message={t('报告不可用（可能已被清理）')} />;
   }
   if (structured.data.available && structured.data.data) {
     return (
       <ReportView
         data={structured.data.data}
         assetBase={apiUrl(`/reports/${runId}/markdown/`)}
-        title="执行报告"
+        title={t('执行报告')}
       />
     );
   }
@@ -186,7 +187,7 @@ export default function ReportView({
         <Input
           allowClear
           prefix={<SearchOutlined />}
-          placeholder="搜索用例、步骤、断言、报错…"
+          placeholder={t('搜索用例、步骤、断言、报错…')}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           style={{ width: 320 }}
@@ -195,14 +196,14 @@ export default function ReportView({
           value={mode}
           onChange={changeMode}
           options={[
-            { label: '紧凑', value: 'compact' },
-            { label: '详细', value: 'detailed' },
+            { label: t('紧凑'), value: 'compact' },
+            { label: t('详细'), value: 'detailed' },
           ]}
         />
-        <Tag>{data.stats.cases} 个用例</Tag>
-        <Tag>{data.stats.steps} 个步骤</Tag>
-        <Tag>{data.stats.keyframes} 张关键帧</Tag>
-        {data.sources.length > 1 && <Tag color="blue">已聚合 {data.sources.length} 份执行报告</Tag>}
+        <Tag>{t('{n} 个用例', { n: data.stats.cases })}</Tag>
+        <Tag>{t('{n} 个步骤', { n: data.stats.steps })}</Tag>
+        <Tag>{t('{n} 张关键帧', { n: data.stats.keyframes })}</Tag>
+        {data.sources.length > 1 && <Tag color="blue">{t('已聚合 {n} 份执行报告', { n: data.sources.length })}</Tag>}
       </Space>
 
       {data.legacy && (
@@ -210,12 +211,12 @@ export default function ReportView({
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message="这份报告没有用例结构，已按执行段展示"
+          message={t('这份报告没有用例结构，已按执行段展示')}
         />
       )}
 
       {groups.length === 0 ? (
-        <Empty description={q ? `没有匹配「${query}」的步骤` : '报告里没有用例结果'} />
+        <Empty description={q ? t('没有匹配「{query}」的步骤', { query }) : t('报告里没有用例结果')} />
       ) : (
         <div className="qa-report-projects">
           {groups.map(({ project, cases }) => (
@@ -227,11 +228,11 @@ export default function ReportView({
                     {project.projectName || project.name}
                   </span>
                   {project.shardCount !== null && project.shardCount > 1 && (
-                    <Tag>分片 {project.shardIndex}/{project.shardCount}</Tag>
+                    <Tag>{t('分片 {index}/{total}', { index: project.shardIndex ?? 0, total: project.shardCount })}</Tag>
                   )}
                   <span className="qa-report-project-meta">
-                    <span>{project.cases.length} 个用例</span>
-                    {cases.length !== project.cases.length && <span>{cases.length} 匹配</span>}
+                    <span>{t('{n} 个用例', { n: project.cases.length })}</span>
+                    {cases.length !== project.cases.length && <span>{t('{n} 匹配', { n: cases.length })}</span>}
                   </span>
                 </div>
               )}
@@ -269,11 +270,11 @@ function ReportHeader({ data, title }: { data: ReportStructured; title: string }
         </Typography.Title>
         <Space size={8} wrap style={{ marginTop: 8 }}>
           <Tag color={allPassed ? 'success' : data.stats.failed ? 'error' : 'default'}>
-            {data.stats.passed}/{data.stats.cases} 用例通过
+            {t('{passed}/{total} 用例通过', { passed: data.stats.passed, total: data.stats.cases })}
           </Tag>
-          {data.stats.failed > 0 && <Tag color="error">{data.stats.failed} 个失败</Tag>}
-          <Tag>耗时 {fmtDuration(data.stats.durationMs)}</Tag>
-          <Tag>{data.stats.steps} 个步骤</Tag>
+          {data.stats.failed > 0 && <Tag color="error">{t('{n} 个失败', { n: data.stats.failed })}</Tag>}
+          <Tag>{t('耗时 {duration}', { duration: fmtDuration(data.stats.durationMs) })}</Tag>
+          <Tag>{t('{n} 个步骤', { n: data.stats.steps })}</Tag>
           <Tag>{fmtTokens(data.stats.tokens.total)} tokens</Tag>
           {data.stats.models.length > 0 && <Tag>{data.stats.models.map((m) => m.model).join(' / ')}</Tag>}
         </Space>
@@ -325,16 +326,16 @@ function CaseCard({
         <StatusDot status={item.status} />
         <span className="qa-report-case-name">{item.name}</span>
         <span className="qa-report-case-meta">
-          <Tag bordered={false}>{item.steps.length} 步</Tag>
-          {steps.length !== item.steps.length && <Tag color="blue">{steps.length} 匹配</Tag>}
+          <Tag bordered={false}>{t('{n} 步', { n: item.steps.length })}</Tag>
+          {steps.length !== item.steps.length && <Tag color="blue">{t('{n} 匹配', { n: steps.length })}</Tag>}
           <Tag bordered={false} icon={<ClockCircleOutlined />}>
             {fmtDuration(item.durationMs)}
           </Tag>
-          {item.attemptCount > 1 && <Tag color="warning">{item.attemptCount} 次尝试</Tag>}
+          {item.attemptCount > 1 && <Tag color="warning">{t('{n} 次尝试', { n: item.attemptCount })}</Tag>}
           {item.status !== 'passed' && <Tag color={item.status === 'failed' ? 'error' : 'default'}>{statusText(item.status)}</Tag>}
           {item.caseUuid && (
             <Link to={`/cases/${item.caseUuid}`} onClick={(event) => event.stopPropagation()}>
-              用例
+              {t('用例')}
             </Link>
           )}
           {item.caseUuid && item.status === 'failed' && (
@@ -347,7 +348,7 @@ function CaseCard({
               }}
               onKeyDown={(event) => event.stopPropagation()}
             >
-              AI 修复
+              {t('AI 修复')}
             </Button>
           )}
           {frames.length > 1 && (
@@ -355,14 +356,14 @@ function CaseCard({
               type="text"
               size="small"
               icon={<PlayCircleOutlined />}
-              title="关键帧回放"
+              title={t('关键帧回放')}
               onClick={(event) => {
                 event.stopPropagation();
                 setReplay(frames);
               }}
               onKeyDown={(event) => event.stopPropagation()}
             >
-              关键帧
+              {t('关键帧')}
             </Button>
           )}
         </span>
@@ -372,7 +373,7 @@ function CaseCard({
           <CaseTimeline frames={frames} assetBase={assetBase} onReplay={setReplay} />
           <div className="qa-report-steps">
             {steps.length === 0 ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的步骤" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('没有匹配的步骤')} />
             ) : (
               steps.map((step) => <StepCard key={step.id} step={step} assetBase={assetBase} />)
             )}
@@ -385,7 +386,7 @@ function CaseCard({
         onCancel={() => setReplay(null)}
         footer={null}
         width={1000}
-        title={`${item.name} · 关键帧回放`}
+        title={t('{name} · 关键帧回放', { name: item.name })}
         destroyOnHidden
       >
         {replay && <KeyframePlayer frames={replay} assetBase={assetBase} />}
@@ -415,10 +416,10 @@ function CaseTimeline({
   return (
     <div className="qa-case-timeline">
       <div className="qa-case-timeline-head">
-        <span>关键帧时间线</span>
+        <span>{t('关键帧时间线')}</span>
         {frames.length > 1 && (
           <Button size="small" type="text" icon={<PlayCircleOutlined />} onClick={() => onReplay(frames)}>
-            回放整个用例
+            {t('回放整个用例')}
           </Button>
         )}
       </div>
@@ -431,7 +432,7 @@ function CaseTimeline({
               width={120}
               height={68}
               style={{ objectFit: 'cover', borderRadius: 6 }}
-              preview={{ mask: '查看' }}
+              preview={{ mask: t('查看') }}
             />
             <figcaption>{clock((frame.time ?? first) - first)}</figcaption>
           </figure>
@@ -453,7 +454,7 @@ function StepCard({ step, assetBase }: { step: ReportStep; assetBase: string }) 
       {!step.synthetic && (
         <div className="qa-report-step-head">
           {(NODE_LABELS[step.node] ?? step.node) !== step.title && (
-            <Tag color={NODE_COLORS[step.node] ?? 'default'}>{NODE_LABELS[step.node] ?? step.node}</Tag>
+            <Tag color={NODE_COLORS[step.node] ?? 'default'}>{t(NODE_LABELS[step.node] ?? step.node)}</Tag>
           )}
           <span className="qa-report-step-title">{step.title}</span>
           <span className="qa-report-step-meta">
@@ -480,7 +481,7 @@ function StepCard({ step, assetBase }: { step: ReportStep; assetBase: string }) 
           items={[
             {
               key: 'detail',
-              label: `执行明细（${taskCount} 个步骤事件）`,
+              label: t('执行明细（{n} 个步骤事件）', { n: taskCount }),
               children: step.executions.map((execution, index) => (
                 <ExecutionBlock key={`${execution.id}-${index}`} execution={execution} />
               )),
@@ -511,11 +512,11 @@ function ExecutionBlock({ execution }: { execution: ReportExecution }) {
 
 function TaskRow({ task }: { task: ReportTask }) {
   const rawSections = [
-    { key: 'param', label: '参数', value: task.param },
-    { key: 'output', label: '输出', value: task.output },
-    { key: 'log', label: '日志', value: task.log },
-    { key: 'reasoning', label: '推理过程', value: task.reasoning },
-    { key: 'usage', label: '模型用量', value: task.usage },
+    { key: 'param', label: t('参数'), value: task.param },
+    { key: 'output', label: t('输出'), value: task.output },
+    { key: 'log', label: t('日志'), value: task.log },
+    { key: 'reasoning', label: t('推理过程'), value: task.reasoning },
+    { key: 'usage', label: t('模型用量'), value: task.usage },
   ].filter((section) => section.value !== null && section.value !== undefined && section.value !== '');
 
   return (
@@ -566,7 +567,7 @@ function MarkdownReport({ runId }: { runId: string }) {
     );
   }
   if (isError || !data || !data.available) {
-    return <Alert type="info" showIcon message="报告不可用（可能已被清理）" />;
+    return <Alert type="info" showIcon message={t('报告不可用（可能已被清理）')} />;
   }
   return (
     <div className="qa-report-md">

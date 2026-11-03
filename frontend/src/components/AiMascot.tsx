@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { t } from '../i18n';
 
 export type MascotState = 'idle' | 'thinking' | 'happy' | 'alert';
 
@@ -63,7 +64,7 @@ export default function AiMascot({
       className={`qa-mascot qa-mascot--${state}`}
       style={{ width: size, height: size, ...style }}
       role="img"
-      aria-label={`AI 助手（${state}）`}
+      aria-label={t('AI 助手（{state}）', { state })}
     >
       <svg viewBox="0 0 24 24" width="100%" height="100%" shapeRendering="crispEdges">
         {/* 影子 */}

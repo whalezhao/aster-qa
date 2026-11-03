@@ -7,6 +7,8 @@ import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import AiMascot from '../components/AiMascot';
 import Logo from '../components/Logo';
+import LocaleSwitch from '../i18n/LocaleSwitch';
+import { t } from '../i18n';
 
 const HIGHLIGHTS = [
   '用例由 AI 生成与维护，人只做审阅和签名',
@@ -107,13 +109,15 @@ export default function Login() {
         </div>
       </div>
 
-      <Button
-        shape="circle"
-        aria-label="切换主题"
-        icon={isDark ? <SunOutlined /> : <MoonOutlined />}
-        onClick={toggle}
-        style={{ position: 'absolute', top: 24, right: 24 }}
-      />
+      <div style={{ position: 'absolute', top: 24, right: 24, display: 'flex', gap: 8 }}>
+        <LocaleSwitch circle />
+        <Button
+          shape="circle"
+          aria-label={t('切换主题')}
+          icon={isDark ? <SunOutlined /> : <MoonOutlined />}
+          onClick={toggle}
+        />
+      </div>
 
       <div
         style={{
@@ -138,9 +142,9 @@ export default function Login() {
                 letterSpacing: -1.2,
               }}
             >
-              让 AI 跑测试，
+              {t('让 AI 跑测试，')}
               <br />
-              人只需要看结论
+              {t('人只需要看结论')}
             </Typography.Title>
             <Typography.Paragraph
               style={{
@@ -151,8 +155,9 @@ export default function Login() {
                 color: token.colorTextSecondary,
               }}
             >
-              团队、项目、功能、用例一条链管到底：AI 生成用例、执行产生报告、人工签名背书、
-              webhook 把结果送回你的工单系统。
+              {t(
+                '团队、项目、功能、用例一条链管到底：AI 生成用例、执行产生报告、人工签名背书、webhook 把结果送回你的工单系统。',
+              )}
             </Typography.Paragraph>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 32 }}>
               {HIGHLIGHTS.map((item) => (
@@ -168,7 +173,7 @@ export default function Login() {
                     }}
                   />
                   <Typography.Text type="secondary" style={{ fontSize: 15 }}>
-                    {item}
+                    {t(item)}
                   </Typography.Text>
                 </div>
               ))}
@@ -192,23 +197,36 @@ export default function Login() {
             </div>
           )}
           <Typography.Title level={2} style={{ margin: 0, fontSize: 26, letterSpacing: -0.4 }}>
-            登录
+            {t('登录')}
           </Typography.Title>
           <Typography.Paragraph
             type="secondary"
             style={{ margin: '8px 0 28px', fontSize: 13, lineHeight: 1.6 }}
           >
-            账号由团队管理员在「人员」里维护，忘记密码也找管理员重置。
+            {t('账号由团队管理员在「人员」里维护，忘记密码也找管理员重置。')}
           </Typography.Paragraph>
 
           <Form layout="vertical" onFinish={onFinish} requiredMark={false} size="large">
-            <Form.Item name="username" label="用户名" rules={[{ required: true, message: '请输入用户名' }]}>
-              <Input prefix={<UserOutlined />} placeholder="用户名" autoComplete="username" autoFocus />
+            <Form.Item
+              name="username"
+              label={t('用户名')}
+              rules={[{ required: true, message: t('请输入用户名') }]}
+            >
+              <Input
+                prefix={<UserOutlined />}
+                placeholder={t('用户名')}
+                autoComplete="username"
+                autoFocus
+              />
             </Form.Item>
-            <Form.Item name="password" label="密码" rules={[{ required: true, message: '请输入密码' }]}>
+            <Form.Item
+              name="password"
+              label={t('密码')}
+              rules={[{ required: true, message: t('请输入密码') }]}
+            >
               <Input.Password
                 prefix={<LockOutlined />}
-                placeholder="密码"
+                placeholder={t('密码')}
                 autoComplete="current-password"
               />
             </Form.Item>
@@ -219,7 +237,7 @@ export default function Login() {
               loading={loading}
               style={{ marginTop: 8, boxShadow: 'none' }}
             >
-              登录
+              {t('登录')}
             </Button>
           </Form>
         </div>

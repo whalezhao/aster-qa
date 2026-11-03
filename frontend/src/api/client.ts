@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { t } from '../i18n';
 import type { ApiErrorBody } from './types';
 
 export const TOKEN_KEY = 'qa_token';
@@ -39,14 +40,14 @@ export function apiError(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const body = error.response?.data as ApiErrorBody | undefined;
     const detail = body?.detail;
-    if (typeof detail === 'string') return detail;
+    if (typeof detail === 'string') return t(detail);
     if (Array.isArray(detail)) {
       return detail
         .map((item) => {
           const field = item.loc.filter((p) => p !== 'body').join('.');
           return field ? `${field}: ${item.msg}` : item.msg;
         })
-        .join('；');
+        .join(t('；'));
     }
     return error.message;
   }

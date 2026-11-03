@@ -6,6 +6,7 @@ import { ProCard, ProDescriptions } from '@ant-design/pro-components';
 import { ReloadOutlined, StopOutlined } from '@ant-design/icons';
 import { cancelRun, getRun, getRunCases, isRunActive, reparseRun, rerunFailedRun } from '../api/runs';
 import { apiError } from '../api/client';
+import { t } from '../i18n';
 import { fmtDateTime, fmtDuration, fmtPercent, fmtTokens, runStatusView } from '../lib/format';
 import { PAGE, byNumber, byRank, byText } from '../lib/table';
 import type { RunCase } from '../api/types';
@@ -38,7 +39,9 @@ export default function RunDetail() {
   const cancelMutation = useMutation({
     mutationFn: () => cancelRun(rid),
     onSuccess: (res) => {
-      message.success(res.status === 'cancelling' ? '正在取消，worker 会尽快终止进程' : '已取消');
+      message.success(
+        res.status === 'cancelling' ? t('正在取消，worker 会尽快终止进程') : t('已取消'),
+      );
       queryClient.invalidateQueries({ queryKey: ['run', rid] });
     },
     onError: (e) => message.error(apiError(e)),
@@ -47,7 +50,7 @@ export default function RunDetail() {
   const reparseMutation = useMutation({
     mutationFn: () => reparseRun(rid),
     onSuccess: (res) => {
-      message.success(`已重新解析，重建 ${res.cases} 条用例结果`);
+      message.success(t('已重新解析，重建 {n} 条用例结果', { n: res.cases }));
       queryClient.invalidateQueries({ queryKey: ['run', rid] });
       queryClient.invalidateQueries({ queryKey: ['run-cases', rid] });
     },
@@ -57,7 +60,7 @@ export default function RunDetail() {
   const rerunFailed = useMutation({
     mutationFn: () => rerunFailedRun(rid),
     onSuccess: (res) => {
-      message.success(`已提交重跑 ${res.case_count} 个失败用例`);
+      message.success(t('已提交重跑 {n} 个失败用例', { n: res.case_count }));
       navigate(`/executions/${res.batch_id}`);
     },
     onError: (e) => message.error(apiError(e)),
@@ -79,16 +82,16 @@ export default function RunDetail() {
       style={{ margin: 20 }}
       title={
         <Space>
-          <span>执行详情</span>
+          <span>{t('执行详情')}</span>
           <Tag color={view.color}>{view.label}</Tag>
-          {run.midscene_status && <Tag>执行器: {run.midscene_status}</Tag>}
+          {run.midscene_status && <Tag>{t('执行器: {status}', { status: run.midscene_status })}</Tag>}
         </Space>
       }
       extra={
         <Space>
           {!active && (run.failed ?? 0) > 0 && (
             <Button loading={rerunFailed.isPending} onClick={() => rerunFailed.mutate()}>
-              仅重跑失败用例
+              {t('仅重跑失败用例')}
             </Button>
           )}
           <Button
@@ -96,7 +99,7 @@ export default function RunDetail() {
             loading={reparseMutation.isPending}
             onClick={() => reparseMutation.mutate()}
           >
-            重新解析
+            {t('重新解析')}
           </Button>
           <Button
             danger
@@ -105,22 +108,28 @@ export default function RunDetail() {
             loading={cancelMutation.isPending}
             onClick={() => cancelMutation.mutate()}
           >
-            取消执行
+            {t('取消执行')}
           </Button>
-          <Link to="/runs">返回列表</Link>
+          <Link to="/runs">{t('返回列表')}</Link>
         </Space>
       }
     >
       {run.error_message && (
-        <Alert type="error" showIcon message="执行报错" description={run.error_message} style={{ marginBottom: 16 }} />
+        <Alert type="error" showIcon message={t('执行报错')} description={run.error_message} style={{ marginBottom: 16 }} />
       )}
 
       {active && (
-        <ProCard size="small" style={{ marginBottom: 16 }} title="执行进度（每 3 秒自动刷新）">
+        <ProCard size="small" style={{ marginBottom: 16 }} title={t('执行进度（每 3 秒自动刷新）')}>
           <Progress
             percent={run.progress.percent}
             status="active"
-            format={(p) => `${run.progress.done}/${run.progress.total}（${p}%）`}
+            format={(p) =>
+              t('{done}/{total}（{percent}%）', {
+                done: run.progress.done,
+                total: run.progress.total,
+                percent: p ?? 0,
+              })
+            }
           />
         </ProCard>
       )}
@@ -129,46 +138,46 @@ export default function RunDetail() {
       <Row gutter={16}>
         <Col span={5}>
           <Statistic
-            title="通过 / 总数"
+            title={t('通过 / 总数')}
             value={run.total === null ? '-' : `${run.passed ?? 0}/${run.total}`}
           />
         </Col>
         <Col span={4}>
           <Statistic
-            title="失败"
+            title={t('失败')}
             value={run.failed ?? 0}
             valueStyle={{ color: (run.failed ?? 0) > 0 ? '#faad14' : undefined }}
           />
         </Col>
         <Col span={5}>
-          <Statistic title="最终通过率" value={fmtPercent(run.final_pass_rate)} />
+          <Statistic title={t('最终通过率')} value={fmtPercent(run.final_pass_rate)} />
         </Col>
         <Col span={5}>
-          <Statistic title="首次通过率" value={fmtPercent(run.first_pass_rate)} />
+          <Statistic title={t('首次通过率')} value={fmtPercent(run.first_pass_rate)} />
         </Col>
         <Col span={5}>
-          <Statistic title="耗时" value={fmtDuration(run.duration_ms)} />
+          <Statistic title={t('耗时')} value={fmtDuration(run.duration_ms)} />
         </Col>
       </Row>
 
       <ProDescriptions column={3} size="small" style={{ marginTop: 20 }}>
-        <ProDescriptions.Item label="重试后通过">{run.passed_after_retry ?? 0}</ProDescriptions.Item>
-        <ProDescriptions.Item label="AI 调用">{run.ai_calls} 次</ProDescriptions.Item>
-        <ProDescriptions.Item label="Token 用量">{fmtTokens(run.ai_total_tokens)}</ProDescriptions.Item>
-        <ProDescriptions.Item label="AI 耗时">{fmtDuration(run.ai_cost_ms)}</ProDescriptions.Item>
-        <ProDescriptions.Item label="模型">{run.model_name || '-'}</ProDescriptions.Item>
-        <ProDescriptions.Item label="环境">
+        <ProDescriptions.Item label={t('重试后通过')}>{run.passed_after_retry ?? 0}</ProDescriptions.Item>
+        <ProDescriptions.Item label={t('AI 调用')}>{t('{n} 次', { n: run.ai_calls })}</ProDescriptions.Item>
+        <ProDescriptions.Item label={t('Token 用量')}>{fmtTokens(run.ai_total_tokens)}</ProDescriptions.Item>
+        <ProDescriptions.Item label={t('AI 耗时')}>{fmtDuration(run.ai_cost_ms)}</ProDescriptions.Item>
+        <ProDescriptions.Item label={t('模型')}>{run.model_name || '-'}</ProDescriptions.Item>
+        <ProDescriptions.Item label={t('环境')}>
           {run.environment_name
             ? `${run.environment_name}${run.environment_base_url ? ` · ${run.environment_base_url}` : ''}`
-            : '默认'}
+            : t('默认')}
         </ProDescriptions.Item>
-        <ProDescriptions.Item label="退出码">{run.exit_code ?? '-'}</ProDescriptions.Item>
+        <ProDescriptions.Item label={t('退出码')}>{run.exit_code ?? '-'}</ProDescriptions.Item>
         <ProDescriptions.Item label="Run ID">{run.id}</ProDescriptions.Item>
-        <ProDescriptions.Item label="任务">
+        <ProDescriptions.Item label={t('任务')}>
           {run.task_id ? <Link to={`/tasks/${run.task_id}`}>{run.task_id.slice(0, 8)}</Link> : '-'}
         </ProDescriptions.Item>
-        <ProDescriptions.Item label="开始">{fmtDateTime(run.started_at)}</ProDescriptions.Item>
-        <ProDescriptions.Item label="结束">{fmtDateTime(run.ended_at)}</ProDescriptions.Item>
+        <ProDescriptions.Item label={t('开始')}>{fmtDateTime(run.started_at)}</ProDescriptions.Item>
+        <ProDescriptions.Item label={t('结束')}>{fmtDateTime(run.ended_at)}</ProDescriptions.Item>
       </ProDescriptions>
 
       <Tabs
@@ -176,10 +185,10 @@ export default function RunDetail() {
         onChange={(key) => setActiveTab(key === 'report' ? 'report' : 'cases')}
         style={{ marginTop: 16 }}
         items={[
-          { key: 'cases', label: '用例结果', children: <CasesTab rid={rid} /> },
+          { key: 'cases', label: t('用例结果'), children: <CasesTab rid={rid} /> },
           {
             key: 'report',
-            label: '报告',
+            label: t('报告'),
             children: <RunReportView runId={rid} available={run.report_available} />,
           },
         ]}
@@ -203,7 +212,7 @@ function CasesTab({ rid }: { rid: string }) {
         loading={isLoading}
         dataSource={cases}
         pagination={PAGE}
-        locale={{ emptyText: '暂无用例结果' }}
+        locale={{ emptyText: t('暂无用例结果') }}
         columns={[
           {
             title: '#',
@@ -211,9 +220,9 @@ function CasesTab({ rid }: { rid: string }) {
             width: 60,
             sorter: byNumber<RunCase>((r) => r.case_index),
           },
-          { title: '用例', dataIndex: 'name', sorter: byText<RunCase>((r) => r.name) },
+          { title: t('用例'), dataIndex: 'name', sorter: byText<RunCase>((r) => r.name) },
           {
-            title: '结果',
+            title: t('结果'),
             dataIndex: 'status',
             width: 110,
             sorter: byRank<RunCase>((r) => r.status, ['passed', 'failed']),
@@ -222,20 +231,20 @@ function CasesTab({ rid }: { rid: string }) {
             ),
           },
           {
-            title: '尝试次数',
+            title: t('尝试次数'),
             dataIndex: 'attempt_count',
             width: 100,
             sorter: byNumber<RunCase>((r) => r.attempt_count),
           },
           {
-            title: '重试后通过',
+            title: t('重试后通过'),
             dataIndex: 'passed_after_retry',
             width: 110,
             sorter: byNumber<RunCase>((r) => (r.passed_after_retry ? 1 : 0)),
-            render: (v: boolean) => (v ? <Tag color="warning">是</Tag> : '否'),
+            render: (v: boolean) => (v ? <Tag color="warning">{t('是')}</Tag> : t('否')),
           },
           {
-            title: '操作',
+            title: t('操作'),
             width: 110,
             render: (_value, row) =>
               row.status !== 'success' && row.test_case_id ? (
@@ -243,7 +252,7 @@ function CasesTab({ rid }: { rid: string }) {
                   size="small"
                   onClick={() => setFixing({ id: row.test_case_id!, name: row.name })}
                 >
-                  AI 修复
+                  {t('AI 修复')}
                 </Button>
               ) : (
                 '-'

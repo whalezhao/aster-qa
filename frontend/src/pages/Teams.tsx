@@ -7,6 +7,7 @@ import { ModalForm, PageContainer, ProFormText, ProFormTextArea } from '@ant-des
 import { createTeam, deleteTeam, getTeams, updateTeam, type TeamInput } from '../api/teams';
 import { apiError } from '../api/client';
 import { PAGE, byText } from '../lib/table';
+import { t } from '../i18n';
 import type { Team } from '../api/types';
 import QaTable from '../components/QaTable';
 
@@ -24,7 +25,7 @@ export default function Teams() {
     mutationFn: (values: TeamInput) =>
       editing ? updateTeam(editing.id, values) : createTeam({ ...values, name: values.name! }),
     onSuccess: () => {
-      message.success(editing ? '团队已更新' : '团队已创建');
+      message.success(editing ? t('团队已更新') : t('团队已创建'));
       setOpen(false);
       invalidate();
     },
@@ -34,7 +35,7 @@ export default function Teams() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteTeam(id),
     onSuccess: () => {
-      message.success('团队已删除');
+      message.success(t('团队已删除'));
       invalidate();
     },
     onError: (e) => message.error(apiError(e)),
@@ -54,11 +55,11 @@ export default function Teams() {
     <PageContainer
       ghost
       header={{
-        title: '团队',
-        subTitle: '删除团队需要拥有者（owner）权限',
+        title: t('团队'),
+        subTitle: t('删除团队需要拥有者（owner）权限'),
         extra: [
           <Button key="create" type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            新建团队
+            {t('新建团队')}
           </Button>,
         ],
       }}
@@ -70,33 +71,33 @@ export default function Teams() {
         pagination={PAGE}
         columns={[
           {
-            title: '名称',
+            title: t('名称'),
             dataIndex: 'name',
             sorter: byText<Team>((r) => r.name),
             render: (_, record) => <Link to={`/teams/${record.id}`}>{record.name}</Link>,
           },
           {
-            title: '描述',
+            title: t('描述'),
             dataIndex: 'description',
             sorter: byText<Team>((r) => r.description),
             render: (_, record) =>
               record.description || <Typography.Text type="secondary">-</Typography.Text>,
           },
           {
-            title: '操作',
+            title: t('操作'),
             width: 160,
             render: (_, record) => (
               <Space>
                 <Button size="small" onClick={() => openEdit(record)}>
-                  编辑
+                  {t('编辑')}
                 </Button>
                 <Popconfirm
-                  title="确定删除该团队？"
-                  description="删除后不可恢复。"
+                  title={t('确定删除该团队？')}
+                  description={t('删除后不可恢复。')}
                   onConfirm={() => deleteMutation.mutate(record.id)}
                 >
                   <Button size="small" danger>
-                    删除
+                    {t('删除')}
                   </Button>
                 </Popconfirm>
               </Space>
@@ -106,7 +107,7 @@ export default function Teams() {
       />
 
       <ModalForm<TeamInput>
-        title={editing ? '编辑团队' : '新建团队'}
+        title={editing ? t('编辑团队') : t('新建团队')}
         open={open}
         onOpenChange={setOpen}
         modalProps={{ destroyOnHidden: true }}
@@ -120,10 +121,10 @@ export default function Teams() {
       >
         <ProFormText
           name="name"
-          label="名称"
-          rules={[{ required: true, message: '请输入团队名称' }]}
+          label={t('名称')}
+          rules={[{ required: true, message: t('请输入团队名称') }]}
         />
-        <ProFormTextArea name="description" label="描述" fieldProps={{ rows: 3 }} />
+        <ProFormTextArea name="description" label={t('描述')} fieldProps={{ rows: 3 }} />
       </ModalForm>
     </PageContainer>
   );

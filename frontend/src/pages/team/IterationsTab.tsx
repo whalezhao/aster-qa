@@ -6,6 +6,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { getIterationsByTeam, createIteration, deleteIteration, updateIteration } from '../../api/iterations';
 import { apiError } from '../../api/client';
 import { PAGE, byDate, byRank, byText } from '../../lib/table';
+import { t } from '../../i18n';
 import type {
   Iteration,
   IterationStatus } from '../../api/types';
@@ -38,7 +39,7 @@ export default function IterationsTab({ tid }: { tid: string }) {
       return editing ? updateIteration(editing.id, payload) : createIteration(tid, payload);
     },
     onSuccess: () => {
-      message.success(editing ? '迭代已更新' : '迭代已创建');
+      message.success(editing ? t('迭代已更新') : t('迭代已创建'));
       setOpen(false);
       invalidate();
     },
@@ -48,7 +49,7 @@ export default function IterationsTab({ tid }: { tid: string }) {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteIteration(id),
     onSuccess: () => {
-      message.success('迭代已删除');
+      message.success(t('迭代已删除'));
       invalidate();
     },
     onError: (e) => message.error(apiError(e)),
@@ -67,7 +68,7 @@ export default function IterationsTab({ tid }: { tid: string }) {
           setOpen(true);
         }}
       >
-        新建迭代
+        {t('新建迭代')}
       </Button>
       <QaTable<Iteration>
         rowKey="id"
@@ -76,36 +77,36 @@ export default function IterationsTab({ tid }: { tid: string }) {
         pagination={PAGE}
         columns={[
           {
-            title: '名称',
+            title: t('名称'),
             dataIndex: 'name',
             sorter: byText<Iteration>((r) => r.name),
           },
           {
-            title: '版本',
+            title: t('版本'),
             dataIndex: 'version',
             sorter: byText<Iteration>((r) => r.version),
             render: (v: string | null) => v || '-',
           },
           {
-            title: '状态',
+            title: t('状态'),
             dataIndex: 'status',
             sorter: byRank<Iteration>((r) => r.status, ['planned', 'active', 'released', 'archived']),
-            render: (s: IterationStatus) => <Tag color={statusColors[s]}>{statusLabels[s]}</Tag>,
+            render: (s: IterationStatus) => <Tag color={statusColors[s]}>{t(statusLabels[s])}</Tag>,
           },
           {
-            title: '开始',
+            title: t('开始'),
             dataIndex: 'start_date',
             sorter: byDate<Iteration>((r) => r.start_date),
             render: (v: string | null) => v || '-',
           },
           {
-            title: '结束',
+            title: t('结束'),
             dataIndex: 'end_date',
             sorter: byDate<Iteration>((r) => r.end_date),
             render: (v: string | null) => v || '-',
           },
           {
-            title: '操作',
+            title: t('操作'),
             width: 160,
             render: (_, r) => (
               <Space>
@@ -123,11 +124,11 @@ export default function IterationsTab({ tid }: { tid: string }) {
                     setOpen(true);
                   }}
                 >
-                  编辑
+                  {t('编辑')}
                 </Button>
-                <Popconfirm title="确定删除该迭代？" onConfirm={() => deleteMutation.mutate(r.id)}>
+                <Popconfirm title={t('确定删除该迭代？')} onConfirm={() => deleteMutation.mutate(r.id)}>
                   <Button size="small" danger>
-                    删除
+                    {t('删除')}
                   </Button>
                 </Popconfirm>
               </Space>
@@ -137,7 +138,7 @@ export default function IterationsTab({ tid }: { tid: string }) {
       />
 
       <Modal
-        title={editing ? '编辑迭代' : '新建迭代'}
+        title={editing ? t('编辑迭代') : t('新建迭代')}
         open={open}
         onCancel={() => setOpen(false)}
         onOk={() => form.submit()}
@@ -145,24 +146,24 @@ export default function IterationsTab({ tid }: { tid: string }) {
         forceRender
       >
         <Form form={form} layout="vertical" onFinish={(v) => saveMutation.mutate(v)} preserve={false}>
-          <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入迭代名称' }]}>
+          <Form.Item name="name" label={t('名称')} rules={[{ required: true, message: t('请输入迭代名称') }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="version" label="版本">
-            <Input placeholder="如 v1.2.0" />
+          <Form.Item name="version" label={t('版本')}>
+            <Input placeholder={t('如 v1.2.0')} />
           </Form.Item>
-          <Form.Item name="status" label="状态" rules={[{ required: true }]}>
+          <Form.Item name="status" label={t('状态')} rules={[{ required: true }]}>
             <Select
               options={(Object.keys(statusLabels) as IterationStatus[]).map((s) => ({
                 value: s,
-                label: statusLabels[s],
+                label: t(statusLabels[s]),
               }))}
             />
           </Form.Item>
-          <Form.Item name="start_date" label="开始日期">
+          <Form.Item name="start_date" label={t('开始日期')}>
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item name="end_date" label="结束日期">
+          <Form.Item name="end_date" label={t('结束日期')}>
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
         </Form>

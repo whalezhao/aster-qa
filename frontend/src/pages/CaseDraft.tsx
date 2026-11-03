@@ -23,6 +23,7 @@ import EnvVariableHint from '../components/EnvVariableHint';
 import AiMascot from '../components/AiMascot';
 import UserAvatar from '../components/UserAvatar';
 import { clearDraft, loadDraft, saveDraft } from '../lib/draft';
+import { t } from '../i18n';
 
 /** 空状态给的起手示例 —— 比一个光标干等着好，顺便示范「把测试数据一起给它」。 */
 const EXAMPLES = [
@@ -109,11 +110,11 @@ export default function CaseDraft() {
     // yaml 的三态：null=这轮没给 YAML，右侧别动；""=模型明确要清空；其他=替换
     if (res.yaml === '') {
       setYaml(null);
-      message.info('已按模型的要求清空右侧 YAML');
+      message.info(t('已按模型的要求清空右侧 YAML'));
     } else if (res.yaml) {
       setYaml(res.yaml);
       if (!res.yaml_ok && res.yaml_errors.length) {
-        message.warning('模型给的 YAML 没通过校验，请让它修正');
+        message.warning(t('模型给的 YAML 没通过校验，请让它修正'));
       }
     }
   }
@@ -126,7 +127,7 @@ export default function CaseDraft() {
     onSuccess: (saved) => {
       // 草稿已经变成正式用例，留着反而下次进来会看到过期内容
       clearDraft(draftKey);
-      message.success(editing ? '用例已更新' : '用例已创建');
+      message.success(editing ? t('用例已更新') : t('用例已创建'));
       navigate(`/cases/${saved.id}`);
     },
     onError: (e) => message.error(apiError(e)),
@@ -175,22 +176,22 @@ export default function CaseDraft() {
 
   return (
     <div style={{ padding: 20 }}>
-      <ModelConfigNotice projectId={feature?.project_id} action="用 AI 生成用例" />
+      <ModelConfigNotice projectId={feature?.project_id} action={t('用 AI 生成用例')} />
 
       <ProCard
         title={
           <Space>
-            <span>{editing ? 'AI 修改用例' : '新建用例'}</span>
+            <span>{editing ? t('AI 修改用例') : t('新建用例')}</span>
             <Typography.Text type="secondary" style={{ fontWeight: 400 }}>
-              {feature?.name ? `功能：${feature.name}` : ''}
+              {feature?.name ? t('功能：{name}', { name: feature.name }) : ''}
             </Typography.Text>
           </Space>
         }
         extra={
           editing ? (
-            <Link to={`/cases/${cid}`}>返回用例</Link>
+            <Link to={`/cases/${cid}`}>{t('返回用例')}</Link>
           ) : (
-            <Link to={`/features/${fid}`}>返回功能</Link>
+            <Link to={`/features/${fid}`}>{t('返回功能')}</Link>
           )
         }
         bodyStyle={{ padding: 12 }}
@@ -221,19 +222,19 @@ export default function CaseDraft() {
                   >
                     <AiMascot size={72} state={busy ? 'thinking' : 'idle'} />
                     <Typography.Title level={5} style={{ margin: '8px 0 0' }}>
-                      告诉我你想测什么
+                      {t('告诉我你想测什么')}
                     </Typography.Title>
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      模型会把它写成可执行的用例，不需要懂 YAML，也不需要写选择器
+                      {t('模型会把它写成可执行的用例，不需要懂 YAML，也不需要写选择器')}
                     </Typography.Text>
                   </div>
                   <Prompts
                     vertical
-                    title="试试这些"
+                    title={t('试试这些')}
                     style={{ marginTop: 16 }}
                     items={EXAMPLES.map((example, index) => ({
                       key: String(index),
-                      label: example,
+                      label: t(example),
                     }))}
                     onItemClick={({ data }) => send(String(data.label ?? ''))}
                   />
@@ -261,7 +262,7 @@ export default function CaseDraft() {
                           ),
                       })),
                     ...(busy && !messages[messages.length - 1]?.content
-                      ? [{ key: 'typing', role: 'ai', content: '正在生成…', loading: true }]
+                      ? [{ key: 'typing', role: 'ai', content: t('正在生成…'), loading: true }]
                       : []),
                   ]}
                   roles={{
@@ -290,19 +291,19 @@ export default function CaseDraft() {
                 onChange={setInput}
                 loading={busy}
                 onSubmit={(text) => send(text)}
-                placeholder="描述要测什么，或要求修改（Enter 发送，Shift+Enter 换行）"
+                placeholder={t('描述要测什么，或要求修改（Enter 发送，Shift+Enter 换行）')}
                 style={{ marginTop: 12 }}
               />
 
               <div style={{ marginTop: 4, textAlign: 'right' }}>
-                <Tooltip title="只清空聊天记录，右侧 YAML 保留">
+                <Tooltip title={t('只清空聊天记录，右侧 YAML 保留')}>
                   <Button
                     type="link"
                     size="small"
                     disabled={busy || messages.length === 0}
                     onClick={() => setMessages([])}
                   >
-                    清空对话
+                    {t('清空对话')}
                   </Button>
                 </Tooltip>
               </div>
@@ -333,10 +334,10 @@ export default function CaseDraft() {
                   color: token.colorTextSecondary,
                 }}
               >
-                <span>YAML 预览</span>
+                <span>{t('YAML 预览')}</span>
                 <span>
-                  {yaml ? `${yamlLines.length} 行` : '还没有内容'}
-                  {validation?.ok ? ` · 解析出 ${validation.case_count} 个用例` : ''}
+                  {yaml ? t('{n} 行', { n: yamlLines.length }) : t('还没有内容')}
+                  {validation?.ok ? t(' · 解析出 {n} 个用例', { n: validation.case_count }) : ''}
                 </span>
               </div>
 
@@ -382,7 +383,7 @@ export default function CaseDraft() {
                   >
                     <AiMascot size={48} state={busy ? 'thinking' : 'idle'} />
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      生成的 YAML 会出现在这里
+                      {t('生成的 YAML 会出现在这里')}
                     </Typography.Text>
                   </div>
                 )}
@@ -394,9 +395,9 @@ export default function CaseDraft() {
             {yaml && (
               <>
                 <div style={{ marginTop: 8, textAlign: 'right' }}>
-                  <Tooltip title="只清空右侧 YAML，聊天记录保留">
+                  <Tooltip title={t('只清空右侧 YAML，聊天记录保留')}>
                     <Button type="link" size="small" danger onClick={() => setYaml(null)}>
-                      清空 YAML
+                      {t('清空 YAML')}
                     </Button>
                   </Tooltip>
                 </div>
@@ -405,14 +406,14 @@ export default function CaseDraft() {
                     type="success"
                     showIcon
                     style={{ marginTop: 8 }}
-                    message={`YAML 校验通过，解析出 ${validation.case_count} 个用例`}
+                    message={t('YAML 校验通过，解析出 {n} 个用例', { n: validation.case_count })}
                   />
                 ) : (
                   <Alert
                     type="error"
                     showIcon
                     style={{ marginTop: 8 }}
-                    message="YAML 校验不通过"
+                    message={t('YAML 校验不通过')}
                     description={
                       <ul style={{ margin: 0, paddingLeft: 18 }}>
                         {(validation?.errors ?? []).map((e, i) => (
@@ -426,13 +427,13 @@ export default function CaseDraft() {
                 <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)}>
                   <Form.Item
                     name="name"
-                    label="用例名称"
+                    label={t('用例名称')}
                     style={{ marginTop: 12, marginBottom: 8 }}
-                    rules={[{ required: true, message: '请输入用例名称' }]}
+                    rules={[{ required: true, message: t('请输入用例名称') }]}
                   >
-                    <Input placeholder="用例名称" />
+                    <Input placeholder={t('用例名称')} />
                   </Form.Item>
-                  <Tooltip title={canSave ? '' : '需要 YAML 通过校验后才能保存'}>
+                  <Tooltip title={canSave ? '' : t('需要 YAML 通过校验后才能保存')}>
                     <Button
                       type="primary"
                       icon={<SaveOutlined />}
@@ -440,15 +441,14 @@ export default function CaseDraft() {
                       loading={save.isPending}
                       disabled={!canSave}
                     >
-                      {editing ? '保存修改' : '创建用例'}
+                      {editing ? t('保存修改') : t('创建用例')}
                     </Button>
                   </Tooltip>
                   <Typography.Paragraph
                     type="secondary"
                     style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}
                   >
-                    创建后可以真跑一遍验证效果。AI 靠视觉定位元素，描述越具体越稳
-                    —— 写「页面中央蓝色的登录按钮」，别写「登录按钮」。
+                    {t('创建后可以真跑一遍验证效果。AI 靠视觉定位元素，描述越具体越稳 —— 写「页面中央蓝色的登录按钮」，别写「登录按钮」。')}
                   </Typography.Paragraph>
                 </Form>
               </>

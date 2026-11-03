@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { Avatar } from 'antd';
+import { t } from '../i18n';
 
 /**
  * 内置卡通扁平头像。
@@ -64,7 +65,7 @@ function hairShape(preset: AvatarPreset) {
 /** 一个头像就是一张 64×64 的小图，size 只是缩放。 */
 export function AvatarFigure({ preset, size = 32 }: { preset: AvatarPreset; size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label={`头像 ${preset.key}`}>
+    <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label={t('头像 {name}', { name: preset.key })}>
       <rect width="64" height="64" rx="14" fill={preset.bg} />
       <circle cx="32" cy="33" r="15" fill={preset.skin} />
       {hairShape(preset)}

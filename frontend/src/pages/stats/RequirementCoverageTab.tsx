@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getRequirementCoverage, type CoverageParams } from '../../api/coverage';
 import { fmtDateTime, fmtPercent } from '../../lib/format';
+import { t } from '../../i18n';
 import type { CoverageItem } from '../../api/types';
 
 const STATUS: Record<CoverageItem['status'], { label: string; color: string }> = {
@@ -27,9 +28,9 @@ export default function RequirementCoverageTab({ params }: { params: CoveragePar
         <Empty
           description={
             <Space direction="vertical" size={0}>
-              <Typography.Text>还没有可统计的需求编号</Typography.Text>
+              <Typography.Text>{t('还没有可统计的需求编号')}</Typography.Text>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                到「项目 → 功能」里给功能填上需求编号（禅道/Jira），这里就会生成覆盖矩阵。
+                {t('到「项目 → 功能」里给功能填上需求编号（禅道/Jira），这里就会生成覆盖矩阵。')}
               </Typography.Text>
             </Space>
           }
@@ -43,11 +44,11 @@ export default function RequirementCoverageTab({ params }: { params: CoveragePar
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <Row gutter={12}>
         {[
-          ['需求总数', summary.total ?? 0, undefined],
-          ['已覆盖', summary.covered ?? 0, 'green'],
-          ['有失败', summary.failed ?? 0, 'red'],
-          ['未执行', summary.not_run ?? 0, 'default'],
-          ['无用例', summary.gap ?? 0, 'purple'],
+          [t('需求总数'), summary.total ?? 0, undefined],
+          [t('已覆盖'), summary.covered ?? 0, 'green'],
+          [t('有失败'), summary.failed ?? 0, 'red'],
+          [t('未执行'), summary.not_run ?? 0, 'default'],
+          [t('无用例'), summary.gap ?? 0, 'purple'],
         ].map(([title, value]) => (
           <Col span={4} key={String(title)}>
             <Card size="small">
@@ -57,7 +58,7 @@ export default function RequirementCoverageTab({ params }: { params: CoveragePar
         ))}
         <Col span={4}>
           <Card size="small">
-            <Statistic title="未填需求的功能" value={summary.unmapped_features ?? 0} />
+            <Statistic title={t('未填需求的功能')} value={summary.unmapped_features ?? 0} />
           </Card>
         </Col>
       </Row>
@@ -66,8 +67,8 @@ export default function RequirementCoverageTab({ params }: { params: CoveragePar
         <Alert
           type="warning"
           showIcon
-          message={`有 ${summary.failed} 个需求最近一次执行存在失败用例`}
-          description="这里只统计「最近一次有效结果」；模型/网络导致的运行失败会标为环境异常，不会算成产品失败。"
+          message={t('有 {n} 个需求最近一次执行存在失败用例', { n: summary.failed })}
+          description={t('这里只统计「最近一次有效结果」；模型/网络导致的运行失败会标为环境异常，不会算成产品失败。')}
         />
       )}
 
@@ -79,13 +80,13 @@ export default function RequirementCoverageTab({ params }: { params: CoveragePar
         pagination={{ pageSize: 20, hideOnSinglePage: true }}
         columns={[
           {
-            title: '需求',
+            title: t('需求'),
             dataIndex: 'requirement_id',
             width: 150,
             render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
           },
           {
-            title: '功能',
+            title: t('功能'),
             dataIndex: 'features',
             render: (features: string[], row) => (
               <Space wrap>
@@ -98,13 +99,13 @@ export default function RequirementCoverageTab({ params }: { params: CoveragePar
             ),
           },
           {
-            title: '项目',
+            title: t('项目'),
             dataIndex: 'projects',
-            render: (projects: string[]) => projects.join('、') || '-',
+            render: (projects: string[]) => projects.join(t('、')) || '-',
           },
-          { title: '用例', dataIndex: 'case_count', width: 70 },
+          { title: t('用例'), dataIndex: 'case_count', width: 70 },
           {
-            title: '覆盖',
+            title: t('覆盖'),
             dataIndex: 'coverage_rate',
             width: 160,
             render: (value: number, row) => (
@@ -116,21 +117,21 @@ export default function RequirementCoverageTab({ params }: { params: CoveragePar
             ),
           },
           {
-            title: '通过率',
+            title: t('通过率'),
             dataIndex: 'pass_rate',
             width: 90,
             render: (value: number | null) => (value == null ? '-' : fmtPercent(value * 100)),
           },
           {
-            title: '状态',
+            title: t('状态'),
             dataIndex: 'status',
             width: 100,
             render: (value: CoverageItem['status']) => (
-              <Tag color={STATUS[value].color}>{STATUS[value].label}</Tag>
+              <Tag color={STATUS[value].color}>{t(STATUS[value].label)}</Tag>
             ),
           },
           {
-            title: '最近执行',
+            title: t('最近执行'),
             dataIndex: 'last_run_at',
             width: 170,
             render: (value: string | null) => fmtDateTime(value),

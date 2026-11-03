@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { t } from '../i18n';
 
 export type LogoMood = 'idle' | 'happy' | 'alert' | 'thinking';
 
@@ -30,7 +31,7 @@ export default function Logo({
       className={`qa-logo qa-logo--${mood}`}
       style={{ width: size, height: size, ...style }}
       role="img"
-      aria-label={`Aster QA（${mood}）`}
+      aria-label={t('Aster QA（{mood}）', { mood })}
     >
       <svg viewBox="0 0 48 48" width="100%" height="100%">
         <circle className="qa-logo-halo" cx="24" cy="24" r="15" fill={c.accent} opacity="0.18" />

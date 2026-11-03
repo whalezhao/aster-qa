@@ -16,7 +16,8 @@ import { getAllTasks } from '../api/tasks';
 import { getTeams } from '../api/teams';
 import { useAuth } from '../auth/AuthContext';
 import AiMascot from '../components/AiMascot';
-import { BATCH_STATUS_COLORS, BATCH_STATUS_LABELS, fmtDateTime, fmtPercent } from '../lib/format';
+import { t } from '../i18n';
+import { BATCH_STATUS_COLORS, batchStatusLabel, fmtDateTime, fmtPercent } from '../lib/format';
 import { useActiveTeam } from '../team/TeamContext';
 
 export default function Dashboard() {
@@ -37,8 +38,8 @@ export default function Dashboard() {
     enabled: Boolean(teamId),
   });
 
-  const teamName = teams.find((t) => t.id === teamId)?.name ?? '未选择团队';
-  const running = tasks.filter((t) => t.status === 'queued' || t.status === 'running').length;
+  const teamName = teams.find((team) => team.id === teamId)?.name ?? t('未选择团队');
+  const running = tasks.filter((task) => task.status === 'queued' || task.status === 'running').length;
   const insufficient = overview ? !overview.sample_sufficient : false;
   const passRate = overview?.final_pass_rate ?? null;
 
@@ -59,41 +60,43 @@ export default function Dashboard() {
               variant="borderless"
               title={
                 <span style={{ fontSize: 26, fontWeight: 600 }}>
-                  欢迎回来，{user?.display_name || user?.username} 👋
+                  {t('欢迎回来，{name} 👋', { name: user?.display_name || user?.username || '' })}
                 </span>
               }
               description={
                 <Space size={8} wrap>
                   <Typography.Text type="secondary">
-                    Aster QA · 当前团队「{teamName}」
+                    {t('Aster QA · 当前团队「{team}」', { team: teamName })}
                   </Typography.Text>
-                  {running > 0 && <Tag color="processing">{running} 个任务正在跑</Tag>}
-                  {insufficient && <Tag color="warning">统计数据样本不足</Tag>}
+                  {running > 0 && (
+                    <Tag color="processing">{t('{n} 个任务正在跑', { n: running })}</Tag>
+                  )}
+                  {insufficient && <Tag color="warning">{t('统计数据样本不足')}</Tag>}
                 </Space>
               }
             />
             <div style={{ marginTop: 16 }}>
               <Prompts
                 wrap
-                title="从这里开始"
+                title={t('从这里开始')}
                 items={[
                   {
                     key: 'case',
                     icon: <RobotOutlined style={{ color: token.colorPrimary }} />,
-                    label: '用 AI 写一条用例',
-                    description: '描述要测什么，AI 生成 YAML',
+                    label: t('用 AI 写一条用例'),
+                    description: t('描述要测什么，AI 生成 YAML'),
                   },
                   {
                     key: 'task',
                     icon: <ThunderboltOutlined style={{ color: '#7C5CFF' }} />,
-                    label: '发起一次回归',
-                    description: '多选功能，勾选任务批量执行',
+                    label: t('发起一次回归'),
+                    description: t('多选功能，勾选任务批量执行'),
                   },
                   {
                     key: 'stats',
                     icon: <BarChartOutlined style={{ color: '#22B07D' }} />,
-                    label: '看测试统计',
-                    description: '通过率趋势、Flaky 榜单',
+                    label: t('看测试统计'),
+                    description: t('通过率趋势、Flaky 榜单'),
                   },
                 ]}
                 onItemClick={({ data }) => {
@@ -112,34 +115,37 @@ export default function Dashboard() {
         <Col xs={24} sm={12} lg={6}>
           <ProCard>
             <Statistic
-              title="用例通过率"
+              title={t('用例通过率')}
               value={fmtPercent(passRate)}
               valueStyle={insufficient ? { color: token.colorTextTertiary } : { color: passRate && passRate > 0.9 ? '#22B07D' : undefined }}
               prefix={<ExperimentOutlined />}
             />
             <Typography.Text type={insufficient ? 'warning' : 'secondary'}>
-              置信下界 {fmtPercent(overview?.pass_rate_lower_bound ?? null)} · 样本 {overview?.sample_size ?? 0}
+              {t('置信下界')} {fmtPercent(overview?.pass_rate_lower_bound ?? null)} · {t('样本')}{' '}
+              {overview?.sample_size ?? 0}
             </Typography.Text>
           </ProCard>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <ProCard>
-            <Statistic title="执行次数" value={overview?.runs ?? 0} prefix={<PlayCircleOutlined />} />
+            <Statistic title={t('执行次数')} value={overview?.runs ?? 0} prefix={<PlayCircleOutlined />} />
             <Typography.Text type="secondary">
-              覆盖 {overview?.sample_size ?? 0} 个用例
+              {t('覆盖 {n} 个用例', { n: overview?.sample_size ?? 0 })}
             </Typography.Text>
           </ProCard>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <ProCard>
-            <Statistic title="进行中的任务" value={running} prefix={<ThunderboltOutlined />} />
-            <Typography.Text type="secondary">共 {tasks.length} 个任务</Typography.Text>
+            <Statistic title={t('进行中的任务')} value={running} prefix={<ThunderboltOutlined />} />
+            <Typography.Text type="secondary">
+              {t('共 {n} 个任务', { n: tasks.length })}
+            </Typography.Text>
           </ProCard>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <ProCard>
             <Statistic
-              title="最近 5 次执行通过率"
+              title={t('最近 5 次执行通过率')}
               value={
                 recent?.items.length
                   ? fmtPercent(
@@ -172,20 +178,22 @@ export default function Dashboard() {
         <Alert
           type="warning"
           showIcon
-          message={`有 ${overview?.excluded_infra_runs} 次执行因模型额度/服务/网络问题被排除在通过率之外`}
-          description="这些执行里的用例失败不代表缺陷，不计入上面的通过率。"
+          message={t('有 {n} 次执行因模型额度/服务/网络问题被排除在通过率之外', {
+            n: overview?.excluded_infra_runs ?? 0,
+          })}
+          description={t('这些执行里的用例失败不代表缺陷，不计入上面的通过率。')}
         />
       )}
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={14}>
           <ProCard
-            title="最近执行"
-            extra={<Link to="/executions">全部</Link>}
+            title={t('最近执行')}
+            extra={<Link to="/executions">{t('全部')}</Link>}
             bodyStyle={{ paddingTop: 8, paddingBottom: 8 }}
           >
             {(recent?.items ?? []).length === 0 ? (
-              <Typography.Text type="secondary">这个团队还没有执行记录。</Typography.Text>
+              <Typography.Text type="secondary">{t('这个团队还没有执行记录。')}</Typography.Text>
             ) : (
               <Space direction="vertical" style={{ width: '100%' }} size={4}>
                 {(recent?.items ?? []).map((batch) => (
@@ -196,7 +204,7 @@ export default function Dashboard() {
                   >
                     <Space>
                       <Tag color={BATCH_STATUS_COLORS[batch.status] ?? 'default'}>
-                        {BATCH_STATUS_LABELS[batch.status] ?? batch.status}
+                        {batchStatusLabel(batch.status)}
                       </Tag>
                       <span>{batch.name}</span>
                     </Space>
@@ -215,15 +223,21 @@ export default function Dashboard() {
           </ProCard>
         </Col>
         <Col xs={24} lg={10}>
-          <ProCard title="读数的正确姿势">
+          <ProCard title={t('读数的正确姿势')}>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              用例由 AI 驱动执行，<strong>同一个用例时过时不过属于常态，单次失败不等价于缺陷</strong>。
+              {t('用例由 AI 驱动执行，')}
+              <strong>{t('同一个用例时过时不过属于常态，单次失败不等价于缺陷')}</strong>
+              {t('。')}
             </Typography.Paragraph>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-              通过率要同时看首轮通过率与 Wilson 置信下界，并关注统计页的 Flaky 榜单。
+              {t('通过率要同时看首轮通过率与 Wilson 置信下界，并关注统计页的 Flaky 榜单。')}
             </Typography.Paragraph>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              想看明细去 <Link to="/stats">统计</Link>，或 <Link to="/executions">执行记录</Link> 看每一份报告。
+              {t('想看明细去 ')}
+              <Link to="/stats">{t('统计')}</Link>
+              {t('，或 ')}
+              <Link to="/executions">{t('执行记录')}</Link>
+              {t(' 看每一份报告。')}
             </Typography.Paragraph>
           </ProCard>
         </Col>

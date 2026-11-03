@@ -48,8 +48,9 @@ import {
   fmtPercent,
   fmtTokens,
   TASK_STATUS_COLORS,
-  TASK_STATUS_LABELS,
+  taskStatusLabel,
 } from '../lib/format';
+import { t } from '../i18n';
 import { PAGE, byDate, byNumber, byRank, byText } from '../lib/table';
 import { useTheme } from '../theme/ThemeContext';
 import type { StatsFlaky, StatsRegressionRow } from '../api/types';
@@ -133,7 +134,7 @@ export default function Stats() {
   };
 
   return (
-    <ProCard title="统计">
+    <ProCard title={t('统计')}>
       <Space wrap style={{ marginBottom: 16 }} size={12}>
         <Segmented
           value={dimension}
@@ -141,14 +142,14 @@ export default function Stats() {
             patch({ dimension: value as string, project_id: undefined })
           }
           options={[
-            { label: '团队维度', value: 'team' },
-            { label: '项目维度', value: 'project' },
+            { label: t('团队维度'), value: 'team' },
+            { label: t('项目维度'), value: 'project' },
           ]}
         />
         {dimension === 'project' && (
           <Select
             style={{ minWidth: 220 }}
-            placeholder="选择项目"
+            placeholder={t('选择项目')}
             value={projectId}
             onChange={(value) => patch({ project_id: value })}
             options={projects.map((p) => ({ value: p.id, label: p.name }))}
@@ -157,7 +158,7 @@ export default function Stats() {
         <Select
           allowClear
           style={{ minWidth: 180 }}
-          placeholder="全部迭代"
+          placeholder={t('全部迭代')}
           value={iterationId}
           onChange={(value) => patch({ iteration_id: value })}
           options={iterations.map((i) => ({ value: i.id, label: i.name }))}
@@ -175,7 +176,7 @@ export default function Stats() {
               patch({ preset: value as string, from: undefined, to: undefined });
             }
           }}
-          options={PRESET_OPTIONS}
+          options={PRESET_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
         />
         {preset === 'custom' && (
           <RangePicker
@@ -192,7 +193,7 @@ export default function Stats() {
           />
         )}
         <Button icon={<ReloadOutlined />} loading={refreshing} onClick={refresh}>
-          刷新
+          {t('刷新')}
         </Button>
       </Space>
 
@@ -223,9 +224,9 @@ function TabsBlock({
           value={tab}
           onChange={(value) => setTab(value as string)}
           options={[
-            { label: '总览', value: 'overview' },
-            { label: '回归进度', value: 'regression' },
-            { label: '需求覆盖', value: 'coverage' },
+            { label: t('总览'), value: 'overview' },
+            { label: t('回归进度'), value: 'regression' },
+            { label: t('需求覆盖'), value: 'coverage' },
           ]}
         />
       </Space>
@@ -290,24 +291,32 @@ function OverviewTab({
   const compare = overview?.compare ?? null;
 
   const trendData = trend.flatMap((point) => {
-    const label = point.bucket ? point.bucket.slice(5, 10) : '未关联';
+    const label = point.bucket ? point.bucket.slice(5, 10) : t('未关联');
     const rows = [];
     if (point.pass_rate != null) {
-      rows.push({ bucket: label, type: '最终通过率', value: +(point.pass_rate * 100).toFixed(1) });
+      rows.push({ bucket: label, type: t('最终通过率'), value: +(point.pass_rate * 100).toFixed(1) });
     }
     if (point.pass_rate_lower_bound != null) {
       rows.push({
         bucket: label,
-        type: '置信下界',
+        type: t('置信下界'),
         value: +(point.pass_rate_lower_bound * 100).toFixed(1),
       });
     }
     return rows;
   });
 
-  const statusData = (breakdown?.status_breakdown ?? []).filter((item) => item.runs > 0);
-  const failureKindData = breakdown?.failure_kinds ?? [];
-  const durationData = breakdown?.duration_buckets ?? [];
+  const statusData = (breakdown?.status_breakdown ?? [])
+    .filter((item) => item.runs > 0)
+    .map((item) => ({ ...item, label: t(item.label) }));
+  const failureKindData = (breakdown?.failure_kinds ?? []).map((item) => ({
+    ...item,
+    label: t(item.label),
+  }));
+  const durationData = (breakdown?.duration_buckets ?? []).map((item) => ({
+    ...item,
+    label: t(item.label),
+  }));
 
   return (
     <div>
@@ -321,8 +330,8 @@ function OverviewTab({
           <ProCard loading={isLoading}>
             <Statistic
               title={
-                <Tooltip title="通过率 = 通过用例数 / 执行用例数（先求和再相除）。置信下界用 Wilson 计算，n 越小声誉越低。">
-                  <span>最终通过率</span>
+                <Tooltip title={t('通过率 = 通过用例数 / 执行用例数（先求和再相除）。置信下界用 Wilson 计算，n 越小声誉越低。')}>
+                  <span>{t('最终通过率')}</span>
                 </Tooltip>
               }
               value={fmtPercent(overview?.final_pass_rate ?? null)}
@@ -330,9 +339,11 @@ function OverviewTab({
             />
             <Space direction="vertical" size={2} style={{ marginTop: 4 }}>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                置信下界 {fmtPercent(overview?.pass_rate_lower_bound ?? null)} · 样本{' '}
-                {overview?.sample_size ?? 0} 个用例
-                {insufficient ? '（n<3，先别下结论）' : ''}
+                {t('置信下界 {lower} · 样本 {n} 个用例', {
+                  lower: fmtPercent(overview?.pass_rate_lower_bound ?? null),
+                  n: overview?.sample_size ?? 0,
+                })}
+                {insufficient ? t('（n<3，先别下结论）') : ''}
               </Typography.Text>
               <RateDelta current={overview?.final_pass_rate} previous={compare?.final_pass_rate} />
             </Space>
@@ -341,10 +352,10 @@ function OverviewTab({
 
         <Col xs={24} sm={12} xl={8}>
           <ProCard loading={isLoading}>
-            <Statistic title="首次通过率" value={fmtPercent(overview?.first_pass_rate ?? null)} />
+            <Statistic title={t('首次通过率')} value={fmtPercent(overview?.first_pass_rate ?? null)} />
             <Space direction="vertical" size={2} style={{ marginTop: 4 }}>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                靠重试救回 {fmtPercent(overview?.retry_recovery_rate ?? null)} 的用例
+                {t('靠重试救回 {rate} 的用例', { rate: fmtPercent(overview?.retry_recovery_rate ?? null) })}
               </Typography.Text>
               <RateDelta current={overview?.first_pass_rate} previous={compare?.first_pass_rate} />
             </Space>
@@ -353,15 +364,15 @@ function OverviewTab({
 
         <Col xs={24} sm={12} xl={8}>
           <ProCard loading={isLoading}>
-            <Statistic title="执行次数" value={overview?.runs ?? 0} suffix="次" />
+            <Statistic title={t('执行次数')} value={overview?.runs ?? 0} suffix={t('次')} />
             <Space direction="vertical" size={2} style={{ marginTop: 4 }}>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                覆盖 {overview?.sample_size ?? 0} 个用例
+                {t('覆盖 {n} 个用例', { n: overview?.sample_size ?? 0 })}
                 {(overview?.excluded_infra_runs ?? 0) > 0
-                  ? ` · ${overview?.excluded_infra_runs} 次非用例原因未计入`
+                  ? t(' · {n} 次非用例原因未计入', { n: overview?.excluded_infra_runs ?? 0 })
                   : ''}
               </Typography.Text>
-              <CountDelta current={overview?.runs} previous={compare?.runs} suffix="次" />
+              <CountDelta current={overview?.runs} previous={compare?.runs} suffix={t('次')} />
             </Space>
           </ProCard>
         </Col>
@@ -369,18 +380,18 @@ function OverviewTab({
         <Col xs={24} sm={12} xl={8}>
           <ProCard loading={isLoading}>
             <Statistic
-              title="失败用例"
+              title={t('失败用例')}
               value={overview?.failed ?? 0}
               valueStyle={{ color: (overview?.failed ?? 0) > 0 ? '#E8A23B' : undefined }}
             />
             <Space direction="vertical" size={2} style={{ marginTop: 4 }}>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {overview?.passed ?? 0}/{overview?.sample_size ?? 0} 通过
+                {t('{passed}/{total} 通过', { passed: overview?.passed ?? 0, total: overview?.sample_size ?? 0 })}
               </Typography.Text>
               <CountDelta
                 current={overview?.failed}
                 previous={compare?.failed}
-                suffix="个"
+                suffix={t('个')}
                 invert
               />
             </Space>
@@ -389,36 +400,39 @@ function OverviewTab({
 
         <Col xs={24} sm={12} xl={8}>
           <ProCard loading={isLoading}>
-            <Statistic title="平均耗时" value={fmtDuration(overview?.avg_duration_ms ?? null)} />
+            <Statistic title={t('平均耗时')} value={fmtDuration(overview?.avg_duration_ms ?? null)} />
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              中位耗时 {fmtDuration(overview?.median_duration_ms ?? null)}
+              {t('中位耗时 {duration}', { duration: fmtDuration(overview?.median_duration_ms ?? null) })}
             </Typography.Text>
           </ProCard>
         </Col>
 
         <Col xs={24} sm={12} xl={8}>
           <ProCard loading={isLoading}>
-            <Statistic title="Token 用量" value={fmtTokens(overview?.ai_total_tokens ?? null)} />
+            <Statistic title={t('Token 用量')} value={fmtTokens(overview?.ai_total_tokens ?? null)} />
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              AI 调用 {overview?.ai_calls ?? 0} 次 · 模型耗时{' '}
-              {fmtDuration(overview?.ai_cost_ms ?? null)}
+              {t('AI 调用 {calls} 次 · 模型耗时 {duration}', {
+                calls: overview?.ai_calls ?? 0,
+                duration: fmtDuration(overview?.ai_cost_ms ?? null),
+              })}
             </Typography.Text>
           </ProCard>
         </Col>
       </Row>
 
       <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
-        首次通过率与最终通过率之差，就是「靠重试蒙过去」的部分。置信下界（Wilson）才是诚实的读数。
+        {t('首次通过率与最终通过率之差，就是「靠重试蒙过去」的部分。置信下界（Wilson）才是诚实的读数。')}
         {(overview?.excluded_infra_runs ?? 0) > 0 &&
-          ` 另有 ${overview?.excluded_infra_runs} 次执行因模型额度/服务/网络问题未计入通过率。`}
-        {dataUpdatedAt > 0 && `（数据更新于 ${fmtDateTime(new Date(dataUpdatedAt).toISOString())}）`}
+          t(' 另有 {n} 次执行因模型额度/服务/网络问题未计入通过率。', { n: overview?.excluded_infra_runs ?? 0 })}
+        {dataUpdatedAt > 0 &&
+          t('（数据更新于 {time}）', { time: fmtDateTime(new Date(dataUpdatedAt).toISOString()) })}
       </Typography.Paragraph>
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} xl={16}>
-          <ProCard size="small" title="通过率趋势">
+          <ProCard size="small" title={t('通过率趋势')}>
             {trendData.length === 0 ? (
-              <Empty description="暂无数据" />
+              <Empty description={t('暂无数据')} />
             ) : (
               <Line
                 data={trendData}
@@ -435,9 +449,9 @@ function OverviewTab({
           </ProCard>
         </Col>
         <Col xs={24} xl={8}>
-          <ProCard size="small" title="执行结果分布">
+          <ProCard size="small" title={t('执行结果分布')}>
             {statusData.length === 0 ? (
-              <Empty description="暂无数据" />
+              <Empty description={t('暂无数据')} />
             ) : (
               <Pie
                 data={statusData}
@@ -452,7 +466,7 @@ function OverviewTab({
                     range: ['#22B07D', '#F5A33C', '#E85C5C', '#8C8C8C', '#4F8CFF'],
                   },
                 }}
-                tooltip={{ items: [{ channel: 'y', valueFormatter: (v: number) => `${v} 次` }] }}
+                tooltip={{ items: [{ channel: 'y', valueFormatter: (v: number) => t('{n} 次', { n: v }) }] }}
               />
             )}
           </ProCard>
@@ -461,9 +475,9 @@ function OverviewTab({
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} xl={12}>
-          <ProCard size="small" title="非用例原因的失败">
+          <ProCard size="small" title={t('非用例原因的失败')}>
             {failureKindData.length === 0 ? (
-              <Empty description="没有因模型额度 / 服务 / 网络被排除的执行" />
+              <Empty description={t('没有因模型额度 / 服务 / 网络被排除的执行')} />
             ) : (
               <Column
                 data={failureKindData}
@@ -472,15 +486,15 @@ function OverviewTab({
                 height={240}
                 theme={chartTheme}
                 scale={{ x: { padding: 0.5 } }}
-                tooltip={{ items: [{ channel: 'y', valueFormatter: (v: number) => `${v} 次` }] }}
+                tooltip={{ items: [{ channel: 'y', valueFormatter: (v: number) => t('{n} 次', { n: v }) }] }}
               />
             )}
           </ProCard>
         </Col>
         <Col xs={24} xl={12}>
-          <ProCard size="small" title="耗时分布（每次执行）">
+          <ProCard size="small" title={t('耗时分布（每次执行）')}>
             {durationData.length === 0 ? (
-              <Empty description="暂无数据" />
+              <Empty description={t('暂无数据')} />
             ) : (
               <Column
                 data={durationData}
@@ -489,29 +503,29 @@ function OverviewTab({
                 height={240}
                 theme={chartTheme}
                 scale={{ x: { padding: 0.35 } }}
-                tooltip={{ items: [{ channel: 'y', valueFormatter: (v: number) => `${v} 次` }] }}
+                tooltip={{ items: [{ channel: 'y', valueFormatter: (v: number) => t('{n} 次', { n: v }) }] }}
               />
             )}
           </ProCard>
         </Col>
       </Row>
 
-      <ProCard size="small" title="失败最集中的功能" style={{ marginTop: 16 }}>
+      <ProCard size="small" title={t('失败最集中的功能')} style={{ marginTop: 16 }}>
         <QaTable
           rowKey="feature_id"
           dataSource={breakdown?.top_failing_features ?? []}
           pagination={false}
-          locale={{ emptyText: '这段时间没有失败用例' }}
+          locale={{ emptyText: t('这段时间没有失败用例') }}
           columns={[
             {
-              title: '功能',
+              title: t('功能'),
               dataIndex: 'feature_name',
               sorter: byText((r: { feature_name: string }) => r.feature_name),
               render: (_, r) => <Link to={`/features/${r.feature_id}`}>{r.feature_name}</Link>,
             },
-            { title: '项目', dataIndex: 'project_name', width: 220 },
+            { title: t('项目'), dataIndex: 'project_name', width: 220 },
             {
-              title: '失败次数',
+              title: t('失败次数'),
               dataIndex: 'failures',
               width: 120,
               sorter: byNumber((r: { failures: number }) => r.failures),
@@ -521,9 +535,9 @@ function OverviewTab({
         />
       </ProCard>
 
-      <ProCard size="small" title="失败用例排行" style={{ marginTop: 16 }}>
+      <ProCard size="small" title={t('失败用例排行')} style={{ marginTop: 16 }}>
         {failures.length === 0 ? (
-          <Empty description="暂无失败用例，保持住" />
+          <Empty description={t('暂无失败用例，保持住')} />
         ) : (
           <Column
             data={failures}
@@ -534,50 +548,50 @@ function OverviewTab({
             // 只有一两个用例时，默认的柱宽会糊满整张图 —— 按条数给 band padding
             scale={{ x: { padding: failures.length <= 3 ? 0.7 : 0.2 } }}
             xAxis={{ label: { autoRotate: true, autoHide: true } }}
-            tooltip={{ items: [{ channel: 'y', valueFormatter: (v: number) => `${v} 次` }] }}
+            tooltip={{ items: [{ channel: 'y', valueFormatter: (v: number) => t('{n} 次', { n: v }) }] }}
           />
         )}
       </ProCard>
 
-      <ProCard size="small" title="Flaky 用例榜单" style={{ marginTop: 16 }}>
+      <ProCard size="small" title={t('Flaky 用例榜单')} style={{ marginTop: 16 }}>
         <Alert
           type="info"
           showIcon
           style={{ marginBottom: 12 }}
-          message="AI 执行器对同一用例时过时不过属常态，单次失败不等价于缺陷。flakiness 越高越值得人工复核。"
+          message={t('AI 执行器对同一用例时过时不过属常态，单次失败不等价于缺陷。flakiness 越高越值得人工复核。')}
         />
         <QaTable<StatsFlaky>
           rowKey="test_case_id"
           dataSource={flaky}
           pagination={PAGE}
-          locale={{ emptyText: '暂无数据' }}
+          locale={{ emptyText: t('暂无数据') }}
           columns={[
             {
-              title: '用例',
+              title: t('用例'),
               dataIndex: 'case_name',
               sorter: byText<StatsFlaky>((r) => r.case_name),
               render: (_, r) => <Link to={`/cases/${r.test_case_id}`}>{r.case_name}</Link>,
             },
             {
-              title: '功能',
+              title: t('功能'),
               dataIndex: 'feature_name',
               sorter: byText<StatsFlaky>((r) => r.feature_name),
               render: (v: string | null) => v || '-',
             },
             {
-              title: '执行次数',
+              title: t('执行次数'),
               dataIndex: 'runs',
               width: 100,
               sorter: byNumber<StatsFlaky>((r) => r.runs),
             },
             {
-              title: '通过',
+              title: t('通过'),
               dataIndex: 'passed',
               width: 80,
               sorter: byNumber<StatsFlaky>((r) => r.passed),
             },
             {
-              title: '失败',
+              title: t('失败'),
               dataIndex: 'failed',
               width: 80,
               sorter: byNumber<StatsFlaky>((r) => r.failed),
@@ -596,14 +610,14 @@ function OverviewTab({
               ),
             },
             {
-              title: '最近状态',
+              title: t('最近状态'),
               dataIndex: 'last_status',
               width: 110,
               sorter: byRank<StatsFlaky>((r) => r.last_status ?? '', ['success', 'failed']),
               render: (v: string | null) => v || '-',
             },
             {
-              title: '最近执行',
+              title: t('最近执行'),
               dataIndex: 'last_run_at',
               sorter: byDate<StatsFlaky>((r) => r.last_run_at),
               render: (v: string | null) => fmtDateTime(v),
@@ -628,14 +642,17 @@ function RateDelta({
   if (Math.abs(diff) < 0.05) {
     return (
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        与上期持平
+        {t('与上期持平')}
       </Typography.Text>
     );
   }
   const good = diff > 0;
   return (
     <Typography.Text style={{ fontSize: 12, color: good ? '#22B07D' : '#E85C5C' }}>
-      {diff > 0 ? '↑' : '↓'} {Math.abs(diff).toFixed(1)} 个百分点 vs 上期
+      {t('{arrow} {diff} 个百分点 vs 上期', {
+        arrow: diff > 0 ? '↑' : '↓',
+        diff: Math.abs(diff).toFixed(1),
+      })}
     </Typography.Text>
   );
 }
@@ -657,14 +674,18 @@ function CountDelta({
   if (diff === 0) {
     return (
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        与上期持平
+        {t('与上期持平')}
       </Typography.Text>
     );
   }
   const good = invert ? diff < 0 : diff > 0;
   return (
     <Typography.Text style={{ fontSize: 12, color: good ? '#22B07D' : '#E85C5C' }}>
-      {diff > 0 ? '↑' : '↓'} {Math.abs(diff)} {suffix} vs 上期
+      {t('{arrow} {diff} {suffix} vs 上期', {
+        arrow: diff > 0 ? '↑' : '↓',
+        diff: Math.abs(diff),
+        suffix,
+      })}
     </Typography.Text>
   );
 }
@@ -688,16 +709,16 @@ function RegressionTab({
       loading={isLoading}
       dataSource={rows}
       pagination={PAGE}
-      locale={{ emptyText: '暂无回归任务' }}
+      locale={{ emptyText: t('暂无回归任务') }}
       columns={[
         {
-          title: '回归任务',
+          title: t('回归任务'),
           dataIndex: 'name',
           sorter: byText<StatsRegressionRow>((r) => r.name),
           render: (_, r) => <Link to={`/tasks/${r.task_id}`}>{r.name}</Link>,
         },
         {
-          title: '状态',
+          title: t('状态'),
           dataIndex: 'status',
           width: 110,
           sorter: byRank<StatsRegressionRow>((r) => r.status, [
@@ -708,46 +729,46 @@ function RegressionTab({
             'failed',
             'cancelled',
           ]),
-          render: (s: string) => <Tag color={TASK_STATUS_COLORS[s]}>{TASK_STATUS_LABELS[s] ?? s}</Tag>,
+          render: (s: string) => <Tag color={TASK_STATUS_COLORS[s]}>{taskStatusLabel(s)}</Tag>,
         },
         {
-          title: '覆盖功能',
+          title: t('覆盖功能'),
           dataIndex: 'features',
           width: 100,
           sorter: byNumber<StatsRegressionRow>((r) => r.features),
         },
         {
-          title: 'run 数',
+          title: t('run 数'),
           dataIndex: 'runs',
           width: 90,
           sorter: byNumber<StatsRegressionRow>((r) => r.runs),
         },
         {
-          title: '通过 / 总数',
+          title: t('通过 / 总数'),
           width: 120,
           sorter: byNumber<StatsRegressionRow>((r) => (r.total ? r.passed / r.total : -1)),
           render: (_, r) => `${r.passed}/${r.total}`,
         },
         {
-          title: '失败',
+          title: t('失败'),
           dataIndex: 'failed',
           width: 80,
           sorter: byNumber<StatsRegressionRow>((r) => r.failed),
         },
         {
-          title: '通过率',
+          title: t('通过率'),
           width: 100,
           sorter: byNumber<StatsRegressionRow>((r) => r.pass_rate),
           render: (_, r) => fmtPercent(r.pass_rate),
         },
         {
-          title: '置信下界',
+          title: t('置信下界'),
           width: 100,
           sorter: byNumber<StatsRegressionRow>((r) => r.pass_rate_lower_bound),
           render: (_, r) => fmtPercent(r.pass_rate_lower_bound),
         },
         {
-          title: '进度',
+          title: t('进度'),
           width: 180,
           sorter: byNumber<StatsRegressionRow>((r) => (r.total ? r.passed / r.total : -1)),
           render: (_, r) => (
@@ -780,7 +801,7 @@ function AiReviewSection({ teamId }: { teamId: string | null }) {
     mutationFn: () => runTeamReview(teamId as string, days),
     onSuccess: (result) => {
       queryClient.setQueryData(['team-ai-review', teamId], result);
-      message.success('复盘已生成');
+      message.success(t('复盘已生成'));
     },
     onError: (e) => message.error(apiError(e)),
   });
@@ -791,18 +812,18 @@ function AiReviewSection({ teamId }: { teamId: string | null }) {
   return (
     <div>
       <Space wrap style={{ marginBottom: 16 }}>
-        <span>时间范围</span>
+        <span>{t('时间范围')}</span>
         <Segmented
           value={days}
           onChange={(value) => setDays(value as number)}
           options={[
-            { label: '近 7 天', value: 7 },
-            { label: '近 14 天', value: 14 },
-            { label: '近 30 天', value: 30 },
+            { label: t('近 7 天'), value: 7 },
+            { label: t('近 14 天'), value: 14 },
+            { label: t('近 30 天'), value: 30 },
           ]}
         />
         <Button type="primary" loading={generate.isPending} onClick={() => generate.mutate()}>
-          {markdown ? '重新生成' : '生成复盘'}
+          {markdown ? t('重新生成') : t('生成复盘')}
         </Button>
         {markdown && <SpeakButton text={markdown} />}
       </Space>
@@ -814,18 +835,18 @@ function AiReviewSection({ teamId }: { teamId: string | null }) {
         >
           <XMarkdown content={markdown} />
           <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
-            {check?.model_name ? `由 ${check.model_name} 生成 · ` : ''}
-            {check?.created_at ? fmtDateTime(check.created_at) : ''} · 仅供参考
+            {check?.model_name ? t('由 {model} 生成 · ', { model: check.model_name }) : ''}
+            {check?.created_at ? fmtDateTime(check.created_at) : ''}{t(' · 仅供参考')}
           </Typography.Paragraph>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '40px 0' }}>
           <AiMascot size={96} state={generate.isPending ? 'thinking' : 'idle'} />
           <Typography.Text strong>
-            {generate.isPending ? '正在读最近的执行记录…' : '让 AI 汇总最近的测试情况，给一份优化建议'}
+            {generate.isPending ? t('正在读最近的执行记录…') : t('让 AI 汇总最近的测试情况，给一份优化建议')}
           </Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            会综合通过率、失败集中度、Flaky 用例和执行频次；生成一次要几十秒
+            {t('会综合通过率、失败集中度、Flaky 用例和执行频次；生成一次要几十秒')}
           </Typography.Text>
         </div>
       )}

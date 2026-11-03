@@ -24,8 +24,22 @@ import { TeamProvider } from '../team/TeamContext';
 import { useTheme } from '../theme/ThemeContext';
 import UserAvatar from '../components/UserAvatar';
 import AgentPresence from '../components/AgentPresence';
+import LocaleSwitch from '../i18n/LocaleSwitch';
+import { getLocale, t } from '../i18n';
 
 const TITLE = 'Aster QA';
+
+// 菜单要复数（Projects / Test tasks），而正文里的「项目」是单数表头，故单独一张表
+const NAV_EN: Record<string, string> = {
+  工作台: 'Dashboard',
+  项目: 'Projects',
+  测试任务: 'Test tasks',
+  执行记录: 'Executions',
+  统计: 'Stats',
+  团队: 'Teams',
+  人员: 'Users',
+  执行器: 'Runners',
+};
 
 // 入口顺序按使用频率：干活（项目/任务/执行）在前，组织和配置（团队/人员）在后
 const menuRoutes = [
@@ -89,7 +103,7 @@ export default function AppShell() {
     mutationFn: (v: { old_password: string; new_password: string }) =>
       changePassword(v.old_password, v.new_password),
     onSuccess: () => {
-      message.success('密码修改成功，请重新登录');
+      message.success(t('密码修改成功，请重新登录'));
       setPwdOpen(false);
       form.resetFields();
       void logout();
@@ -99,13 +113,18 @@ export default function AppShell() {
 
   const activePath = MENU_PREFIXES.find((p) => location.pathname.startsWith(p)) ?? '/';
   const canSeeWorkers = user?.teams.some((t) => t.role !== 'member') ?? false;
-  const routes = canSeeWorkers
-    ? [
-        ...menuRoutes.slice(0, 5),
-        { path: '/workers', name: '执行器', icon: <ClusterOutlined /> },
-        ...menuRoutes.slice(5),
-      ]
-    : menuRoutes;
+  const routes = (
+    canSeeWorkers
+      ? [
+          ...menuRoutes.slice(0, 5),
+          { path: '/workers', name: '执行器', icon: <ClusterOutlined /> },
+          ...menuRoutes.slice(5),
+        ]
+      : menuRoutes
+  ).map((item) => ({
+    ...item,
+    name: getLocale() === 'en' ? (NAV_EN[item.name] ?? t(item.name)) : item.name,
+  }));
 
   return (
     <>
@@ -138,14 +157,15 @@ export default function AppShell() {
             variant="borderless"
             style={{ minWidth: 150 }}
             value={activeTeam ?? undefined}
-            placeholder="选择团队"
+            placeholder={t('选择团队')}
             onChange={onSwitchTeam}
-            options={teams.map((t) => ({ value: t.id, label: t.name }))}
+            options={teams.map((item) => ({ value: item.id, label: item.name }))}
           />,
+          <LocaleSwitch key="locale" />,
           <Button
             key="theme"
             type="text"
-            aria-label="切换主题"
+            aria-label={t('切换主题')}
             icon={isDark ? <SunOutlined /> : <MoonOutlined />}
             onClick={toggle}
           />,
@@ -155,9 +175,9 @@ export default function AppShell() {
             <Dropdown
               menu={{
                 items: [
-                  { key: 'pwd', label: '修改密码' },
+                  { key: 'pwd', label: t('修改密码') },
                   { type: 'divider' },
-                  { key: 'logout', label: '退出登录' },
+                  { key: 'logout', label: t('退出登录') },
                 ],
                 onClick: ({ key }) => {
                   if (key === 'pwd') setPwdOpen(true);
@@ -197,7 +217,7 @@ export default function AppShell() {
       </ProLayout>
 
       <Modal
-        title="修改密码"
+        title={t('修改密码')}
         open={pwdOpen}
         onCancel={() => setPwdOpen(false)}
         onOk={() => form.submit()}
@@ -205,10 +225,18 @@ export default function AppShell() {
         forceRender
       >
         <Form form={form} layout="vertical" onFinish={(v) => pwdMutation.mutate(v)} preserve={false}>
-          <Form.Item name="old_password" label="当前密码" rules={[{ required: true, message: '请输入当前密码' }]}>
+          <Form.Item
+            name="old_password"
+            label={t('当前密码')}
+            rules={[{ required: true, message: t('请输入当前密码') }]}
+          >
             <Input.Password autoComplete="current-password" />
           </Form.Item>
-          <Form.Item name="new_password" label="新密码" rules={[{ required: true, message: '请输入新密码' }]}>
+          <Form.Item
+            name="new_password"
+            label={t('新密码')}
+            rules={[{ required: true, message: t('请输入新密码') }]}
+          >
             <Input.Password autoComplete="new-password" />
           </Form.Item>
         </Form>

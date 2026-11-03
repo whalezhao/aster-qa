@@ -9,12 +9,13 @@ import { getBatches, type Batch, type BatchFeature } from '../api/batches';
 import { getProjects } from '../api/projects';
 import { getTasks } from '../api/tasks';
 import { useActiveTeam } from '../team/TeamContext';
+import { t } from '../i18n';
 import {
   BATCH_STATUS_COLORS,
-  BATCH_STATUS_LABELS,
+  batchStatusLabel,
   fmtDateTime,
   fmtDuration,
-  TASK_TYPE_LABELS,
+  taskTypeLabel,
 } from '../lib/format';
 import { PAGE, byDate, byNumber, byRank, byText } from '../lib/table';
 import type { FeatureStage } from '../api/types';
@@ -35,7 +36,12 @@ function FeatureChip({ feature }: { feature: BatchFeature }) {
   const pending = feature.passed + feature.failed < feature.total;
   return (
     <Tooltip
-      title={`${feature.name}（${feature.stage === 'released' ? '正式' : '迭代中'}）通过 ${feature.passed}/${feature.total}`}
+      title={t('{name}（{stage}）通过 {passed}/{total}', {
+        name: feature.name,
+        stage: t(feature.stage === 'released' ? '正式' : '迭代中'),
+        passed: feature.passed,
+        total: feature.total,
+      })}
     >
       <Tag color={pending ? 'processing' : ok ? 'success' : 'error'}>
         {feature.name} {feature.passed}/{feature.total}
@@ -105,21 +111,21 @@ export default function Executions() {
   });
 
   const batches = data?.items ?? [];
-  const taskName = (id: string | null) => tasks.find((t) => t.id === id)?.name;
+  const taskName = (id: string | null) => tasks.find((task) => task.id === id)?.name;
 
   return (
     <PageContainer
       ghost
       header={{
-        title: '执行记录',
-        subTitle: '每行是一次执行（一个任务点一次「执行」）；跨项目的任务会拆成多次运行，但在这里算一件事',
+        title: t('执行记录'),
+        subTitle: t('每行是一次执行（一个任务点一次「执行」）；跨项目的任务会拆成多次运行，但在这里算一件事'),
         extra: taskId
           ? [
               <Typography.Text key="hint" type="secondary">
-                只看任务「{taskName(taskId) ?? taskId.slice(0, 8)}」
+                {t('只看任务「{name}」', { name: taskName(taskId) ?? taskId.slice(0, 8) })}
               </Typography.Text>,
               <Link key="clear" to="/executions">
-                清除筛选
+                {t('清除筛选')}
               </Link>,
             ]
           : undefined,
@@ -129,7 +135,7 @@ export default function Executions() {
       <Space wrap style={{ marginBottom: 16 }}>
         <Select
           allowClear
-          placeholder="全部项目"
+          placeholder={t('全部项目')}
           style={{ minWidth: 180 }}
           value={projectId}
           onChange={(value) => updateParams({ project_id: value })}
@@ -141,14 +147,14 @@ export default function Executions() {
             updateParams({ stage: value === 'all' ? undefined : (value as string) })
           }
           options={[
-            { value: 'all', label: '全部分期' },
-            { value: 'in_iteration', label: '当前迭代' },
-            { value: 'released', label: '正式' },
+            { value: 'all', label: t('全部分期') },
+            { value: 'in_iteration', label: t('当前迭代') },
+            { value: 'released', label: t('正式') },
           ]}
         />
         <Input.Search
           allowClear
-          placeholder="按任务名搜索"
+          placeholder={t('按任务名搜索')}
           style={{ width: 220 }}
           value={nameInput}
           onChange={(event) => setNameInput(event.target.value)}
@@ -180,7 +186,7 @@ export default function Executions() {
         })}
         columns={[
           {
-            title: '执行',
+            title: t('执行'),
             sorter: byDate<Batch>((r) => r.created_at),
             render: (_, r) => (
               <Space direction="vertical" size={0}>
@@ -188,21 +194,21 @@ export default function Executions() {
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   {fmtDateTime(r.created_at)}
                   {r.trigger !== 'manual'
-                    ? ` · ${
+                    ? ` · ${t(
                         {
                           regression: '回归',
                           rerun: '重跑失败',
                           schedule: '定时',
                           ci: 'CI',
-                        }[r.trigger] ?? r.trigger
-                      }`
+                        }[r.trigger] ?? r.trigger,
+                      )}`
                     : ''}
                 </Typography.Text>
               </Space>
             ),
           },
           {
-            title: '环境',
+            title: t('环境'),
             width: 110,
             sorter: byText<Batch>((r) => r.environment_name ?? ''),
             render: (_, r) =>
@@ -213,7 +219,7 @@ export default function Executions() {
               ),
           },
           {
-            title: '测试任务',
+            title: t('测试任务'),
             width: 200,
             sorter: byText<Batch>((r) => r.task_name),
             render: (_, r) =>
@@ -221,9 +227,9 @@ export default function Executions() {
                 <Space direction="vertical" size={0}>
                   <Link to={`/tasks/${r.task_id}`}>{r.task_name}</Link>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {(TASK_TYPE_LABELS as Record<string, string>)[r.task_type ?? ''] ?? r.task_type}
-                    {r.task_case_count ? ` · ${r.task_case_count} 个用例` : ''}
-                    {r.task_feature_count ? ` · ${r.task_feature_count} 个功能` : ''}
+                    {taskTypeLabel(r.task_type ?? '')}
+                    {r.task_case_count ? t(' · {n} 个用例', { n: r.task_case_count }) : ''}
+                    {r.task_feature_count ? t(' · {n} 个功能', { n: r.task_feature_count }) : ''}
                   </Typography.Text>
                 </Space>
               ) : (
@@ -231,7 +237,7 @@ export default function Executions() {
               ),
           },
           {
-            title: '状态',
+            title: t('状态'),
             width: 130,
             sorter: byRank<Batch>((r) => r.status, [
               'running',
@@ -245,12 +251,12 @@ export default function Executions() {
             ]),
             render: (_, r) => (
               <Tag color={BATCH_STATUS_COLORS[r.status] ?? 'default'}>
-                {BATCH_STATUS_LABELS[r.status] ?? r.status}
+                {batchStatusLabel(r.status)}
               </Tag>
             ),
           },
           {
-            title: '结果',
+            title: t('结果'),
             width: 120,
             sorter: byNumber<Batch>((r) => (r.total ? r.passed / r.total : -1)),
             render: (_, r) =>
@@ -262,15 +268,15 @@ export default function Executions() {
                     {r.passed}/{r.total}
                   </Typography.Text>
                   {r.excluded_runs > 0 && (
-                    <Tooltip title={`${r.excluded_runs} 次执行因模型额度/配置/网络问题未计入统计`}>
-                      <Tag>未计入 {r.excluded_runs}</Tag>
+                    <Tooltip title={t('{n} 次执行因模型额度/配置/网络问题未计入统计', { n: r.excluded_runs })}>
+                      <Tag>{t('未计入 {n}', { n: r.excluded_runs })}</Tag>
                     </Tooltip>
                   )}
                 </Space>
               ),
           },
           {
-            title: 'AI 判断',
+            title: t('AI 判断'),
             width: 100,
             sorter: byRank<Batch>((r) => r.ai_verdict ?? '', [
               'healthy',
@@ -282,28 +288,28 @@ export default function Executions() {
               // 全绿批次不调 AI：用奖杯代替「未评估」，和详情页的卡片一致
               if (r.total > 0 && r.passed === r.total) {
                 return (
-                  <Tooltip title="全部通过：不需要 AI 分析">
+                  <Tooltip title={t('全部通过：不需要 AI 分析')}>
                     <Tag color="success" icon={<TrophyOutlined />}>
-                      全部通过
+                      {t('全部通过')}
                     </Tag>
                   </Tooltip>
                 );
               }
-              if (r.ai_status === 'pending') return <Tag color="processing">分析中</Tag>;
+              if (r.ai_status === 'pending') return <Tag color="processing">{t('分析中')}</Tag>;
               if (r.ai_status === 'failed') {
                 return (
-                  <Tooltip title="这次执行没有拿到 AI 结论（可能是项目没配模型）">
-                    <Tag>未评估</Tag>
+                  <Tooltip title={t('这次执行没有拿到 AI 结论（可能是项目没配模型）')}>
+                    <Tag>{t('未评估')}</Tag>
                   </Tooltip>
                 );
               }
               const view = AI_VERDICT[r.ai_verdict ?? 'unknown'];
               if (!view) return <Typography.Text type="secondary">-</Typography.Text>;
-              return <Tag color={view.color}>{view.label}</Tag>;
+              return <Tag color={view.color}>{t(view.label)}</Tag>;
             },
           },
           {
-            title: '功能（各功能通过情况）',
+            title: t('功能（各功能通过情况）'),
             // 这是这一页的核心：一行里看到这次执行里每个功能过没过
             sorter: byNumber<Batch>((r) => r.features.length),
             render: (_, r) =>
@@ -318,13 +324,14 @@ export default function Executions() {
               ),
           },
           {
-            title: '项目',
+            title: t('项目'),
             width: 90,
             sorter: byNumber<Batch>((r) => r.project_count),
-            render: (_, r) => (r.project_count > 1 ? `${r.project_count} 个` : '1 个'),
+            render: (_, r) =>
+              r.project_count > 1 ? t('{n} 个', { n: r.project_count }) : t('1 个'),
           },
           {
-            title: '耗时',
+            title: t('耗时'),
             width: 90,
             sorter: byNumber<Batch>((r) => r.duration_ms),
             render: (_, r) => fmtDuration(r.duration_ms),
@@ -332,7 +339,7 @@ export default function Executions() {
         ]}
         locale={{
           emptyText: (
-            <Empty description="还没有执行记录。到「测试任务」里点一次执行就有了。" />
+            <Empty description={t('还没有执行记录。到「测试任务」里点一次执行就有了。')} />
           ),
         }}
       />
@@ -340,8 +347,10 @@ export default function Executions() {
           免得有人以为按通过率排出来的第一名是全部历史里的第一名 */}
       {data && data.total > batches.length ? (
         <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-          共 {data.total} 次执行，本页只加载了最近 {batches.length} 条：分页与排序都在这
-          {batches.length} 条之内。
+          {t('共 {total} 次执行，本页只加载了最近 {loaded} 条：分页与排序都在这 {loaded} 条之内。', {
+            total: data.total,
+            loaded: batches.length,
+          })}
         </Typography.Paragraph>
       ) : null}
     </PageContainer>

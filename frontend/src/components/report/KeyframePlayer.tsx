@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Image } from 'antd';
 import { PauseCircleFilled, PlayCircleFilled } from '@ant-design/icons';
 import type { ReportKeyframe } from '../../api/runs';
+import { t } from '../../i18n';
 
 /**
  * 关键帧回放：原版报告里那个「视频」其实也是截图序列，没有 video 元素。
@@ -52,16 +53,16 @@ export default function KeyframePlayer({
       <div className="qa-keyframe-stage">
         <Image
           src={src}
-          alt={current.label || `关键帧 ${index + 1}`}
+          alt={current.label || t('关键帧 {n}', { n: index + 1 })}
           className="qa-keyframe-image"
-          preview={{ mask: '查看大图' }}
+          preview={{ mask: t('查看大图') }}
         />
         {frames.length > 1 && (
           <button
             type="button"
             className="qa-keyframe-toggle"
             onClick={() => setPlaying((value) => !value)}
-            aria-label={playing ? '暂停回放' : '开始回放'}
+            aria-label={playing ? t('暂停回放') : t('开始回放')}
           >
             {playing ? <PauseCircleFilled /> : <PlayCircleFilled />}
           </button>
@@ -79,7 +80,7 @@ export default function KeyframePlayer({
             icon={playing ? <PauseCircleFilled /> : <PlayCircleFilled />}
             onClick={() => setPlaying((value) => !value)}
           >
-            {playing ? '暂停' : '回放'}
+            {playing ? t('暂停') : t('回放')}
           </Button>
           <input
             type="range"
@@ -92,7 +93,7 @@ export default function KeyframePlayer({
               setPlaying(false);
               setIndex(Number(event.target.value));
             }}
-            aria-label="关键帧进度"
+            aria-label={t('关键帧进度')}
           />
           <span className="qa-keyframe-clock">
             {clock(elapsed)} / {clock(total)}

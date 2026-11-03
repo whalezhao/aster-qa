@@ -5,6 +5,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import { apiError } from '../../api/client';
 import { fmtDateTime } from '../../lib/format';
 import { PAGE, byDate, byNumber, byText } from '../../lib/table';
+import { t } from '../../i18n';
 import {
   createWebhook,
   deleteWebhook,
@@ -35,7 +36,7 @@ export default function WebhooksTab({ tid }: { tid: string }) {
     queryKey: ['webhook-events'],
     queryFn: getWebhookEvents,
   });
-  const eventLabel = (e: string) => eventTypes.find((t) => t.event === e)?.label ?? e;
+  const eventLabel = (e: string) => t(eventTypes.find((item) => item.event === e)?.label ?? e);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['webhooks', tid] });
 
@@ -45,7 +46,7 @@ export default function WebhooksTab({ tid }: { tid: string }) {
         ? updateWebhook(editing.id, { ...v, secret: v.secret || undefined })
         : createWebhook(tid, v as WebhookInput),
     onSuccess: () => {
-      message.success(editing ? 'webhook 已更新' : 'webhook 已创建');
+      message.success(editing ? t('webhook 已更新') : t('webhook 已创建'));
       setOpen(false);
       invalidate();
     },
@@ -55,7 +56,7 @@ export default function WebhooksTab({ tid }: { tid: string }) {
   const remove = useMutation({
     mutationFn: (id: string) => deleteWebhook(id),
     onSuccess: () => {
-      message.success('webhook 已删除');
+      message.success(t('webhook 已删除'));
       invalidate();
     },
     onError: (e) => message.error(apiError(e)),
@@ -64,7 +65,7 @@ export default function WebhooksTab({ tid }: { tid: string }) {
   const test = useMutation({
     mutationFn: (id: string) => testWebhook(id),
     onSuccess: () => {
-      message.success('已排队投递，几秒后到「投递记录」里看结果');
+      message.success(t('已排队投递，几秒后到「投递记录」里看结果'));
       invalidate();
     },
     onError: (e) => message.error(apiError(e)),
@@ -76,13 +77,12 @@ export default function WebhooksTab({ tid }: { tid: string }) {
         type="info"
         showIcon
         style={{ marginBottom: 12 }}
-        message="签名、执行完成时会 POST 到这里"
+        message={t('签名、执行完成时会 POST 到这里')}
         description={
           <>
-            请求头带 <Typography.Text code>X-QA-Token</Typography.Text>（你配的密钥）和{' '}
+            {t('请求头带')} <Typography.Text code>X-QA-Token</Typography.Text> {t('（你配的密钥）和')}{' '}
             <Typography.Text code>X-QA-Signature: sha256=…</Typography.Text>
-            —— 后者是对「X-QA-Timestamp.body 的原始字节」做 HMAC-SHA256，接收方要按原始字节验。
-            投递失败按 1m→2m→4m→8m→16m→30m 重试共 6 次，失败原因在「投递记录」里。
+            {t('—— 后者是对「X-QA-Timestamp.body 的原始字节」做 HMAC-SHA256，接收方要按原始字节验。投递失败按 1m→2m→4m→8m→16m→30m 重试共 6 次，失败原因在「投递记录」里。')}
           </>
         }
       />
@@ -102,7 +102,7 @@ export default function WebhooksTab({ tid }: { tid: string }) {
           setOpen(true);
         }}
       >
-        新建 webhook
+        {t('新建 webhook')}
       </Button>
 
       <QaTable<Webhook>
@@ -110,30 +110,30 @@ export default function WebhooksTab({ tid }: { tid: string }) {
         loading={isLoading}
         dataSource={hooks}
         pagination={PAGE}
-        locale={{ emptyText: '还没有配置 webhook' }}
+        locale={{ emptyText: t('还没有配置 webhook') }}
         columns={[
-          { title: '名称', dataIndex: 'name', sorter: byText<Webhook>((h) => h.name) },
+          { title: t('名称'), dataIndex: 'name', sorter: byText<Webhook>((h) => h.name) },
           {
-            title: '类型',
+            title: t('类型'),
             dataIndex: 'kind',
             width: 110,
             render: (value: Webhook['kind']) => (
               <Tag>
                 {
                   {
-                    generic: '通用',
-                    wecom: '企业微信',
-                    feishu: '飞书',
-                    dingtalk: '钉钉',
+                    generic: t('通用'),
+                    wecom: t('企业微信'),
+                    feishu: t('飞书'),
+                    dingtalk: t('钉钉'),
                     slack: 'Slack',
                   }[value] ?? value
                 }
               </Tag>
             ),
           },
-          { title: '地址', dataIndex: 'url', ellipsis: true, sorter: byText<Webhook>((h) => h.url) },
+          { title: t('地址'), dataIndex: 'url', ellipsis: true, sorter: byText<Webhook>((h) => h.url) },
           {
-            title: '订阅事件',
+            title: t('订阅事件'),
             render: (_, h) => (
               <Space size={4} wrap>
                 {h.events.map((e) => (
@@ -143,13 +143,13 @@ export default function WebhooksTab({ tid }: { tid: string }) {
             ),
           },
           {
-            title: '状态',
+            title: t('状态'),
             width: 90,
             sorter: byNumber<Webhook>((h) => (h.is_active ? 1 : 0)),
-            render: (_, h) => (h.is_active ? <Tag color="success">启用</Tag> : <Tag>停用</Tag>),
+            render: (_, h) => (h.is_active ? <Tag color="success">{t('启用')}</Tag> : <Tag>{t('停用')}</Tag>),
           },
           {
-            title: '最近投递',
+            title: t('最近投递'),
             width: 190,
             sorter: byDate<Webhook>((h) => h.last_delivery_at),
             render: (_, h) =>
@@ -165,21 +165,21 @@ export default function WebhooksTab({ tid }: { tid: string }) {
                     }
                   >
                     {h.last_delivery_status === 'success'
-                      ? '成功'
+                      ? t('成功')
                       : h.last_delivery_status === 'pending'
-                        ? '重试中'
-                        : '失败'}
+                        ? t('重试中')
+                        : t('失败')}
                   </Tag>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                     {fmtDateTime(h.last_delivery_at)}
                   </Typography.Text>
                 </Space>
               ) : (
-                <Typography.Text type="secondary">还没投过</Typography.Text>
+                <Typography.Text type="secondary">{t('还没投过')}</Typography.Text>
               ),
           },
           {
-            title: '操作',
+            title: t('操作'),
             width: 250,
             render: (_, h) => (
               <Space>
@@ -199,24 +199,24 @@ export default function WebhooksTab({ tid }: { tid: string }) {
                     setOpen(true);
                   }}
                 >
-                  编辑
+                  {t('编辑')}
                 </Button>
                 <Button
                   size="small"
                   loading={test.isPending && test.variables === h.id}
                   onClick={() => test.mutate(h.id)}
                 >
-                  测试
+                  {t('测试')}
                 </Button>
                 <Button size="small" onClick={() => setViewing(h)}>
-                  投递记录
+                  {t('投递记录')}
                 </Button>
                 <Popconfirm
-                  title="删除后不再投递，投递记录也一并删掉"
+                  title={t('删除后不再投递，投递记录也一并删掉')}
                   onConfirm={() => remove.mutate(h.id)}
                 >
                   <Button size="small" danger>
-                    删除
+                    {t('删除')}
                   </Button>
                 </Popconfirm>
               </Space>
@@ -226,7 +226,7 @@ export default function WebhooksTab({ tid }: { tid: string }) {
       />
 
       <Modal
-        title={editing ? '编辑 webhook' : '新建 webhook'}
+        title={editing ? t('编辑 webhook') : t('新建 webhook')}
         open={open}
         onCancel={() => setOpen(false)}
         onOk={() => form.submit()}
@@ -237,28 +237,28 @@ export default function WebhooksTab({ tid }: { tid: string }) {
         <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)} preserve={false}>
           <Form.Item
             name="name"
-            label="名称"
-            rules={[{ required: true, message: '给这个 webhook 起个名字' }]}
+            label={t('名称')}
+            rules={[{ required: true, message: t('给这个 webhook 起个名字') }]}
           >
-            <Input placeholder="例如：禅道同步" />
+            <Input placeholder={t('例如：禅道同步')} />
           </Form.Item>
-          <Form.Item name="kind" label="渠道类型">
+          <Form.Item name="kind" label={t('渠道类型')}>
             <Select
               options={[
-                { value: 'generic', label: '通用 Webhook（HMAC 签名）' },
-                { value: 'wecom', label: '企业微信机器人' },
-                { value: 'feishu', label: '飞书机器人' },
-                { value: 'dingtalk', label: '钉钉机器人' },
+                { value: 'generic', label: t('通用 Webhook（HMAC 签名）') },
+                { value: 'wecom', label: t('企业微信机器人') },
+                { value: 'feishu', label: t('飞书机器人') },
+                { value: 'dingtalk', label: t('钉钉机器人') },
                 { value: 'slack', label: 'Slack Incoming Webhook' },
               ]}
             />
           </Form.Item>
           <Form.Item
             name="url"
-            label={kind === 'generic' ? '地址' : '机器人 Webhook 地址'}
+            label={kind === 'generic' ? t('地址') : t('机器人 Webhook 地址')}
             rules={[
-              { required: true, message: '请输入接收地址' },
-              { pattern: /^https?:\/\//, message: '要以 http:// 或 https:// 开头' },
+              { required: true, message: t('请输入接收地址') },
+              { pattern: /^https?:\/\//, message: t('要以 http:// 或 https:// 开头') },
             ]}
           >
             <Input placeholder="https://..." />
@@ -268,43 +268,43 @@ export default function WebhooksTab({ tid }: { tid: string }) {
             label={
               kind === 'generic'
                 ? editing
-                  ? '密钥（留空则不修改）'
-                  : '密钥'
-                : '签名密钥（可选）'
+                  ? t('密钥（留空则不修改）')
+                  : t('密钥')
+                : t('签名密钥（可选）')
             }
             tooltip={
               kind === 'generic'
-                ? '接收方拿它比对 X-QA-Token，并用它验 HMAC 签名。存进去之后读不回来，只能改。'
-                : '钉钉/飞书机器人开启了「加签」时才需要填。'
+                ? t('接收方拿它比对 X-QA-Token，并用它验 HMAC 签名。存进去之后读不回来，只能改。')
+                : t('钉钉/飞书机器人开启了「加签」时才需要填。')
             }
             rules={
               kind === 'generic' && !editing
                 ? [
-                    { required: true, message: '请设置密钥' },
-                    { min: 8, message: '至少 8 位' },
+                    { required: true, message: t('请设置密钥') },
+                    { min: 8, message: t('至少 8 位') },
                   ]
                 : []
             }
           >
-            <Input.Password placeholder={editing ? '留空则不修改' : kind === 'generic' ? '必填' : '可选'} />
+            <Input.Password placeholder={editing ? t('留空则不修改') : kind === 'generic' ? t('必填') : t('可选')} />
           </Form.Item>
-          <Form.Item name="events" label="订阅事件" rules={[{ required: true, message: '至少选一个' }]}>
+          <Form.Item name="events" label={t('订阅事件')} rules={[{ required: true, message: t('至少选一个') }]}>
             <Select
               mode="multiple"
-              placeholder="选择要投递的事件"
-              options={eventTypes.map((t) => ({ value: t.event, label: t.label }))}
+              placeholder={t('选择要投递的事件')}
+              options={eventTypes.map((item) => ({ value: item.event, label: t(item.label ?? item.event) }))}
             />
           </Form.Item>
           <Space size={24}>
-            <Form.Item name="is_active" label="启用" valuePropName="checked">
+            <Form.Item name="is_active" label={t('启用')} valuePropName="checked">
               <Switch />
             </Form.Item>
             {kind === 'generic' && (
               <Form.Item
                 name="include_yaml"
-                label="连用例 YAML 一起发"
+                label={t('连用例 YAML 一起发')}
                 valuePropName="checked"
-                tooltip="默认不发正文（用例多的时候 payload 会到几百 KB）。接收方需要正文时才开"
+                tooltip={t('默认不发正文（用例多的时候 payload 会到几百 KB）。接收方需要正文时才开')}
               >
                 <Switch />
               </Form.Item>
@@ -332,7 +332,7 @@ export function DeliveriesModal({ hook, onClose }: { hook: Webhook | null; onClo
   const again = useMutation({
     mutationFn: (id: string) => redeliver(hook!.id, id),
     onSuccess: () => {
-      message.success('已重新排队');
+      message.success(t('已重新排队'));
       queryClient.invalidateQueries({ queryKey: ['webhook-deliveries', hook?.id] });
     },
     onError: (e) => message.error(apiError(e)),
@@ -340,7 +340,7 @@ export function DeliveriesModal({ hook, onClose }: { hook: Webhook | null; onClo
 
   return (
     <Modal
-      title={`投递记录 · ${hook?.name ?? ''}`}
+      title={t('投递记录 · {name}', { name: hook?.name ?? '' })}
       open={Boolean(hook)}
       onCancel={onClose}
       footer={null}
@@ -352,18 +352,18 @@ export function DeliveriesModal({ hook, onClose }: { hook: Webhook | null; onClo
         loading={isLoading}
         dataSource={rows}
         pagination={PAGE}
-        locale={{ emptyText: '还没有投递记录' }}
+        locale={{ emptyText: t('还没有投递记录') }}
         columns={[
           {
-            title: '时间',
+            title: t('时间'),
             dataIndex: 'created_at',
             width: 165,
             sorter: byDate<WebhookDelivery>((d) => d.created_at),
             render: (v: string) => fmtDateTime(v),
           },
-          { title: '事件', dataIndex: 'event', width: 140 },
+          { title: t('事件'), dataIndex: 'event', width: 140 },
           {
-            title: '结果',
+            title: t('结果'),
             width: 150,
             render: (_, d) => (
               <Tag
@@ -372,17 +372,17 @@ export function DeliveriesModal({ hook, onClose }: { hook: Webhook | null; onClo
                 }
               >
                 {d.status === 'success'
-                  ? `成功 ${d.response_status ?? ''}`
+                  ? t('成功 {status}', { status: d.response_status ?? '' })
                   : d.status === 'pending'
-                    ? `第 ${d.attempts + 1} 次待投`
-                    : '失败'}
+                    ? t('第 {n} 次待投', { n: d.attempts + 1 })
+                    : t('失败')}
               </Tag>
             ),
           },
           {
             // 这一列的内容是一整段 JSON / 报错原文：必须给定宽度 + 单行省略，
             // 否则 antd 的自动布局会按最长内容把整张表撑出弹窗（实测溢出 100+px）
-            title: '响应 / 错误',
+            title: t('响应 / 错误'),
             width: 420,
             ellipsis: true,
             render: (_, d) => (
@@ -392,11 +392,11 @@ export function DeliveriesModal({ hook, onClose }: { hook: Webhook | null; onClo
             ),
           },
           {
-            title: '操作',
+            title: t('操作'),
             width: 90,
             render: (_, d) => (
               <Button size="small" onClick={() => again.mutate(d.id)}>
-                重发
+                {t('重发')}
               </Button>
             ),
           },

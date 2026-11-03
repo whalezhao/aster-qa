@@ -6,6 +6,7 @@ import { getIterationsByTeam } from '../../api/iterations';
 import { getTagsByTeam, createTag, deleteTag, updateTag } from '../../api/tags';
 import { apiError } from '../../api/client';
 import { PAGE, byText } from '../../lib/table';
+import { t } from '../../i18n';
 import type {
   Tag as TagType } from '../../api/types';
 import QaTable from '../../components/QaTable';
@@ -30,7 +31,7 @@ export default function TagsTab({ tid }: { tid: string }) {
     mutationFn: (v: TagFormValues) =>
       editing ? updateTag(editing.id, v) : createTag(tid, { ...v, name: v.name }),
     onSuccess: () => {
-      message.success(editing ? '标签已更新' : '标签已创建');
+      message.success(editing ? t('标签已更新') : t('标签已创建'));
       setOpen(false);
       invalidate();
     },
@@ -40,7 +41,7 @@ export default function TagsTab({ tid }: { tid: string }) {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteTag(id),
     onSuccess: () => {
-      message.success('标签已删除');
+      message.success(t('标签已删除'));
       invalidate();
     },
     onError: (e) => message.error(apiError(e)),
@@ -60,7 +61,7 @@ export default function TagsTab({ tid }: { tid: string }) {
           setOpen(true);
         }}
       >
-        新建标签
+        {t('新建标签')}
       </Button>
       <QaTable<TagType>
         rowKey="id"
@@ -69,30 +70,30 @@ export default function TagsTab({ tid }: { tid: string }) {
         pagination={PAGE}
         columns={[
           {
-            title: '名称',
+            title: t('名称'),
             dataIndex: 'name',
             sorter: byText<TagType>((r) => r.name),
             render: (name: string, r) => <Tag color={r.color ?? undefined}>{name}</Tag>,
           },
           {
-            title: '所属迭代',
+            title: t('所属迭代'),
             sorter: byText<TagType>((r) => iterationName(r.iteration_id)),
             render: (_, r) => (r.iteration_id ? iterationName(r.iteration_id) ?? r.iteration_id : '-'),
           },
           {
-            title: '颜色',
+            title: t('颜色'),
             dataIndex: 'color',
             sorter: byText<TagType>((r) => r.color),
             render: (v: string | null) => v || '-',
           },
           {
-            title: '描述',
+            title: t('描述'),
             dataIndex: 'description',
             sorter: byText<TagType>((r) => r.description),
             render: (v: string | null) => v || '-',
           },
           {
-            title: '操作',
+            title: t('操作'),
             width: 160,
             render: (_, r) => (
               <Space>
@@ -109,11 +110,11 @@ export default function TagsTab({ tid }: { tid: string }) {
                     setOpen(true);
                   }}
                 >
-                  编辑
+                  {t('编辑')}
                 </Button>
-                <Popconfirm title="确定删除该标签？" onConfirm={() => deleteMutation.mutate(r.id)}>
+                <Popconfirm title={t('确定删除该标签？')} onConfirm={() => deleteMutation.mutate(r.id)}>
                   <Button size="small" danger>
-                    删除
+                    {t('删除')}
                   </Button>
                 </Popconfirm>
               </Space>
@@ -123,7 +124,7 @@ export default function TagsTab({ tid }: { tid: string }) {
       />
 
       <Modal
-        title={editing ? '编辑标签' : '新建标签'}
+        title={editing ? t('编辑标签') : t('新建标签')}
         open={open}
         onCancel={() => setOpen(false)}
         onOk={() => form.submit()}
@@ -131,20 +132,20 @@ export default function TagsTab({ tid }: { tid: string }) {
         forceRender
       >
         <Form form={form} layout="vertical" onFinish={(v) => saveMutation.mutate(v)} preserve={false}>
-          <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入标签名称' }]}>
+          <Form.Item name="name" label={t('名称')} rules={[{ required: true, message: t('请输入标签名称') }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="iteration_id" label="所属迭代">
+          <Form.Item name="iteration_id" label={t('所属迭代')}>
             <Select
               allowClear
-              placeholder="可不选"
+              placeholder={t('可不选')}
               options={iterations.map((i) => ({ value: i.id, label: i.name }))}
             />
           </Form.Item>
-          <Form.Item name="color" label="颜色">
+          <Form.Item name="color" label={t('颜色')}>
             <Select
               allowClear
-              placeholder="选择预设色"
+              placeholder={t('选择预设色')}
               options={colorPresets.map((c) => ({
                 value: c,
                 label: (
@@ -156,7 +157,7 @@ export default function TagsTab({ tid }: { tid: string }) {
               }))}
             />
           </Form.Item>
-          <Form.Item name="description" label="描述">
+          <Form.Item name="description" label={t('描述')}>
             <Input.TextArea rows={3} />
           </Form.Item>
         </Form>

@@ -35,12 +35,13 @@ import {
 } from '../api/runs';
 import { apiError } from '../api/client';
 import {
-  BATCH_STATUS_LABELS,
+  batchStatusLabel,
   fmtDateTime,
   fmtDuration,
   fmtPercent,
-  TASK_TYPE_LABELS,
+  taskTypeLabel,
 } from '../lib/format';
+import { t } from '../i18n';
 
 /**
  * 测试执行报告（合规留存版）。
@@ -87,7 +88,7 @@ export default function BatchReport() {
     mutationFn: () => signBatchReport(bid, note.trim() || undefined),
     onSuccess: (state) => {
       queryClient.setQueryData(['batch-signoff', bid], state);
-      message.success('已签章（仅当前执行记录）');
+      message.success(t('已签章（仅当前执行记录）'));
       setSignOpen(false);
       setNote('');
     },
@@ -97,7 +98,7 @@ export default function BatchReport() {
     mutationFn: () => revokeBatchReportSignoff(bid),
     onSuccess: (state) => {
       queryClient.setQueryData(['batch-signoff', bid], state);
-      message.success('签章已撤销');
+      message.success(t('签章已撤销'));
     },
     onError: (error) => message.error(apiError(error)),
   });
@@ -117,7 +118,7 @@ export default function BatchReport() {
   if (batchQuery.isError || !batchQuery.data) {
     return (
       <div style={{ padding: 40 }}>
-        <Alert type="error" showIcon message="执行记录不存在或无权访问" />
+        <Alert type="error" showIcon message={t('执行记录不存在或无权访问')} />
       </div>
     );
   }
@@ -129,7 +130,7 @@ export default function BatchReport() {
       ? fallbackQuery.data.data
       : null;
   const signoff = signoffQuery.data;
-  const teamName = batch.team_name || '测试团队';
+  const teamName = batch.team_name || t('测试团队');
   const running = batch.status === 'running';
 
   return (
@@ -137,23 +138,23 @@ export default function BatchReport() {
       <div className="qa-formal-toolbar no-print">
         <Space wrap>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(`/executions/${bid}`)}>
-            返回
+            {t('返回')}
           </Button>
           <Button icon={<PrinterOutlined />} onClick={() => window.print()} disabled={!report}>
-            打印 / 导出 PDF
+            {t('打印 / 导出 PDF')}
           </Button>
           {signoff?.can_sign && signoff.report_available && report && (
             <>
               {signoff.signed && !signoff.stale ? (
                 <Popconfirm
-                  title="撤销这份报告的签章？"
-                  description="撤销会留痕，报告本身不会被删除。"
-                  okText="撤销签章"
-                  cancelText="取消"
+                  title={t('撤销这份报告的签章？')}
+                  description={t('撤销会留痕，报告本身不会被删除。')}
+                  okText={t('撤销签章')}
+                  cancelText={t('取消')}
                   onConfirm={() => revoke.mutate()}
                 >
                   <Button danger loading={revoke.isPending}>
-                    撤销签章
+                    {t('撤销签章')}
                   </Button>
                 </Popconfirm>
               ) : (
@@ -162,7 +163,7 @@ export default function BatchReport() {
                   icon={<SafetyCertificateOutlined />}
                   onClick={() => setSignOpen(true)}
                 >
-                  {signoff.stale ? '重新签章' : '签章'}
+                  {signoff.stale ? t('重新签章') : t('签章')}
                 </Button>
               )}
             </>
@@ -176,82 +177,82 @@ export default function BatchReport() {
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message="执行尚未结束"
-          description="报告会在本次执行全部结束后生成，届时才能签章。"
+          message={t('执行尚未结束')}
+          description={t('报告会在本次执行全部结束后生成，届时才能签章。')}
         />
       )}
 
       {!report ? (
         <div style={{ padding: 40 }}>
-          <Empty description="这份执行还没有可用的聚合报告" />
+          <Empty description={t('这份执行还没有可用的聚合报告')} />
           <div style={{ textAlign: 'center', marginTop: 16 }}>
-            <Link to={`/executions/${batch.id}`}>返回执行详情</Link>
+            <Link to={`/executions/${batch.id}`}>{t('返回执行详情')}</Link>
           </div>
         </div>
       ) : (
         <article className="qa-formal-doc">
           <header className="qa-formal-cover">
             <div className="qa-formal-org">{teamName}</div>
-            <h1>测试执行报告</h1>
+            <h1>{t('测试执行报告')}</h1>
             <div className="qa-formal-en">TEST EXECUTION REPORT</div>
-            <div className="qa-formal-no">报告编号：{reportNo(batch)}</div>
+            <div className="qa-formal-no">{t('报告编号：')}{reportNo(batch)}</div>
             <table className="qa-formal-meta">
               <tbody>
                 <tr>
-                  <th>测试任务</th>
+                  <th>{t('测试任务')}</th>
                   <td>{batch.task_name || batch.name}</td>
-                  <th>任务类型</th>
-                  <td>{(TASK_TYPE_LABELS as Record<string, string>)[batch.task_type ?? ''] ?? '—'}</td>
+                  <th>{t('任务类型')}</th>
+                  <td>{taskTypeLabel(batch.task_type ?? '') || '—'}</td>
                 </tr>
                 <tr>
-                  <th>触发方式</th>
+                  <th>{t('触发方式')}</th>
                   <td>
                     {
                       {
-                        manual: '手动执行',
-                        regression: '回归执行',
-                        rerun: '失败重跑',
-                        schedule: '定时执行',
-                        ci: 'CI 触发',
+                        manual: t('手动执行'),
+                        regression: t('回归执行'),
+                        rerun: t('失败重跑'),
+                        schedule: t('定时执行'),
+                        ci: t('CI 触发'),
                       }[batch.trigger] ?? batch.trigger
                     }
                   </td>
-                  <th>执行状态</th>
-                  <td>{BATCH_STATUS_LABELS[batch.status] ?? batch.status}</td>
+                  <th>{t('执行状态')}</th>
+                  <td>{batchStatusLabel(batch.status)}</td>
                 </tr>
                 <tr>
-                  <th>执行环境</th>
-                  <td>{batch.environment_name || '默认'}</td>
-                  <th>质量门禁</th>
+                  <th>{t('执行环境')}</th>
+                  <td>{batch.environment_name || t('默认')}</td>
+                  <th>{t('质量门禁')}</th>
                   <td>
                     {batch.gate_detail && batch.gate_detail.status !== 'disabled'
                       ? batch.gate_detail.status === 'passed'
-                        ? '通过'
+                        ? t('通过')
                         : batch.gate_detail.status === 'failed'
-                          ? `未通过：${batch.gate_detail.reasons.join('；')}`
+                          ? t('未通过：{reasons}', { reasons: batch.gate_detail.reasons.join(t('；')) })
                           : batch.gate_detail.status === 'no_data'
-                            ? `无有效执行：${batch.gate_detail.reasons.join('；')}`
-                            : '待执行完成'
-                      : '未启用'}
+                            ? t('无有效执行：{reasons}', { reasons: batch.gate_detail.reasons.join(t('；')) })
+                            : t('待执行完成')
+                      : t('未启用')}
                   </td>
                 </tr>
                 <tr>
-                  <th>执行人</th>
+                  <th>{t('执行人')}</th>
                   <td>{batch.created_by_name || '—'}</td>
-                  <th>执行时间</th>
+                  <th>{t('执行时间')}</th>
                   <td>
                     {fmtDateTime(batch.started_at ?? batch.created_at)}
-                    {batch.ended_at ? ` 至 ${fmtDateTime(batch.ended_at)}` : ''}
+                    {batch.ended_at ? t(' 至 {time}', { time: fmtDateTime(batch.ended_at) }) : ''}
                   </td>
                 </tr>
                 <tr>
-                  <th>涉及项目</th>
-                  <td>{batch.project_count} 个</td>
-                  <th>执行耗时</th>
+                  <th>{t('涉及项目')}</th>
+                  <td>{t('{n} 个', { n: batch.project_count })}</td>
+                  <th>{t('执行耗时')}</th>
                   <td>{fmtDuration(batch.duration_ms)}</td>
                 </tr>
                 <tr>
-                  <th>执行 ID</th>
+                  <th>{t('执行 ID')}</th>
                   <td colSpan={3}>
                     <Typography.Text code style={{ fontSize: 12 }}>
                       {batch.id}
@@ -263,39 +264,41 @@ export default function BatchReport() {
           </header>
 
           <section className="qa-formal-section">
-            <h2>一、执行概况</h2>
+            <h2>{t('一、执行概况')}</h2>
             <div className="qa-formal-kpis">
-              <Kpi label="用例总数" value={String(report.stats.cases)} />
-              <Kpi label="通过" value={String(report.stats.passed)} tone="pass" />
-              <Kpi label="失败" value={String(report.stats.failed)} tone={report.stats.failed ? 'fail' : undefined} />
+              <Kpi label={t('用例总数')} value={String(report.stats.cases)} />
+              <Kpi label={t('通过')} value={String(report.stats.passed)} tone="pass" />
+              <Kpi label={t('失败')} value={String(report.stats.failed)} tone={report.stats.failed ? 'fail' : undefined} />
               <Kpi
-                label="通过率"
+                label={t('通过率')}
                 value={fmtPercent(report.stats.cases ? report.stats.passed / report.stats.cases : null)}
               />
-              <Kpi label="步骤数" value={String(report.stats.steps)} />
-              <Kpi label="耗时" value={fmtDuration(report.stats.durationMs)} />
+              <Kpi label={t('步骤数')} value={String(report.stats.steps)} />
+              <Kpi label={t('耗时')} value={fmtDuration(report.stats.durationMs)} />
             </div>
             <p className="qa-formal-note">
-              本次执行覆盖 {batch.project_count} 个项目、{report.stats.cases} 个用例，共{' '}
-              {report.stats.steps} 个执行步骤；使用模型{' '}
-              {report.stats.models.map((model) => model.model).join('、') || '—'}。
-              详细执行证据（关键帧、参数、日志）可在平台按执行 ID 追溯。
+              {t('本次执行覆盖 {projects} 个项目、{cases} 个用例，共 {steps} 个执行步骤；使用模型 {models}。详细执行证据（关键帧、参数、日志）可在平台按执行 ID 追溯。', {
+                projects: batch.project_count,
+                cases: report.stats.cases,
+                steps: report.stats.steps,
+                models: report.stats.models.map((model) => model.model).join(t('、')) || '—',
+              })}
             </p>
           </section>
 
           <section className="qa-formal-section">
-            <h2>二、测试范围与功能结果</h2>
+            <h2>{t('二、测试范围与功能结果')}</h2>
             {batch.features.length === 0 ? (
-              <p className="qa-formal-note">本次执行没有功能维度的结果。</p>
+              <p className="qa-formal-note">{t('本次执行没有功能维度的结果。')}</p>
             ) : (
               <table className="qa-formal-table">
                 <thead>
                   <tr>
                     <th>#</th>
-                    <th>功能</th>
-                    <th>分期</th>
-                    <th>通过 / 总数</th>
-                    <th>结果</th>
+                    <th>{t('功能')}</th>
+                    <th>{t('分期')}</th>
+                    <th>{t('通过 / 总数')}</th>
+                    <th>{t('结果')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -303,13 +306,13 @@ export default function BatchReport() {
                     <tr key={feature.feature_id}>
                       <td>{index + 1}</td>
                       <td>{feature.name}</td>
-                      <td>{feature.stage === 'released' ? '正式' : '当前迭代'}</td>
+                      <td>{feature.stage === 'released' ? t('正式') : t('当前迭代')}</td>
                       <td>
                         {feature.passed}/{feature.total}
                       </td>
                       <td>
                         <span className={`qa-formal-status ${feature.failed ? 'is-fail' : 'is-pass'}`}>
-                          {feature.failed ? `失败 ${feature.failed}` : '通过'}
+                          {feature.failed ? t('失败 {n}', { n: feature.failed }) : t('通过')}
                         </span>
                       </td>
                     </tr>
@@ -320,18 +323,18 @@ export default function BatchReport() {
           </section>
 
           <section className="qa-formal-section">
-            <h2>三、用例执行明细</h2>
+            <h2>{t('三、用例执行明细')}</h2>
             <CaseTable report={report} />
           </section>
 
           {failedCases(report).length > 0 && (
             <section className="qa-formal-section">
-              <h2>四、失败详情</h2>
+              <h2>{t('四、失败详情')}</h2>
               <div className="qa-formal-failures">
                 {failedCases(report).map(({ project, item }) => (
                   <div className="qa-formal-failure" key={`${project.id}:${item.id}`}>
                     <div className="qa-formal-failure-head">
-                      <span className="qa-formal-status is-fail">失败</span>
+                      <span className="qa-formal-status is-fail">{t('失败')}</span>
                       <strong>{item.name}</strong>
                       <span className="qa-formal-failure-project">{project.projectName || project.name}</span>
                     </div>
@@ -341,13 +344,13 @@ export default function BatchReport() {
                         <div className="qa-formal-failure-step" key={`${item.id}-${index}`}>
                           <div className="qa-formal-failure-title">
                             {step.title}
-                            {step.error ? '' : '（未提供具体错误信息）'}
+                            {step.error ? '' : t('（未提供具体错误信息）')}
                           </div>
                           {step.error && <pre className="qa-formal-error">{step.error}</pre>}
                         </div>
                       ))}
                     {item.steps.every((step) => step.status !== 'failed') && (
-                      <div className="qa-formal-note">用例失败，具体步骤信息见平台执行记录。</div>
+                      <div className="qa-formal-note">{t('用例失败，具体步骤信息见平台执行记录。')}</div>
                     )}
                   </div>
                 ))}
@@ -356,77 +359,78 @@ export default function BatchReport() {
           )}
 
           <section className="qa-formal-section qa-formal-sign">
-            <h2>{failedCases(report).length > 0 ? '五' : '四'}、报告签章</h2>
+            <h2>{failedCases(report).length > 0 ? t('五、报告签章') : t('四、报告签章')}</h2>
             {signoff?.signed && !signoff.stale && signoff.signoff ? (
               <Seal teamName={teamName} signoff={signoff.signoff} />
             ) : signoff?.stale ? (
               <Alert
                 type="warning"
                 showIcon
-                message="原签章已失效"
-                description="报告内容在签章后发生了变化（或报告文件被重新生成），请重新签章。"
+                message={t('原签章已失效')}
+                description={t('报告内容在签章后发生了变化（或报告文件被重新生成），请重新签章。')}
               />
             ) : (
               <div className="qa-formal-unsigned">
-                <div className="qa-formal-unsigned-title">本执行记录尚未签章</div>
+                <div className="qa-formal-unsigned-title">{t('本执行记录尚未签章')}</div>
                 <div className="qa-formal-note">
                   {!signoff?.report_available
-                    ? '聚合报告尚未生成（老批次没有聚合产物），暂不能签章。'
+                    ? t('聚合报告尚未生成（老批次没有聚合产物），暂不能签章。')
                     : signoff.can_sign
-                      ? '签章只作用于当前执行记录；请在执行记录列表或本页选择要签章的执行记录。'
-                      : '如需归档留存，请联系团队管理员完成签章。'}
+                      ? t('签章只作用于当前执行记录；请在执行记录列表或本页选择要签章的执行记录。')
+                      : t('如需归档留存，请联系团队管理员完成签章。')}
                 </div>
               </div>
             )}
 
             <div className="qa-formal-sign-lines">
-              <span>执行人（签字）：{batch.created_by_name || '________________'}</span>
+              <span>{t('执行人（签字）：')}{batch.created_by_name || '________________'}</span>
               <span>
-                审核人（签章）：
+                {t('审核人（签章）：')}
                 {signoff?.signed && !signoff.stale && signoff.signoff?.signed_by_name
                   ? signoff.signoff.signed_by_name
                   : '________________'}
               </span>
               <span>
-                日期：
+                {t('日期：')}
                 {signoff?.signed && !signoff.stale && signoff.signoff
                   ? fmtDateTime(signoff.signoff.signed_at)
                   : '________________'}
               </span>
             </div>
             <div className="qa-formal-fingerprint">
-              报告指纹：{signoff?.report_hash ?? '—'}
+              {t('报告指纹：')}{signoff?.report_hash ?? '—'}
               <span className="qa-formal-fingerprint-note">
-                （仅当前执行记录；内容变更后指纹失效，可用于核验留存版本）
+                {t('（仅当前执行记录；内容变更后指纹失效，可用于核验留存版本）')}
               </span>
             </div>
           </section>
 
           <footer className="qa-formal-footer">
-            本报告由 Aster QA 根据实际执行产物自动生成 · 报告生成时间{' '}
-            {fmtDateTime(report.generatedAt)} · 执行 ID {batch.id}
+            {t('本报告由 Aster QA 根据实际执行产物自动生成 · 报告生成时间 {time} · 执行 ID {id}', {
+              time: fmtDateTime(report.generatedAt),
+              id: batch.id,
+            })}
           </footer>
         </article>
       )}
 
       <Modal
-        title="签章 · 仅当前执行记录"
+        title={t('签章 · 仅当前执行记录')}
         open={signOpen}
         onCancel={() => setSignOpen(false)}
         onOk={() => sign.mutate()}
         confirmLoading={sign.isPending}
-        okText="确认签章"
-        cancelText="取消"
+        okText={t('确认签章')}
+        cancelText={t('取消')}
       >
         <Typography.Paragraph type="secondary">
-          本次签章只作用于执行记录「{batch.name}」，同一测试任务的其他执行记录需要分别签章。
-          签章绑定当前报告内容的指纹，报告重新生成后原签章会自动失效。
+          {t('本次签章只作用于执行记录「{name}」，同一测试任务的其他执行记录需要分别签章。签章绑定当前报告内容的指纹，报告重新生成后原签章会自动失效。', { name: batch.name })}
         </Typography.Paragraph>
         <Input.TextArea
           rows={3}
           maxLength={500}
           showCount
-          placeholder="签章备注（可选），例如：本次回归结论已审核"
+          placeholder={t('签章备注（可选），例如：本次回归结论已审核')}
           value={note}
           onChange={(event) => setNote(event.target.value)}
         />
@@ -462,19 +466,19 @@ function failedCases(report: ReportStructured): Array<{ project: ReportProject; 
 function CaseTable({ report }: { report: ReportStructured }) {
   const rows = allCases(report);
   if (rows.length === 0) {
-    return <p className="qa-formal-note">报告里没有用例结果。</p>;
+    return <p className="qa-formal-note">{t('报告里没有用例结果。')}</p>;
   }
   return (
     <table className="qa-formal-table">
       <thead>
         <tr>
           <th>#</th>
-          <th>项目</th>
-          <th>用例</th>
-          <th>步骤</th>
-          <th>耗时</th>
-          <th>结果</th>
-          <th>失败信息</th>
+          <th>{t('项目')}</th>
+          <th>{t('用例')}</th>
+          <th>{t('步骤')}</th>
+          <th>{t('耗时')}</th>
+          <th>{t('结果')}</th>
+          <th>{t('失败信息')}</th>
         </tr>
       </thead>
       <tbody>
@@ -489,7 +493,7 @@ function CaseTable({ report }: { report: ReportStructured }) {
               <td>{fmtDuration(item.durationMs)}</td>
               <td>
                 <span className={`qa-formal-status ${item.status === 'passed' ? 'is-pass' : item.status === 'failed' ? 'is-fail' : ''}`}>
-                  {item.status === 'passed' ? '通过' : item.status === 'failed' ? '失败' : '未执行'}
+                  {item.status === 'passed' ? t('通过') : item.status === 'failed' ? t('失败') : t('未执行')}
                 </span>
               </td>
               <td className="qa-formal-failure-cell">
@@ -507,25 +511,25 @@ function Seal({ teamName, signoff }: { teamName: string; signoff: BatchSignoffIn
   const signedAt = new Date(signoff.signed_at);
   return (
     <div className="qa-formal-seal-row">
-      <div className="qa-seal" aria-label="电子签章">
+      <div className="qa-seal" aria-label={t('电子签章')}>
         <span className="qa-seal-team">{teamName}</span>
         <span className="qa-seal-star">★</span>
-        <span className="qa-seal-title">测试报告专用章</span>
+        <span className="qa-seal-title">{t('测试报告专用章')}</span>
         <span className="qa-seal-date">
           {signedAt.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })}
         </span>
       </div>
       <div className="qa-formal-seal-info">
         <div className="qa-formal-seal-name">
-          {signoff.signed_by_name || '—'} <span>（电子签章）</span>
+          {signoff.signed_by_name || '—'} <span>{t('（电子签章）')}</span>
         </div>
-        <div>签章时间：{fmtDateTime(signoff.signed_at)}</div>
+        <div>{t('签章时间：')}{fmtDateTime(signoff.signed_at)}</div>
         <div>
-          签章时结果：{signoff.passed}/{signoff.case_count} 通过
-          {signoff.failed ? `，${signoff.failed} 个失败` : ''}
+          {t('签章时结果：')}{signoff.passed}/{signoff.case_count} {t('通过')}
+          {signoff.failed ? t('，{n} 个失败', { n: signoff.failed }) : ''}
         </div>
-        {signoff.note && <div>备注：{signoff.note}</div>}
-        <div className="qa-formal-seal-hint">仅对当前执行记录生效，由 Aster QA 生成并与报告指纹绑定</div>
+        {signoff.note && <div>{t('备注：')}{signoff.note}</div>}
+        <div className="qa-formal-seal-hint">{t('仅对当前执行记录生效，由 Aster QA 生成并与报告指纹绑定')}</div>
       </div>
     </div>
   );

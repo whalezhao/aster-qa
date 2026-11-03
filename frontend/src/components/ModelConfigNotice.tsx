@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, Space, Typography } from 'antd';
 import { Link } from 'react-router-dom';
 import { getModelConfig } from '../api/projects';
+import { t } from '../i18n';
 
 /**
  * 「这个项目还没配好大模型」的提示条。
@@ -29,21 +30,22 @@ export default function ModelConfigNotice({
 
   if (!projectId || !data || data.configured) return null;
 
-  const missing = data.missing.join('、');
+  const missing = data.missing.join(t('、'));
   return (
     <Alert
       type="warning"
       showIcon
       style={{ marginBottom: 16 }}
-      message={`该项目还没配好大模型，无法${action}`}
+      message={t('该项目还没配好大模型，无法{action}', { action: t(action) })}
       description={
         <Space direction="vertical" size={4}>
           <Typography.Text>
-            缺少：<Typography.Text strong>{missing}</Typography.Text>
+            {t('缺少：')}<Typography.Text strong>{missing}</Typography.Text>
           </Typography.Text>
           <Typography.Text type="secondary">
-            平台不提供全局模型，每个项目必须自己指定模型。
-            到 <Link to={`/projects/${projectId}`}>项目详情 → 大模型配置</Link> 补齐后即可{action}。
+            {t('平台不提供全局模型，每个项目必须自己指定模型。')}
+            {t('到')} <Link to={`/projects/${projectId}`}>{t('项目详情 → 大模型配置')}</Link>
+            {t('补齐后即可{action}。', { action: t(action) })}
           </Typography.Text>
         </Space>
       }

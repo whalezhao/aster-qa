@@ -1,4 +1,5 @@
 import type { RunStatus } from '../api/types';
+import { getLocale, t } from '../i18n';
 
 const ACTIVE_LABELS: Partial<Record<RunStatus, string>> = {
   queued: '排队中',
@@ -43,7 +44,20 @@ export const BATCH_STATUS_COLORS: Record<string, string> = {
 /** 非用例原因导致的失败的说明文案，用于列表与详情；不是这类失败时返回 null。 */
 export function failureKindLabel(kind: string | null | undefined): string | null {
   if (!kind) return null;
-  return FAILURE_KIND_LABELS[kind] ?? kind;
+  return t(FAILURE_KIND_LABELS[kind] ?? kind);
+}
+
+/** 状态 / 类型的中文值在表里，展示时再过一层翻译。 */
+export function batchStatusLabel(status: string): string {
+  return t(BATCH_STATUS_LABELS[status] ?? status);
+}
+
+export function taskTypeLabel(type: string): string {
+  return t(TASK_TYPE_LABELS[type] ?? type);
+}
+
+export function taskStatusLabel(status: string): string {
+  return t(TASK_STATUS_LABELS[status] ?? status);
 }
 
 /**
@@ -59,20 +73,20 @@ export function runStatusView(run: {
   failure_kind?: string | null;
 }): { color: string; label: string } {
   if (ACTIVE.includes(run.status)) {
-    return { color: 'processing', label: ACTIVE_LABELS[run.status] ?? run.status };
+    return { color: 'processing', label: t(ACTIVE_LABELS[run.status] ?? run.status) };
   }
-  if (run.status === 'cancelled') return { color: 'default', label: '已取消' };
+  if (run.status === 'cancelled') return { color: 'default', label: t('已取消') };
 
   const kind = failureKindLabel(run.failure_kind);
   if (kind) {
-    return { color: 'default', label: `未计入统计 · ${kind}` };
+    return { color: 'default', label: t('未计入统计 · {kind}', { kind }) };
   }
-  if (run.status === 'failed') return { color: 'error', label: '执行失败' };
-  if (run.status === 'timed_out') return { color: 'error', label: '执行超时' };
+  if (run.status === 'failed') return { color: 'error', label: t('执行失败') };
+  if (run.status === 'timed_out') return { color: 'error', label: t('执行超时') };
   // succeeded：执行跑完了，通过与否看 failed
   const failed = run.failed ?? 0;
-  if (failed > 0) return { color: 'warning', label: `完成 · 含 ${failed} 失败` };
-  return { color: 'success', label: '完成' };
+  if (failed > 0) return { color: 'warning', label: t('完成 · 含 {n} 失败', { n: failed }) };
+  return { color: 'success', label: t('完成') };
 }
 
 export function fmtPercent(v: number | null | undefined, digits = 1): string {
@@ -100,7 +114,7 @@ export function fmtTokens(n: number | null | undefined): string {
 
 export function fmtDateTime(v: string | null | undefined): string {
   if (!v) return '-';
-  return new Date(v).toLocaleString('zh-CN');
+  return new Date(v).toLocaleString(getLocale() === 'en' ? 'en-US' : 'zh-CN');
 }
 
 export const TASK_TYPE_LABELS: Record<string, string> = {

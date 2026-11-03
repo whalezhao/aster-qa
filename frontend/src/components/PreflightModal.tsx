@@ -5,6 +5,7 @@ import { preflightTask } from '../api/preflight';
 import { getProjectEnvironments } from '../api/environments';
 import { getTaskFeatures } from '../api/tasks';
 import type { PreflightCheck } from '../api/types';
+import { t } from '../i18n';
 
 interface Props {
   open: boolean;
@@ -29,14 +30,14 @@ function CheckRow({ item }: { item: PreflightCheck }) {
       <Space direction="vertical" size={0} style={{ width: '100%' }}>
         <Space wrap>
           <Tag color={severityColor[item.severity] ?? 'default'}>
-            {item.severity === 'ok' ? '通过' : item.severity === 'warning' ? '注意' : '阻断'}
+            {item.severity === 'ok' ? t('通过') : item.severity === 'warning' ? t('注意') : t('阻断')}
           </Tag>
           {item.project_name && <Typography.Text strong>{item.project_name}</Typography.Text>}
-          <Typography.Text>{item.message}</Typography.Text>
+          <Typography.Text>{t(item.message)}</Typography.Text>
         </Space>
         {!item.ok && item.overridable && (
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            这一项可以继续执行，但失败风险更高。
+            {t('这一项可以继续执行，但失败风险更高。')}
           </Typography.Text>
         )}
       </Space>
@@ -81,7 +82,10 @@ export default function PreflightModal({
     },
     enabled: open && Boolean(taskId) && projectIds.length > 0,
   });
-  const options = (environmentOptions ?? ['默认']).map((name) => ({ value: name, label: name }));
+  const options = (environmentOptions ?? ['默认']).map((name) => ({
+    value: name,
+    label: name === '默认' ? t('默认') : name,
+  }));
 
   const queries = useQueries({
     queries: selected.map((name) => ({
@@ -99,35 +103,35 @@ export default function PreflightModal({
   return (
     <Modal
       open={open}
-      title={`执行前检查${taskName ? ` · ${taskName}` : ''}`}
+      title={taskName ? t('执行前检查 · {name}', { name: taskName }) : t('执行前检查')}
       width={680}
       onCancel={onCancel}
       footer={
         <Space>
-          <Button onClick={onCancel}>取消</Button>
+          <Button onClick={onCancel}>{t('取消')}</Button>
           <Button
             type="primary"
             disabled={!selected.length || loading || Boolean(error) || blocking}
             onClick={() => onRun(selected)}
           >
-            开始执行
+            {t('开始执行')}
           </Button>
         </Space>
       }
     >
       <Space direction="vertical" size={12} style={{ width: '100%' }}>
         <Space wrap>
-          <Typography.Text strong>执行环境</Typography.Text>
+          <Typography.Text strong>{t('执行环境')}</Typography.Text>
           <Select
             mode="multiple"
             style={{ minWidth: 260 }}
-            placeholder="选择一个或多个环境"
+            placeholder={t('选择一个或多个环境')}
             value={selected}
             onChange={setSelected}
             options={options}
           />
           <Typography.Text type="secondary">
-            勾选多个环境时，每个环境各生成一条执行记录。
+            {t('勾选多个环境时，每个环境各生成一条执行记录。')}
           </Typography.Text>
         </Space>
 
@@ -135,26 +139,26 @@ export default function PreflightModal({
           <div style={{ padding: 32, textAlign: 'center' }}>
             <Spin />
             <div style={{ marginTop: 12 }}>
-              <Typography.Text type="secondary">正在检查模型、环境和执行器…</Typography.Text>
+              <Typography.Text type="secondary">{t('正在检查模型、环境和执行器…')}</Typography.Text>
             </div>
           </div>
         )}
         {error && (
-          <Alert type="error" showIcon message="预检失败" description={String(error)} />
+          <Alert type="error" showIcon message={t('预检失败')} description={String(error)} />
         )}
         {!loading &&
           queries.map((query, index) =>
             query.data ? (
               <div key={selected[index]}>
                 {selected.length > 1 && (
-                  <Typography.Text strong>环境「{selected[index]}」</Typography.Text>
+                  <Typography.Text strong>{t('环境「{name}」', { name: t(selected[index]) })}</Typography.Text>
                 )}
                 <Alert
                   style={{ marginTop: 6 }}
                   type={query.data.can_run ? 'success' : 'error'}
                   showIcon
                   message={
-                    query.data.can_run ? '检查通过，可以执行' : '有阻断项，暂时不能执行'
+                    query.data.can_run ? t('检查通过，可以执行') : t('有阻断项，暂时不能执行')
                   }
                 />
                 <List

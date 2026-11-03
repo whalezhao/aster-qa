@@ -18,6 +18,7 @@ import type { CaseHistoryItem, FeatureStage, Priority, ValidateResult } from '..
 import QaTable from '../components/QaTable';
 import CaseVersionsTab from '../components/CaseVersionsTab';
 import EnvVariableHint from '../components/EnvVariableHint';
+import { t } from '../i18n';
 
 interface CaseFormValues {
   name: string;
@@ -81,7 +82,7 @@ export default function CaseEditor() {
         change_source: 'manual',
       } as CaseInput),
     onSuccess: () => {
-      message.success('用例已保存');
+      message.success(t('用例已保存'));
       queryClient.invalidateQueries({ queryKey: ['case', cid] });
       queryClient.invalidateQueries({ queryKey: ['cases'] });
       queryClient.invalidateQueries({ queryKey: ['case-versions', cid] });
@@ -100,10 +101,10 @@ export default function CaseEditor() {
   return (
     <div style={{ padding: 20 }}>
       {/* 放在 Card 外面：Card 的 loading 态会卸载子节点，放里面提示会闪 */}
-      <ModelConfigNotice projectId={testCase?.project_id} action="执行用例" />
+      <ModelConfigNotice projectId={testCase?.project_id} action={t('执行用例')} />
       <EnvVariableHint projectId={testCase?.project_id} style={{ marginBottom: 12 }} />
       <ProCard
-        title={testCase ? `用例：${testCase.name}` : '用例'}
+        title={testCase ? t('用例：{name}', { name: testCase.name }) : t('用例')}
         extra={
           <Space>
             {/* 直接手改 YAML 之外，也可以让 AI 按对话要求改 */}
@@ -113,9 +114,9 @@ export default function CaseEditor() {
               disabled={!testCase}
               onClick={() => navigate(`/cases/${cid}/ai`)}
             >
-              用 AI 修改
+              {t('用 AI 修改')}
             </Button>
-            <Link to={`/features/${testCase?.feature_id ?? ''}`}>返回功能</Link>
+            <Link to={`/features/${testCase?.feature_id ?? ''}`}>{t('返回功能')}</Link>
           </Space>
         }
         loading={isLoading}
@@ -124,53 +125,53 @@ export default function CaseEditor() {
         items={[
           {
             key: 'edit',
-            label: '编辑',
+            label: t('编辑'),
             children: (
               <Form form={form} layout="vertical" onFinish={(v) => saveMutation.mutate(v)}>
                 <Row gutter={16}>
                   <Col xs={24} lg={14}>
-                    <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入用例名称' }]}>
+                    <Form.Item name="name" label={t('名称')} rules={[{ required: true, message: t('请输入用例名称') }]}>
                       <Input />
                     </Form.Item>
                     <Space style={{ display: 'flex' }} align="start">
-                      <Form.Item name="priority" label="优先级" style={{ width: 160 }}>
+                      <Form.Item name="priority" label={t('优先级')} style={{ width: 160 }}>
                         <Select
                           allowClear
-                          placeholder="可不选"
+                          placeholder={t('可不选')}
                           options={(['P0', 'P1', 'P2', 'P3'] as Priority[]).map((p) => ({ value: p, label: p }))}
                         />
                       </Form.Item>
-                      <Form.Item name="stage_override" label="分期覆盖" style={{ width: 200 }}>
+                      <Form.Item name="stage_override" label={t('分期覆盖')} style={{ width: 200 }}>
                         <Select
                           allowClear
-                          placeholder="跟随功能"
+                          placeholder={t('跟随功能')}
                           options={[
-                            { value: 'in_iteration', label: '当前迭代' },
-                            { value: 'released', label: '正式' },
+                            { value: 'in_iteration', label: t('当前迭代') },
+                            { value: 'released', label: t('正式') },
                           ]}
                         />
                       </Form.Item>
                       <Form.Item
                         name="defect_ids"
-                        label="缺陷编号"
+                        label={t('缺陷编号')}
                         style={{ width: 240 }}
-                        tooltip="这条用例是为哪个缺陷补的（禅道/Jira 的 bug 单号）。多个用逗号分隔"
+                        tooltip={t('这条用例是为哪个缺陷补的（禅道/Jira 的 bug 单号）。多个用逗号分隔')}
                       >
-                        <Input placeholder="可留空" allowClear />
+                        <Input placeholder={t('可留空')} allowClear />
                       </Form.Item>
-                      <Form.Item label="当前生效分期">
+                      <Form.Item label={t('当前生效分期')}>
                         <Tag color={testCase?.effective_stage === 'released' ? 'success' : 'processing'}>
-                          {testCase?.effective_stage === 'released' ? '正式' : '当前迭代'}
+                          {testCase?.effective_stage === 'released' ? t('正式') : t('当前迭代')}
                         </Tag>
                       </Form.Item>
                     </Space>
-                    <Form.Item name="description" label="描述">
+                    <Form.Item name="description" label={t('描述')}>
                       <Input.TextArea rows={2} />
                     </Form.Item>
                     <Form.Item
                       name="yaml_content"
-                      label="YAML 内容"
-                      rules={[{ required: true, message: '请输入 YAML 内容' }]}
+                      label={t('YAML 内容')}
+                      rules={[{ required: true, message: t('请输入 YAML 内容') }]}
                     >
                       <Input.TextArea rows={18} style={{ fontFamily: 'monospace' }} spellCheck={false} />
                     </Form.Item>
@@ -180,14 +181,14 @@ export default function CaseEditor() {
                       htmlType="submit"
                       loading={saveMutation.isPending}
                     >
-                      保存
+                      {t('保存')}
                     </Button>
                   </Col>
 
                   <Col xs={24} lg={10}>
                     <ProCard
                       size="small"
-                      title="校验结果"
+                      title={t('校验结果')}
                       extra={validating ? <Spin size="small" /> : null}
                     >
                       <ValidationPanel result={validation} />
@@ -199,12 +200,12 @@ export default function CaseEditor() {
           },
           {
             key: 'history',
-            label: '历史执行结果',
+            label: t('历史执行结果'),
             children: <HistoryTab cid={cid} />,
           },
           {
             key: 'versions',
-            label: '版本历史',
+            label: t('版本历史'),
             children: <CaseVersionsTab caseId={cid} />,
           },
         ]}
@@ -216,7 +217,7 @@ export default function CaseEditor() {
 
 function ValidationPanel({ result }: { result: ValidateResult | null }) {
   if (!result) {
-    return <Empty description="输入 YAML 后自动校验" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+    return <Empty description={t('输入 YAML 后自动校验')} image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   }
   if (result.ok) {
     return (
@@ -224,8 +225,8 @@ function ValidationPanel({ result }: { result: ValidateResult | null }) {
         type="success"
         showIcon
         icon={<CheckCircleOutlined />}
-        message="校验通过"
-        description={`解析出 ${result.case_count} 个用例`}
+        message={t('校验通过')}
+        description={t('解析出 {n} 个用例', { n: result.case_count })}
       />
     );
   }
@@ -234,7 +235,7 @@ function ValidationPanel({ result }: { result: ValidateResult | null }) {
       type="error"
       showIcon
       icon={<CloseCircleOutlined />}
-      message="校验未通过"
+      message={t('校验未通过')}
       description={
         <ul style={{ margin: 0, paddingLeft: 18 }}>
           {result.errors.map((err, i) => (
@@ -259,10 +260,10 @@ function HistoryTab({ cid }: { cid: string }) {
       loading={isLoading}
       dataSource={history}
       pagination={PAGE}
-      locale={{ emptyText: '暂无执行记录' }}
+      locale={{ emptyText: t('暂无执行记录') }}
       columns={[
         {
-          title: '执行时间',
+          title: t('执行时间'),
           width: 170,
           dataIndex: 'started_at',
           sorter: byDate<CaseHistoryItem>((r) => r.started_at),
@@ -270,12 +271,12 @@ function HistoryTab({ cid }: { cid: string }) {
         },
         {
           // 光看结果不知道是哪次、跑的是哪儿，没法判断这次是不是自己关心的
-          title: '执行来源',
+          title: t('执行来源'),
           sorter: byText<CaseHistoryItem>((r) => r.batch_name),
           render: (_, r) => (
             <Space direction="vertical" size={0}>
               {r.batch_id ? (
-                <Link to={`/executions/${r.batch_id}`}>{r.batch_name ?? '查看执行'}</Link>
+                <Link to={`/executions/${r.batch_id}`}>{r.batch_name ?? t('查看执行')}</Link>
               ) : (
                 <Typography.Text type="secondary">-</Typography.Text>
               )}
@@ -286,53 +287,53 @@ function HistoryTab({ cid }: { cid: string }) {
           ),
         },
         {
-          title: '结果',
+          title: t('结果'),
           dataIndex: 'status',
           width: 110,
           sorter: byRank<CaseHistoryItem>((r) => r.status, ['success', 'failed']),
           render: (s: string, r) => {
             // midscene 返回的是 success / failed / notRun
-            if (s === 'success') return <Tag color="success">通过</Tag>;
+            if (s === 'success') return <Tag color="success">{t('通过')}</Tag>;
             if (s === 'failed') {
               const kind = failureKindLabel(r.failure_kind);
               // 非用例原因的失败要标出来，否则会被当成真实缺陷去追
-              return kind ? <Tag>未计入 · {kind}</Tag> : <Tag color="error">失败</Tag>;
+              return kind ? <Tag>{t('未计入 · {kind}', { kind })}</Tag> : <Tag color="error">{t('失败')}</Tag>;
             }
             return <Tag>{s}</Tag>;
           },
         },
         {
-          title: '尝试',
+          title: t('尝试'),
           dataIndex: 'attempt_count',
           width: 100,
           sorter: byNumber<CaseHistoryItem>((r) => r.attempt_count),
           render: (v: number, r) => (
-            <Tooltip title={r.passed_after_retry ? '重试后才通过 —— 这个用例不太稳' : undefined}>
-              <span>{v} 次{r.passed_after_retry ? '（重试后通过）' : ''}</span>
+            <Tooltip title={r.passed_after_retry ? t('重试后才通过 —— 这个用例不太稳') : undefined}>
+              <span>{t('{n} 次', { n: v })}{r.passed_after_retry ? t('（重试后通过）') : ''}</span>
             </Tooltip>
           ),
         },
         {
-          title: '模型',
+          title: t('模型'),
           dataIndex: 'model_name',
           width: 150,
           sorter: byText<CaseHistoryItem>((r) => r.model_name),
           render: (v: string | null) => v || '-',
         },
         {
-          title: '耗时',
+          title: t('耗时'),
           dataIndex: 'duration_ms',
           width: 90,
           sorter: byNumber<CaseHistoryItem>((r) => r.duration_ms),
           render: (v: number | null) => fmtDuration(v),
         },
         {
-          title: '报告',
+          title: t('报告'),
           width: 90,
           render: (_, r) =>
             r.report_available ? (
               <Button size="small" type="link" onClick={() => navigate(`/runs/${r.run_id}?tab=report`)}>
-                查看
+                {t('查看')}
               </Button>
             ) : (
               <Typography.Text type="secondary">-</Typography.Text>

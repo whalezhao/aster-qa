@@ -8,6 +8,7 @@ import { apiError } from '../../api/client';
 import { useAuth } from '../../auth/AuthContext';
 import UserModal from '../../components/UserModal';
 import { PAGE, byRank, byText } from '../../lib/table';
+import { t } from '../../i18n';
 import type {
   Role,
   TeamMember } from '../../api/types';
@@ -22,7 +23,7 @@ export default function MembersTab({ tid }: { tid: string }) {
   // 新人常是「还没账号」的状态 —— 只给一个选人下拉，人永远加不进来
   const [createOpen, setCreateOpen] = useState(false);
   const [form] = Form.useForm<{ user_id: string; role: Role }>();
-  const canMaintain = Boolean(me?.teams.some((t) => t.role !== 'member'));
+  const canMaintain = Boolean(me?.teams.some((team) => team.role !== 'member'));
 
   const { data: members = [], isLoading } = useQuery({
     queryKey: ['members', tid],
@@ -38,7 +39,7 @@ export default function MembersTab({ tid }: { tid: string }) {
   const addMutation = useMutation({
     mutationFn: (v: { user_id: string; role: Role }) => addMember(tid, v.user_id, v.role),
     onSuccess: () => {
-      message.success('成员已添加');
+      message.success(t('成员已添加'));
       setOpen(false);
       invalidate();
     },
@@ -48,7 +49,7 @@ export default function MembersTab({ tid }: { tid: string }) {
   const roleMutation = useMutation({
     mutationFn: (v: { userId: string; role: Role }) => updateMemberRole(tid, v.userId, v.role),
     onSuccess: () => {
-      message.success('角色已更新');
+      message.success(t('角色已更新'));
       invalidate();
     },
     onError: (e) => message.error(apiError(e)),
@@ -57,7 +58,7 @@ export default function MembersTab({ tid }: { tid: string }) {
   const removeMutation = useMutation({
     mutationFn: (userId: string) => removeMember(tid, userId),
     onSuccess: () => {
-      message.success('成员已移除');
+      message.success(t('成员已移除'));
       invalidate();
     },
     onError: (e) => message.error(apiError(e)),
@@ -77,7 +78,7 @@ export default function MembersTab({ tid }: { tid: string }) {
         }}
         style={{ marginBottom: 16 }}
       >
-        添加成员
+        {t('添加成员')}
       </Button>
       <QaTable<TeamMember>
         rowKey="user_id"
@@ -86,17 +87,17 @@ export default function MembersTab({ tid }: { tid: string }) {
         pagination={PAGE}
         columns={[
           {
-            title: '用户名',
+            title: t('用户名'),
             sorter: byText<TeamMember>((m) => m.user.username),
             render: (_, m) => m.user.username,
           },
           {
-            title: '显示名',
+            title: t('显示名'),
             sorter: byText<TeamMember>((m) => m.user.display_name),
             render: (_, m) => m.user.display_name || '-',
           },
           {
-            title: '角色',
+            title: t('角色'),
             width: 160,
             sorter: byRank<TeamMember>((m) => m.role, ['member', 'admin', 'owner']),
             render: (_, m) => (
@@ -104,18 +105,18 @@ export default function MembersTab({ tid }: { tid: string }) {
                 size="small"
                 style={{ width: 120 }}
                 value={m.role}
-                options={roleOptions}
+                options={roleOptions.map((o) => ({ value: o.value, label: t(o.label) }))}
                 onChange={(role) => roleMutation.mutate({ userId: m.user_id, role })}
               />
             ),
           },
           {
-            title: '操作',
+            title: t('操作'),
             width: 100,
             render: (_, m) => (
-              <Popconfirm title="确定移除该成员？" onConfirm={() => removeMutation.mutate(m.user_id)}>
+              <Popconfirm title={t('确定移除该成员？')} onConfirm={() => removeMutation.mutate(m.user_id)}>
                 <Button size="small" danger>
-                  移除
+                  {t('移除')}
                 </Button>
               </Popconfirm>
             ),
@@ -124,7 +125,7 @@ export default function MembersTab({ tid }: { tid: string }) {
       />
 
       <Modal
-        title="添加成员"
+        title={t('添加成员')}
         open={open}
         onCancel={() => setOpen(false)}
         confirmLoading={addMutation.isPending}
@@ -132,28 +133,31 @@ export default function MembersTab({ tid }: { tid: string }) {
         footer={[
           canMaintain ? (
             <Button key="new" icon={<UserAddOutlined />} onClick={() => setCreateOpen(true)}>
-              新建人员
+              {t('新建人员')}
             </Button>
           ) : null,
           <Button key="cancel" onClick={() => setOpen(false)}>
-            取消
+            {t('取消')}
           </Button>,
           <Button key="ok" type="primary" loading={addMutation.isPending} onClick={() => form.submit()}>
-            确定
+            {t('确定')}
           </Button>,
         ]}
       >
         <Form form={form} layout="vertical" onFinish={(v) => addMutation.mutate(v)} preserve={false}>
-          <Form.Item name="user_id" label="用户" rules={[{ required: true, message: '请选择用户' }]}>
+          <Form.Item name="user_id" label={t('用户')} rules={[{ required: true, message: t('请选择用户') }]}>
             <Select
               showSearch
-              placeholder="按用户名搜索"
+              placeholder={t('按用户名搜索')}
               optionFilterProp="label"
-              options={candidates.map((u) => ({ value: u.id, label: `${u.display_name || u.username}（${u.username}）` }))}
+              options={candidates.map((u) => ({
+                value: u.id,
+                label: t('{name}（{username}）', { name: u.display_name || u.username, username: u.username }),
+              }))}
             />
           </Form.Item>
-          <Form.Item name="role" label="角色" initialValue="member" rules={[{ required: true }]}>
-            <Select options={roleOptions} />
+          <Form.Item name="role" label={t('角色')} initialValue="member" rules={[{ required: true }]}>
+            <Select options={roleOptions.map((o) => ({ value: o.value, label: t(o.label) }))} />
           </Form.Item>
         </Form>
       </Modal>

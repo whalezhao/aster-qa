@@ -3,6 +3,7 @@ import AiMascot, { type MascotState } from './AiMascot';
 import SpeakButton from './SpeakButton';
 import { fmtDateTime } from '../lib/format';
 import type { AiCheckResult } from '../api/types';
+import { t } from '../i18n';
 
 const VERDICT: Record<string, { color: string; label: string; mascot: MascotState }> = {
   healthy: { color: 'success', label: '健康', mascot: 'happy' },
@@ -44,7 +45,9 @@ export default function AiInsightCard({
       <Card className="qa-ai-card" style={{ background: token.colorFillQuaternary }}>
         <Space size={12} align="center">
           <AiMascot size={48} state={pending ? 'thinking' : 'idle'} />
-          <Typography.Text type="secondary">{pending ? pendingText : emptyText}</Typography.Text>
+          <Typography.Text type="secondary">
+            {pending ? t(pendingText) : t(emptyText)}
+          </Typography.Text>
         </Space>
       </Card>
     );
@@ -55,8 +58,8 @@ export default function AiInsightCard({
       <Alert
         type="info"
         showIcon
-        message={`${title}暂不可用`}
-        description={check.error || 'AI 调用失败'}
+        message={t('{title}暂不可用', { title: t(title) })}
+        description={check.error || t('AI 调用失败')}
       />
     );
   }
@@ -72,8 +75,8 @@ export default function AiInsightCard({
       title={
         <Space size={10}>
           <AiMascot size={24} state={view.mascot} />
-          <span>{title}</span>
-          <Tag color={view.color}>{view.label}</Tag>
+          <span>{t(title)}</span>
+          <Tag color={view.color}>{t(view.label)}</Tag>
         </Space>
       }
       extra={
@@ -91,7 +94,7 @@ export default function AiInsightCard({
 
       {(check.reasons?.length ?? 0) > 0 && (
         <div style={{ marginBottom: 8 }}>
-          <Typography.Text strong>发现</Typography.Text>
+          <Typography.Text strong>{t('发现')}</Typography.Text>
           <ul style={{ margin: '6px 0 0', paddingLeft: 20 }}>
             {check.reasons.map((reason, index) => (
               <li key={index}>
@@ -104,14 +107,16 @@ export default function AiInsightCard({
 
       {(check.diagnoses?.length ?? 0) > 0 && (
         <div style={{ marginBottom: 8 }}>
-          <Typography.Text strong>逐条诊断</Typography.Text>
+          <Typography.Text strong>{t('逐条诊断')}</Typography.Text>
           <ul style={{ margin: '6px 0 0', paddingLeft: 20 }}>
             {check.diagnoses!.map((d, index) => (
               <li key={index} style={{ marginBottom: 8 }}>
                 <Space size={6} wrap>
                   {d.case && <Typography.Text strong>{d.case}</Typography.Text>}
                   {d.owner && (
-                    <Tag color={OWNER[d.owner]?.color}>{OWNER[d.owner]?.label ?? d.owner}</Tag>
+                    <Tag color={OWNER[d.owner]?.color}>
+                      {t(OWNER[d.owner]?.label ?? d.owner)}
+                    </Tag>
                   )}
                 </Space>
                 {d.cause && (
@@ -121,7 +126,7 @@ export default function AiInsightCard({
                 )}
                 {d.action && (
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    建议：{d.action}
+                    {t('建议：')}{d.action}
                   </Typography.Text>
                 )}
               </li>
@@ -132,7 +137,7 @@ export default function AiInsightCard({
 
       {(check.advice?.length ?? 0) > 0 && (
         <div>
-          <Typography.Text strong>建议</Typography.Text>
+          <Typography.Text strong>{t('建议')}</Typography.Text>
           <ul style={{ margin: '6px 0 0', paddingLeft: 20 }}>
             {check.advice.map((item, index) => (
               <li key={index}>
@@ -144,8 +149,8 @@ export default function AiInsightCard({
       )}
 
       <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
-        {check.model_name ? `由 ${check.model_name} 生成 · ` : ''}
-        {check.created_at ? fmtDateTime(check.created_at) : ''} · 仅供参考，不影响流程
+        {check.model_name ? `${t('由 {model} 生成', { model: check.model_name })} · ` : ''}
+        {check.created_at ? fmtDateTime(check.created_at) : ''} · {t('仅供参考，不影响流程')}
       </Typography.Paragraph>
     </Card>
   );

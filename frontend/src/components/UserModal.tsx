@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createUser, updateUser } from '../api/users';
 import { apiError } from '../api/client';
 import UserAvatar, { AVATAR_PRESETS, AvatarFigure } from './UserAvatar';
+import { t } from '../i18n';
 import type { User } from '../api/types';
 
 interface FormValues {
@@ -74,7 +75,7 @@ export default function UserModal({
       });
     },
     onSuccess: (saved) => {
-      message.success(editing ? '资料已更新' : `人员「${saved.username}」已创建`);
+      message.success(editing ? t('资料已更新') : t('人员「{name}」已创建', { name: saved.username }));
       queryClient.invalidateQueries({ queryKey: ['users'] });
       onClose();
       onSaved?.(saved);
@@ -84,7 +85,7 @@ export default function UserModal({
 
   return (
     <Modal
-      title={user ? `编辑人员：${user.username}` : '新建人员'}
+      title={user ? t('编辑人员：{name}', { name: user.username }) : t('新建人员')}
       open={open}
       onCancel={onClose}
       onOk={() => form.submit()}
@@ -93,7 +94,7 @@ export default function UserModal({
       width={520}
     >
       <Form form={form} layout="vertical" onFinish={(v) => save.mutate(v)} preserve={false}>
-        <Form.Item label="头像">
+        <Form.Item label={t('头像')}>
           <Space size={8} wrap>
             <button
               type="button"
@@ -109,7 +110,7 @@ export default function UserModal({
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
-              title="不用卡通头像（显示首字母）"
+              title={t('不用卡通头像（显示首字母）')}
             >
               <UserAvatar name={form.getFieldValue('username') || user?.username} size={36} />
             </button>
@@ -136,42 +137,42 @@ export default function UserModal({
 
         <Form.Item
           name="username"
-          label="用户名（登录用）"
+          label={t('用户名（登录用）')}
           rules={
             editing
               ? []
               : [
-                  { required: true, message: '请输入用户名' },
-                  { min: 2, message: '至少 2 个字符' },
+                  { required: true, message: t('请输入用户名') },
+                  { min: 2, message: t('至少 2 个字符') },
                 ]
           }
         >
           <Input disabled={editing} autoComplete="off" />
         </Form.Item>
-        <Form.Item name="display_name" label="姓名">
+        <Form.Item name="display_name" label={t('姓名')}>
           <Input autoComplete="off" />
         </Form.Item>
-        <Form.Item name="email" label="邮箱" rules={[{ type: 'email', message: '邮箱格式不正确' }]}>
+        <Form.Item name="email" label={t('邮箱')} rules={[{ type: 'email', message: t('邮箱格式不正确') }]}>
           <Input autoComplete="off" />
         </Form.Item>
         <Form.Item
           name="password"
-          label={editing ? '重置密码（留空则不修改）' : '初始密码'}
+          label={editing ? t('重置密码（留空则不修改）') : t('初始密码')}
           rules={
             editing
-              ? [{ min: 6, message: '至少 6 位' }]
+              ? [{ min: 6, message: t('至少 6 位') }]
               : [
-                  { required: true, message: '请设置初始密码' },
-                  { min: 6, message: '至少 6 位' },
+                  { required: true, message: t('请设置初始密码') },
+                  { min: 6, message: t('至少 6 位') },
                 ]
           }
         >
-          <Input.Password autoComplete="new-password" placeholder={editing ? '留空则不改' : '至少 6 位'} />
+          <Input.Password autoComplete="new-password" placeholder={editing ? t('留空则不改') : t('至少 6 位')} />
         </Form.Item>
       </Form>
       {!editing && (
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0, fontSize: 12 }}>
-          建完可以在团队页把它加进团队。
+          {t('建完可以在团队页把它加进团队。')}
         </Typography.Paragraph>
       )}
     </Modal>

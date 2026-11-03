@@ -7,6 +7,7 @@ import { createProject, getProjects, type ProjectInput } from '../api/projects';
 import { apiError } from '../api/client';
 import { useActiveTeam } from '../team/TeamContext';
 import QaTable from '../components/QaTable';
+import { t } from '../i18n';
 import { PAGE, byNumber, byText } from '../lib/table';
 import type { Project } from '../api/types';
 
@@ -29,7 +30,7 @@ export default function Projects() {
     mutationFn: (values: ProjectInput) =>
       createProject(teamId as string, { ...values, name: values.name! }),
     onSuccess: (saved) => {
-      message.success(`项目「${saved.name}」已创建`);
+      message.success(t('项目「{name}」已创建', { name: saved.name }));
       queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
     onError: (e) => message.error(apiError(e)),
@@ -39,15 +40,15 @@ export default function Projects() {
     <PageContainer
       ghost
       header={{
-        title: '项目',
-        subTitle: '功能、用例和模型配置都在项目里；顶栏可以切换团队',
+        title: t('项目'),
+        subTitle: t('功能、用例和模型配置都在项目里；顶栏可以切换团队'),
         extra: [
           <ModalForm<ProjectInput>
             key="create"
-            title="新建项目"
+            title={t('新建项目')}
             trigger={
               <Button type="primary" icon={<PlusOutlined />}>
-                新建项目
+                {t('新建项目')}
               </Button>
             }
             modalProps={{ destroyOnHidden: true }}
@@ -56,14 +57,18 @@ export default function Projects() {
               return true;
             }}
           >
-            <ProFormText name="name" label="名称" rules={[{ required: true, message: '请输入项目名称' }]} />
-            <ProFormText name="code" label="编码" placeholder="可留空，例如 pansoft-demo" />
+            <ProFormText
+              name="name"
+              label={t('名称')}
+              rules={[{ required: true, message: t('请输入项目名称') }]}
+            />
+            <ProFormText name="code" label={t('编码')} placeholder={t('可留空，例如 pansoft-demo')} />
             <ProFormText
               name="base_url"
-              label="被测地址（Base URL）"
-              placeholder="用例里的 ${BASE_URL} 会替换成它"
+              label={t('被测地址（Base URL）')}
+              placeholder={t('用例里的 ${BASE_URL} 会替换成它')}
             />
-            <ProFormTextArea name="description" label="描述" fieldProps={{ rows: 2 }} />
+            <ProFormTextArea name="description" label={t('描述')} fieldProps={{ rows: 2 }} />
           </ModalForm>,
         ],
       }}
@@ -75,29 +80,29 @@ export default function Projects() {
         pagination={PAGE}
         columns={[
           {
-            title: '名称',
+            title: t('名称'),
             dataIndex: 'name',
             sorter: byText<Project>((r) => r.name),
             render: (_, r) => <Link to={`/projects/${r.id}`}>{r.name}</Link>,
           },
           {
-            title: '编码',
+            title: t('编码'),
             dataIndex: 'code',
             sorter: byText<Project>((r) => r.code),
             render: (_, r) => r.code || <Typography.Text type="secondary">-</Typography.Text>,
           },
           {
-            title: '大模型',
+            title: t('大模型'),
             width: 150,
             sorter: byNumber<Project>((r) => (r.has_model_config ? 1 : 0)),
             render: (_, r) => (
               <Space direction="vertical" size={2}>
                 {r.has_model_config ? (
-                  <Tag color="success">已配置</Tag>
+                  <Tag color="success">{t('已配置')}</Tag>
                 ) : (
                   // 没配模型的项目跑不了任何用例，列表里要一眼能扫出来
                   <Link to={`/projects/${r.id}`}>
-                    <Tag color="warning">未配置</Tag>
+                    <Tag color="warning">{t('未配置')}</Tag>
                   </Link>
                 )}
                 {r.model_health && (
@@ -112,10 +117,10 @@ export default function Projects() {
                       }
                     >
                       {r.model_health.status === 'healthy'
-                        ? '模型正常'
+                        ? t('模型正常')
                         : r.model_health.status === 'unhealthy'
-                          ? '模型异常'
-                          : '未检测'}
+                          ? t('模型异常')
+                          : t('未检测')}
                     </Tag>
                   </Tooltip>
                 )}
@@ -128,18 +133,18 @@ export default function Projects() {
             render: (_, r) => r.base_url || <Typography.Text type="secondary">-</Typography.Text>,
           },
           {
-            title: '描述',
+            title: t('描述'),
             dataIndex: 'description',
             render: (_, r) =>
               r.description || <Typography.Text type="secondary">-</Typography.Text>,
           },
           {
-            title: '操作',
+            title: t('操作'),
             width: 100,
             render: (_, r) => (
               <Space>
                 <Link to={`/projects/${r.id}`}>
-                  <Button size="small">进入</Button>
+                  <Button size="small">{t('进入')}</Button>
                 </Link>
               </Space>
             ),

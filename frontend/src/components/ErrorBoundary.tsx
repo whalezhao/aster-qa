@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Button, Result, Typography } from 'antd';
+import { t } from '../i18n';
 
 interface Props {
   children: ReactNode;
@@ -33,11 +34,11 @@ export default class ErrorBoundary extends Component<Props, State> {
     return (
       <Result
         status="500"
-        title="这个页面出错了"
-        subTitle="刷新一下通常能恢复；如果反复出现，请把下面的信息发给管理员。"
+        title={t('这个页面出错了')}
+        subTitle={t('刷新一下通常能恢复；如果反复出现，请把下面的信息发给管理员。')}
         extra={
           <Button type="primary" onClick={() => window.location.reload()}>
-            重新加载
+            {t('重新加载')}
           </Button>
         }
       >

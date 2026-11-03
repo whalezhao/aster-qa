@@ -23,26 +23,19 @@ import { getSettings, updateSettings } from '../api/settings';
 import FeatureTreeSelect from '../components/FeatureTreeSelect';
 import PreflightModal from '../components/PreflightModal';
 import { getTeamEnvironments } from '../api/environments';
+import { t } from '../i18n';
 import {
   BATCH_STATUS_COLORS,
-  BATCH_STATUS_LABELS,
+  batchStatusLabel,
   fmtDateTime,
   TASK_STATUS_COLORS,
   TASK_STATUS_LABELS,
   TASK_TYPE_LABELS,
+  taskStatusLabel,
+  taskTypeLabel,
 } from '../lib/format';
 import { PAGE, byDate, byNumber, byRank, byText } from '../lib/table';
 import type { FeatureStage, Task, TaskStatus, TaskType } from '../api/types';
-
-const typeOptions = (Object.keys(TASK_TYPE_LABELS) as TaskType[]).map((t) => ({
-  value: t,
-  label: TASK_TYPE_LABELS[t],
-}));
-
-const statusOptions = (Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((s) => ({
-  value: s,
-  label: TASK_STATUS_LABELS[s],
-}));
 
 interface TaskFormValues {
   name: string;
@@ -67,13 +60,23 @@ export default function Tasks() {
   const { teamId } = useActiveTeam();
   const { user: me } = useAuth();
 
+  const typeOptions = (Object.keys(TASK_TYPE_LABELS) as TaskType[]).map((k) => ({
+    value: k,
+    label: t(TASK_TYPE_LABELS[k]),
+  }));
+
+  const statusOptions = (Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((s) => ({
+    value: s,
+    label: t(TASK_STATUS_LABELS[s]),
+  }));
+
   // 全局执行并发（保存在服务端，所有 worker 共享）
   const { data: appSettings } = useQuery({ queryKey: ['app-settings'], queryFn: getSettings });
   const concurrencyMutation = useMutation({
     mutationFn: (value: number) => updateSettings({ max_concurrent_runs: value }),
     onSuccess: (saved) => {
       message.success(
-        `全局执行并发已调整为 ${saved.max_concurrent_runs}，worker 会在 10 秒内跟上`,
+        t('全局执行并发已调整为 {n}，worker 会在 10 秒内跟上', { n: saved.max_concurrent_runs }),
       );
       queryClient.invalidateQueries({ queryKey: ['app-settings'] });
     },
@@ -84,8 +87,8 @@ export default function Tasks() {
     onSuccess: (saved) => {
       message.success(
         saved.run_shard_size
-          ? `单 run 用例数已设为 ${saved.run_shard_size}，新执行会按此分片`
-          : '已关闭分片：一个项目一个 run',
+          ? t('单 run 用例数已设为 {n}，新执行会按此分片', { n: saved.run_shard_size })
+          : t('已关闭分片：一个项目一个 run'),
       );
       queryClient.invalidateQueries({ queryKey: ['app-settings'] });
     },
@@ -96,14 +99,14 @@ export default function Tasks() {
     onSuccess: (saved) => {
       message.success(
         saved.ai_assess_failures_only
-          ? '已开启：只有出现失败的批次才会调用 AI 评估'
-          : '已关闭：每个批次都会调用 AI 评估',
+          ? t('已开启：只有出现失败的批次才会调用 AI 评估')
+          : t('已关闭：每个批次都会调用 AI 评估'),
       );
       queryClient.invalidateQueries({ queryKey: ['app-settings'] });
     },
     onError: (e) => message.error(apiError(e)),
   });
-  const canTuneConcurrency = Boolean(me?.teams.some((t) => t.role !== 'member'));
+  const canTuneConcurrency = Boolean(me?.teams.some((team) => team.role !== 'member'));
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
@@ -192,15 +195,20 @@ export default function Tasks() {
       invalidate();
       // 建完就直接跑：带 run_now 时后端已经建好批次，直接跳到执行详情看进度
       if (!editing && 'batch_id' in res && res.batch_id) {
-        message.success(`任务已创建，已触发执行（快照 ${res.case_count} 个用例）`);
+        message.success(t('任务已创建，已触发执行（快照 {n} 个用例）', { n: res.case_count }));
         navigate(`/executions/${res.batch_id}`);
         return;
       }
       if (!editing && 'case_count' in res) {
-        message.success(`任务已创建（快照 ${res.case_count} 个用例 / ${res.feature_count} 个功能）`);
+        message.success(
+          t('任务已创建（快照 {n} 个用例 / {f} 个功能）', {
+            n: res.case_count,
+            f: res.feature_count,
+          }),
+        );
         return;
       }
-      message.success('任务已更新');
+      message.success(t('任务已更新'));
     },
     onError: (e) => message.error(apiError(e)),
   });
@@ -211,8 +219,8 @@ export default function Tasks() {
     onSuccess: (res) => {
       message.success(
         res.batches.length > 1
-          ? `已触发执行：${res.batches.length} 个环境各一条执行记录`
-          : '已触发执行',
+          ? t('已触发执行：{n} 个环境各一条执行记录', { n: res.batches.length })
+          : t('已触发执行'),
       );
       invalidate();
       if (res.batches.length > 1) {
@@ -227,7 +235,7 @@ export default function Tasks() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteTask(id),
     onSuccess: () => {
-      message.success('任务已删除（执行记录一并清理）');
+      message.success(t('任务已删除（执行记录一并清理）'));
       invalidate();
     },
     onError: (e) => message.error(apiError(e)),
@@ -239,12 +247,14 @@ export default function Tasks() {
       setSelected([]);
       invalidate();
       if (res.skipped.length === 0) {
-        message.success(`已删除 ${res.deleted} 个任务及其执行记录`);
+        message.success(t('已删除 {n} 个任务及其执行记录', { n: res.deleted }));
       } else {
         message.warning(
-          `已删除 ${res.deleted} 个；${res.skipped.length} 个没删（${res.skipped
-            .map((s) => `${s.name}：${s.reason}`)
-            .join('；')}）`,
+          t('已删除 {deleted} 个；{skipped} 个没删（{reasons}）', {
+            deleted: res.deleted,
+            skipped: res.skipped.length,
+            reasons: res.skipped.map((s) => `${s.name}：${s.reason}`).join('；'),
+          }),
         );
       }
     },
@@ -260,7 +270,7 @@ export default function Tasks() {
         try {
           await runTask(id);
         } catch (e) {
-          failed.push({ name: tasks.find((t) => t.id === id)?.name ?? id, msg: apiError(e) });
+          failed.push({ name: tasks.find((task) => task.id === id)?.name ?? id, msg: apiError(e) });
         }
       }
       return failed;
@@ -269,12 +279,15 @@ export default function Tasks() {
       setSelected([]);
       invalidate();
       if (failed.length === 0) {
-        message.success(`已触发 ${ids.length} 个任务的执行`);
+        message.success(t('已触发 {n} 个任务的执行', { n: ids.length }));
       } else {
         // 部分成功要说清楚是哪几个没起来，否则用户以为都跑了
         message.warning(
-          `${ids.length - failed.length} 个已触发，${failed.length} 个没起来：` +
-            failed.map((f) => `${f.name}（${f.msg}）`).join('；'),
+          t('{ok} 个已触发，{failed} 个没起来：{list}', {
+            ok: ids.length - failed.length,
+            failed: failed.length,
+            list: failed.map((f) => `${f.name}（${f.msg}）`).join('；'),
+          }),
         );
       }
       navigate('/executions');
@@ -282,49 +295,50 @@ export default function Tasks() {
   });
 
   function confirmBulkRun() {
-    const picked = tasks.filter((t) => selected.includes(t.id));
+    const picked = tasks.filter((task) => selected.includes(task.id));
     modal.confirm({
-      title: `执行选中的 ${picked.length} 个任务？`,
+      title: t('执行选中的 {n} 个任务？', { n: picked.length }),
       width: 520,
       content: (
         <div>
           <ul style={{ paddingLeft: 18, margin: '8px 0' }}>
-            {picked.slice(0, 10).map((t) => (
-              <li key={t.id}>
-                {t.name}（{t.case_count} 个用例）
+            {picked.slice(0, 10).map((task) => (
+              <li key={task.id}>
+                {task.name}
+                {t('（{n} 个用例）', { n: task.case_count })}
               </li>
             ))}
           </ul>
-          {picked.length > 10 ? <div>…还有 {picked.length - 10} 个</div> : null}
+          {picked.length > 10 ? <div>{t('…还有 {n} 个', { n: picked.length - 10 })}</div> : null}
           <Typography.Text type="secondary">
-            每个任务各建一次执行，排队串行跑（执行器一次只跑一个）。
+            {t('每个任务各建一次执行，排队串行跑（执行器一次只跑一个）。')}
           </Typography.Text>
         </div>
       ),
-      okText: '执行',
-      cancelText: '取消',
+      okText: t('执行'),
+      cancelText: t('取消'),
       onOk: () => bulkRun.mutateAsync(selected),
     });
   }
 
   function confirmBulkDelete() {
-    const picked = tasks.filter((t) => selected.includes(t.id));
+    const picked = tasks.filter((task) => selected.includes(task.id));
     modal.confirm({
-      title: `删除选中的 ${picked.length} 个任务？`,
+      title: t('删除选中的 {n} 个任务？', { n: picked.length }),
       width: 520,
-      okText: '删除',
+      okText: t('删除'),
       okButtonProps: { danger: true },
-      cancelText: '取消',
+      cancelText: t('取消'),
       content: (
         <div>
           <ul style={{ paddingLeft: 18, margin: '8px 0' }}>
-            {picked.slice(0, 10).map((t) => (
-              <li key={t.id}>{t.name}</li>
+            {picked.slice(0, 10).map((task) => (
+              <li key={task.id}>{task.name}</li>
             ))}
           </ul>
-          {picked.length > 10 ? <div>…还有 {picked.length - 10} 个</div> : null}
+          {picked.length > 10 ? <div>{t('…还有 {n} 个', { n: picked.length - 10 })}</div> : null}
           <Typography.Text type="danger">
-            它们的执行记录、报告和 AI 结论会一并删除，不可恢复。正在执行的任务会被跳过。
+            {t('它们的执行记录、报告和 AI 结论会一并删除，不可恢复。正在执行的任务会被跳过。')}
           </Typography.Text>
         </div>
       ),
@@ -352,19 +366,19 @@ export default function Tasks() {
     <PageContainer
       ghost
       header={{
-        title: '测试任务',
-        subTitle: '一个任务 = 一组功能的组合；勾选多个任务可以一次触发',
+        title: t('测试任务'),
+        subTitle: t('一个任务 = 一组功能的组合；勾选多个任务可以一次触发'),
         extra: [
           <Tooltip
             key="assess"
             title={
               canTuneConcurrency
-                ? '开启后，全部通过的批次不再调用模型做评估 —— 每批评估都是一次真实成本'
-                : '只有团队管理员能调整'
+                ? t('开启后，全部通过的批次不再调用模型做评估 —— 每批评估都是一次真实成本')
+                : t('只有团队管理员能调整')
             }
           >
             <Space size={6}>
-              <Typography.Text type="secondary">AI 评估</Typography.Text>
+              <Typography.Text type="secondary">{t('AI 评估')}</Typography.Text>
               <Switch
                 size="small"
                 checked={appSettings?.ai_assess_failures_only}
@@ -373,7 +387,7 @@ export default function Tasks() {
                 onChange={(value) => assessMutation.mutate(value)}
               />
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {appSettings?.ai_assess_failures_only ? '仅有失败时' : '每批都评'}
+                {appSettings?.ai_assess_failures_only ? t('仅有失败时') : t('每批都评')}
               </Typography.Text>
             </Space>
           </Tooltip>,
@@ -381,12 +395,12 @@ export default function Tasks() {
             key="concurrency"
             title={
               canTuneConcurrency
-                ? '全局并发上限：所有 worker 加起来最多同时跑多少个 run（每个 run 一个浏览器）。改完 10 秒内生效。'
-                : '只有团队管理员能调整并发数'
+                ? t('全局并发上限：所有 worker 加起来最多同时跑多少个 run（每个 run 一个浏览器）。改完 10 秒内生效。')
+                : t('只有团队管理员能调整并发数')
             }
           >
             <Space size={6}>
-              <Typography.Text type="secondary">全局执行并发</Typography.Text>
+              <Typography.Text type="secondary">{t('全局执行并发')}</Typography.Text>
               <Select
                 size="small"
                 style={{ width: 74 }}
@@ -402,12 +416,12 @@ export default function Tasks() {
             key="shard"
             title={
               canTuneConcurrency
-                ? '一个项目里的用例按这个数量拆成多个 run 并行跑；0 表示不分片。只影响之后新建的执行。'
-                : '只有团队管理员能调整分片'
+                ? t('一个项目里的用例按这个数量拆成多个 run 并行跑；0 表示不分片。只影响之后新建的执行。')
+                : t('只有团队管理员能调整分片')
             }
           >
             <Space size={6}>
-              <Typography.Text type="secondary">单 run 用例数</Typography.Text>
+              <Typography.Text type="secondary">{t('单 run 用例数')}</Typography.Text>
               <Select
                 size="small"
                 style={{ width: 74 }}
@@ -416,7 +430,7 @@ export default function Tasks() {
                 loading={shardMutation.isPending}
                 onChange={(value) => shardMutation.mutate(value)}
                 options={[
-                  { value: 0, label: '不分片' },
+                  { value: 0, label: t('不分片') },
                   ...[1, 2, 3, 4, 5, 8, 10, 20].map((n) => ({ value: n, label: String(n) })),
                 ]}
               />
@@ -431,7 +445,8 @@ export default function Tasks() {
             loading={bulkRun.isPending}
             onClick={confirmBulkRun}
           >
-            快速多任务执行{selected.length > 0 ? `（${selected.length}）` : ''}
+            {t('快速多任务执行')}
+            {selected.length > 0 ? t('（{n}）', { n: selected.length }) : ''}
           </Button>,
           <Button
             key="bulk-delete"
@@ -440,10 +455,11 @@ export default function Tasks() {
             loading={bulkDelete.isPending}
             onClick={confirmBulkDelete}
           >
-            批量删除{selected.length > 0 ? `（${selected.length}）` : ''}
+            {t('批量删除')}
+            {selected.length > 0 ? t('（{n}）', { n: selected.length }) : ''}
           </Button>,
           <Button key="create" type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            新建任务
+            {t('新建任务')}
           </Button>,
         ],
       }}
@@ -451,7 +467,7 @@ export default function Tasks() {
       <Space wrap style={{ marginBottom: 16 }}>
         <Select
           allowClear
-          placeholder="全部项目"
+          placeholder={t('全部项目')}
           style={{ minWidth: 180 }}
           value={projectId}
           onChange={(value) => updateParams({ project_id: value })}
@@ -463,14 +479,14 @@ export default function Tasks() {
             updateParams({ stage: value === 'all' ? undefined : (value as string) })
           }
           options={[
-            { value: 'all', label: '全部分期' },
-            { value: 'in_iteration', label: '当前迭代' },
-            { value: 'released', label: '正式' },
+            { value: 'all', label: t('全部分期') },
+            { value: 'in_iteration', label: t('当前迭代') },
+            { value: 'released', label: t('正式') },
           ]}
         />
         <Select
           allowClear
-          placeholder="全部状态"
+          placeholder={t('全部状态')}
           style={{ minWidth: 140 }}
           value={status}
           onChange={(value) => updateParams({ status: value })}
@@ -478,7 +494,7 @@ export default function Tasks() {
         />
         <Input.Search
           allowClear
-          placeholder="按任务名搜索"
+          placeholder={t('按任务名搜索')}
           style={{ width: 220 }}
           value={nameInput}
           onChange={(event) => setNameInput(event.target.value)}
@@ -500,13 +516,13 @@ export default function Tasks() {
             disabled: r.status === 'queued' || r.status === 'running',
             title:
               r.status === 'queued' || r.status === 'running'
-                ? '这个任务已有执行在进行中'
+                ? t('这个任务已有执行在进行中')
                 : undefined,
           }),
         }}
         columns={[
           {
-            title: '任务',
+            title: t('任务'),
             dataIndex: 'name',
             sorter: byText<Task>((r) => r.name),
             render: (_, r) => (
@@ -515,38 +531,38 @@ export default function Tasks() {
                   <Link to={`/tasks/${r.id}`}>{r.name}</Link>
                   {/* 人审签名：列表上要一眼看出这个任务有没有人签过 */}
                   {r.signed && (
-                    <Tooltip title={`已签名 · ${fmtDateTime(r.signed_at)}`}>
+                    <Tooltip title={t('已签名 · {time}', { time: fmtDateTime(r.signed_at) })}>
                       <Tag color="success" icon={<SafetyCertificateOutlined />}>
-                        已签名
+                        {t('已签名')}
                       </Tag>
                     </Tooltip>
                   )}
                 </Space>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  {TASK_TYPE_LABELS[r.type] ?? r.type}
-                  {r.project_id ? ` · ${projectName(r.project_id) ?? ''}` : ' · 跨项目'}
+                  {taskTypeLabel(r.type)}
+                  {r.project_id ? ` · ${projectName(r.project_id) ?? ''}` : t(' · 跨项目')}
                   {r.iteration_id ? ` · ${iterationName(r.iteration_id) ?? ''}` : ''}
                 </Typography.Text>
               </Space>
             ),
           },
           {
-            title: '组合',
+            title: t('组合'),
             width: 150,
             sorter: byNumber<Task>((r) => r.feature_count),
             render: (_, r) => (
               <Space size={4}>
-                <Tooltip title="任务里包含的功能数">
-                  <Tag>{r.feature_count} 个功能</Tag>
+                <Tooltip title={t('任务里包含的功能数')}>
+                  <Tag>{t('{n} 个功能', { n: r.feature_count })}</Tag>
                 </Tooltip>
-                <Tooltip title="快照下来的用例数">
-                  <Tag>{r.case_count} 个用例</Tag>
+                <Tooltip title={t('快照下来的用例数')}>
+                  <Tag>{t('{n} 个用例', { n: r.case_count })}</Tag>
                 </Tooltip>
               </Space>
             ),
           },
           {
-            title: '状态',
+            title: t('状态'),
             dataIndex: 'status',
             width: 100,
             sorter: byRank<Task>((r) => r.status, [
@@ -558,24 +574,24 @@ export default function Tasks() {
               'cancelled',
             ]),
             render: (_, r) => (
-              <Tag color={TASK_STATUS_COLORS[r.status]}>{TASK_STATUS_LABELS[r.status] ?? r.status}</Tag>
+              <Tag color={TASK_STATUS_COLORS[r.status]}>{taskStatusLabel(r.status)}</Tag>
             ),
           },
           {
-            title: '定时',
+            title: t('定时'),
             width: 120,
             sorter: byDate<Task>((r) => r.schedule_next_run_at),
             render: (_, r) =>
               r.schedule_enabled ? (
-                <Tooltip title={`下次 ${fmtDateTime(r.schedule_next_run_at)}`}>
-                  <Tag color="green">定时</Tag>
+                <Tooltip title={t('下次 {time}', { time: fmtDateTime(r.schedule_next_run_at) })}>
+                  <Tag color="green">{t('定时')}</Tag>
                 </Tooltip>
               ) : (
                 <Typography.Text type="secondary">-</Typography.Text>
               ),
           },
           {
-            title: '最近执行',
+            title: t('最近执行'),
             width: 210,
             sorter: byDate<Task>((r) => r.last_run_at),
             render: (_, r) =>
@@ -583,7 +599,7 @@ export default function Tasks() {
                 <Space direction="vertical" size={0}>
                   <Link to={`/executions/${r.last_batch_id}`}>
                     <Tag color={BATCH_STATUS_COLORS[r.last_batch_status ?? ''] ?? 'default'}>
-                      {BATCH_STATUS_LABELS[r.last_batch_status ?? ''] ?? r.last_batch_status}
+                      {batchStatusLabel(r.last_batch_status ?? '')}
                     </Tag>
                   </Link>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -591,11 +607,11 @@ export default function Tasks() {
                   </Typography.Text>
                 </Space>
               ) : (
-                <Typography.Text type="secondary">还没跑过</Typography.Text>
+                <Typography.Text type="secondary">{t('还没跑过')}</Typography.Text>
               ),
           },
           {
-            title: '操作',
+            title: t('操作'),
             width: 210,
             render: (_, r) => (
               <Space>
@@ -608,10 +624,10 @@ export default function Tasks() {
                   disabled={r.status === 'queued' || r.status === 'running'}
                   onClick={() => setPreflightTaskId(r.id)}
                 >
-                  执行
+                  {t('执行')}
                 </Button>
                 <Button size="small" onClick={() => navigate(`/executions?task_id=${r.id}`)}>
-                  执行记录
+                  {t('执行记录')}
                 </Button>
                 <Button
                   size="small"
@@ -635,15 +651,15 @@ export default function Tasks() {
                     setOpen(true);
                   }}
                 >
-                  编辑
+                  {t('编辑')}
                 </Button>
                 <Popconfirm
-                  title="删除该任务及其执行记录？"
-                  description="执行记录、报告和 AI 结论会一并删除，不可恢复。"
+                  title={t('删除该任务及其执行记录？')}
+                  description={t('执行记录、报告和 AI 结论会一并删除，不可恢复。')}
                   onConfirm={() => deleteMutation.mutate(r.id)}
                 >
                   <Button size="small" danger>
-                    删除
+                    {t('删除')}
                   </Button>
                 </Popconfirm>
               </Space>
@@ -653,7 +669,7 @@ export default function Tasks() {
       />
 
       <Modal
-        title={editing ? '编辑任务' : '新建任务'}
+        title={editing ? t('编辑任务') : t('新建任务')}
         open={open}
         onCancel={() => setOpen(false)}
         onOk={() => form.submit()}
@@ -662,21 +678,21 @@ export default function Tasks() {
         width={640}
       >
         <Form form={form} layout="vertical" onFinish={(v) => saveMutation.mutate(v)} preserve={false}>
-          <Form.Item name="name" label="任务名称" rules={[{ required: true, message: '请输入任务名称' }]}>
-            <Input placeholder="如：v2.6 上线前回归" />
+          <Form.Item name="name" label={t('任务名称')} rules={[{ required: true, message: t('请输入任务名称') }]}>
+            <Input placeholder={t('如：v2.6 上线前回归')} />
           </Form.Item>
 
-          <Form.Item name="type" label="类型" rules={[{ required: true }]}>
+          <Form.Item name="type" label={t('类型')} rules={[{ required: true }]}>
             <Select options={typeOptions} disabled={Boolean(editing)} />
           </Form.Item>
 
           <Form.Item
             name="feature_ids"
-            label="包含的功能"
+            label={t('包含的功能')}
             tooltip={
               editing
-                ? '功能与用例在创建任务时就已快照固定，不能再改；需要新组合请新建任务。'
-                : '任务就是一堆功能的组合。选中后会把功能下启用中的用例快照进任务 —— 之后再给功能加用例，不会影响这个已定稿的任务。'
+                ? t('功能与用例在创建任务时就已快照固定，不能再改；需要新组合请新建任务。')
+                : t('任务就是一堆功能的组合。选中后会把功能下启用中的用例快照进任务 —— 之后再给功能加用例，不会影响这个已定稿的任务。')
             }
           >
             <FeatureTreeSelect teamId={teamId} disabled={Boolean(editing)} />
@@ -687,63 +703,63 @@ export default function Tasks() {
               type="info"
               showIcon
               style={{ marginBottom: 16 }}
-              message="保存后可以立即执行"
-              description="打开下面的开关，保存的同时就会按项目拆分成多次执行并开始跑。"
+              message={t('保存后可以立即执行')}
+              description={t('打开下面的开关，保存的同时就会按项目拆分成多次执行并开始跑。')}
             />
           )}
 
           <Space style={{ display: 'flex' }} align="start" wrap>
-            <Form.Item name="project_id" label="项目" style={{ width: 220 }}>
+            <Form.Item name="project_id" label={t('项目')} style={{ width: 220 }}>
               <Select
                 allowClear
-                placeholder="跨项目可留空"
+                placeholder={t('跨项目可留空')}
                 disabled={Boolean(editing)}
                 options={projects.map((p) => ({ value: p.id, label: p.name }))}
               />
             </Form.Item>
-            <Form.Item name="iteration_id" label="迭代" style={{ width: 200 }}>
+            <Form.Item name="iteration_id" label={t('迭代')} style={{ width: 200 }}>
               <Select
                 allowClear
-                placeholder="可不选"
+                placeholder={t('可不选')}
                 options={iterations.map((i) => ({ value: i.id, label: i.name }))}
               />
             </Form.Item>
-            <Form.Item name="retry_count" label="重试次数" style={{ width: 120 }}>
+            <Form.Item name="retry_count" label={t('重试次数')} style={{ width: 120 }}>
               <InputNumber min={0} max={5} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item
               name="environment_name"
-              label="环境"
+              label={t('环境')}
               style={{ width: 180 }}
-              tooltip="跨项目任务要求每个项目都有同名环境；留空使用「默认」"
+              tooltip={t('跨项目任务要求每个项目都有同名环境；留空使用「默认」')}
             >
               <Select
                 allowClear
-                placeholder="默认"
+                placeholder={t('默认')}
                 options={environmentNames.map((name) => ({ value: name, label: name }))}
               />
             </Form.Item>
-            <Form.Item name="gate_enabled" label="质量门禁" valuePropName="checked">
+            <Form.Item name="gate_enabled" label={t('质量门禁')} valuePropName="checked">
               <Switch />
             </Form.Item>
             <Form.Item
               name="gate_min_pass_rate"
-              label="最低通过率 (%)"
+              label={t('最低通过率 (%)')}
               style={{ width: 140 }}
             >
-              <InputNumber min={0} max={100} style={{ width: '100%' }} placeholder="不限" />
+              <InputNumber min={0} max={100} style={{ width: '100%' }} placeholder={t('不限')} />
             </Form.Item>
-            <Form.Item name="gate_fail_on_p0" label="P0 失败即拒绝" valuePropName="checked">
+            <Form.Item name="gate_fail_on_p0" label={t('P0 失败即拒绝')} valuePropName="checked">
               <Switch />
             </Form.Item>
             {!editing && (
-              <Form.Item name="run_now" label="保存后立即执行" valuePropName="checked">
+              <Form.Item name="run_now" label={t('保存后立即执行')} valuePropName="checked">
                 <Switch />
               </Form.Item>
             )}
           </Space>
 
-          <Form.Item name="description" label="描述">
+          <Form.Item name="description" label={t('描述')}>
             <Input.TextArea rows={2} />
           </Form.Item>
         </Form>

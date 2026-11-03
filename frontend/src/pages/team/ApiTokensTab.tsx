@@ -18,6 +18,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createApiToken, getApiTokens, revokeApiToken } from '../../api/apiTokens';
 import { apiError } from '../../api/client';
 import { fmtDateTime } from '../../lib/format';
+import { t } from '../../i18n';
 import type { ApiTokenCreated } from '../../api/types';
 
 export default function ApiTokensTab({ tid }: { tid: string }) {
@@ -47,7 +48,7 @@ export default function ApiTokensTab({ tid }: { tid: string }) {
   const revoke = useMutation({
     mutationFn: (id: string) => revokeApiToken(tid, id),
     onSuccess: () => {
-      message.success('Token 已吊销');
+      message.success(t('Token 已吊销'));
       queryClient.invalidateQueries({ queryKey: ['api-tokens', tid] });
     },
     onError: (e) => message.error(apiError(e)),
@@ -59,14 +60,14 @@ export default function ApiTokensTab({ tid }: { tid: string }) {
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message="给 CI 使用的团队 Token"
+        message={t('给 CI 使用的团队 Token')}
         description={
           <span>
-            在 CI 里通过 <Typography.Text code>X-API-Token</Typography.Text> 或
-            <Typography.Text code>Authorization: Bearer aqt_...</Typography.Text> 调用
-            <Typography.Text code>POST /api/ci/tasks/&lt;id&gt;/run</Typography.Text> 和
-            <Typography.Text code>GET /api/ci/batches/&lt;id&gt;</Typography.Text>。
-            明文只在创建时显示一次。
+            {t('在 CI 里通过')} <Typography.Text code>X-API-Token</Typography.Text> {t('或')}
+            <Typography.Text code>Authorization: Bearer aqt_...</Typography.Text> {t('调用')}
+            <Typography.Text code>POST /api/ci/tasks/&lt;id&gt;/run</Typography.Text> {t('和')}
+            <Typography.Text code>GET /api/ci/batches/&lt;id&gt;</Typography.Text>
+            {t('。明文只在创建时显示一次。')}
           </span>
         }
       />
@@ -80,7 +81,7 @@ export default function ApiTokensTab({ tid }: { tid: string }) {
             setOpen(true);
           }}
         >
-          新建 Token
+          {t('新建 Token')}
         </Button>
       </Space>
       <Table
@@ -90,41 +91,41 @@ export default function ApiTokensTab({ tid }: { tid: string }) {
         pagination={false}
         dataSource={tokens}
         columns={[
-          { title: '名称', dataIndex: 'name' },
+          { title: t('名称'), dataIndex: 'name' },
           {
-            title: '前缀',
+            title: t('前缀'),
             dataIndex: 'token_prefix',
             render: (value: string) => <Typography.Text code>{value}…</Typography.Text>,
           },
           {
-            title: '权限',
+            title: t('权限'),
             dataIndex: 'scopes',
             render: (scopes: string[]) => (
               <Space>{scopes.map((s) => <Tag key={s}>{s}</Tag>)}</Space>
             ),
           },
           {
-            title: '最近使用',
+            title: t('最近使用'),
             dataIndex: 'last_used_at',
             render: (value: string | null) => fmtDateTime(value),
           },
           {
-            title: '状态',
+            title: t('状态'),
             render: (_value, row) =>
-              row.revoked_at ? <Tag>已吊销</Tag> : <Tag color="green">有效</Tag>,
+              row.revoked_at ? <Tag>{t('已吊销')}</Tag> : <Tag color="green">{t('有效')}</Tag>,
           },
           {
-            title: '操作',
+            title: t('操作'),
             width: 100,
             render: (_value, row) =>
               !row.revoked_at && (
                 <Popconfirm
-                  title="吊销这个 Token？"
-                  description="吊销后使用它的 CI 任务会立即失败。"
+                  title={t('吊销这个 Token？')}
+                  description={t('吊销后使用它的 CI 任务会立即失败。')}
                   onConfirm={() => revoke.mutate(row.id)}
                 >
                   <Button size="small" danger loading={revoke.isPending}>
-                    吊销
+                    {t('吊销')}
                   </Button>
                 </Popconfirm>
               ),
@@ -134,21 +135,21 @@ export default function ApiTokensTab({ tid }: { tid: string }) {
 
       <Modal
         open={open}
-        title="新建 CI Token"
+        title={t('新建 CI Token')}
         onCancel={() => setOpen(false)}
         onOk={() => form.submit()}
         confirmLoading={create.isPending}
         forceRender
       >
         <Form form={form} layout="vertical" onFinish={(values) => create.mutate(values)}>
-          <Form.Item name="name" label="名称" rules={[{ required: true, message: '必填' }]}>
-            <Input placeholder="如 GitHub Actions" />
+          <Form.Item name="name" label={t('名称')} rules={[{ required: true, message: t('必填') }]}>
+            <Input placeholder={t('如 GitHub Actions')} />
           </Form.Item>
-          <Form.Item name="scopes" label="权限">
+          <Form.Item name="scopes" label={t('权限')}>
             <Checkbox.Group
               options={[
-                { label: 'run（触发执行）', value: 'run' },
-                { label: 'read（查询状态/预检）', value: 'read' },
+                { label: t('run（触发执行）'), value: 'run' },
+                { label: t('read（查询状态/预检）'), value: 'read' },
               ]}
             />
           </Form.Item>
@@ -157,15 +158,15 @@ export default function ApiTokensTab({ tid }: { tid: string }) {
 
       <Modal
         open={Boolean(created)}
-        title="Token 已创建"
+        title={t('Token 已创建')}
         onCancel={() => setCreated(null)}
-        footer={<Button onClick={() => setCreated(null)}>我已保存</Button>}
+        footer={<Button onClick={() => setCreated(null)}>{t('我已保存')}</Button>}
       >
         <Alert
           type="warning"
           showIcon
-          message="这是唯一一次显示明文"
-          description="关闭后无法再查看，只能重新创建。"
+          message={t('这是唯一一次显示明文')}
+          description={t('关闭后无法再查看，只能重新创建。')}
           style={{ marginBottom: 16 }}
         />
         <Typography.Paragraph copyable={{ text: created?.token }} code>
