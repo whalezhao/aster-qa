@@ -25,7 +25,7 @@ export default function Teams() {
     mutationFn: (values: TeamInput) =>
       editing ? updateTeam(editing.id, values) : createTeam({ ...values, name: values.name! }),
     onSuccess: () => {
-      message.success(editing ? t('团队已更新') : t('团队已创建'));
+      message.success(editing ? t('测试团队已更新') : t('测试团队已创建'));
       setOpen(false);
       invalidate();
     },
@@ -35,7 +35,7 @@ export default function Teams() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteTeam(id),
     onSuccess: () => {
-      message.success(t('团队已删除'));
+      message.success(t('测试团队已删除'));
       invalidate();
     },
     onError: (e) => message.error(apiError(e)),
@@ -55,11 +55,11 @@ export default function Teams() {
     <PageContainer
       ghost
       header={{
-        title: t('团队'),
-        subTitle: t('删除团队需要拥有者（owner）权限'),
+        title: t('测试团队'),
+        subTitle: t('删除测试团队需要拥有者（owner）权限'),
         extra: [
           <Button key="create" type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            {t('新建团队')}
+            {t('新建测试团队')}
           </Button>,
         ],
       }}
@@ -92,7 +92,7 @@ export default function Teams() {
                   {t('编辑')}
                 </Button>
                 <Popconfirm
-                  title={t('确定删除该团队？')}
+                  title={t('确定删除该测试团队？')}
                   description={t('删除后不可恢复。')}
                   onConfirm={() => deleteMutation.mutate(record.id)}
                 >
@@ -107,7 +107,7 @@ export default function Teams() {
       />
 
       <ModalForm<TeamInput>
-        title={editing ? t('编辑团队') : t('新建团队')}
+        title={editing ? t('编辑测试团队') : t('新建测试团队')}
         open={open}
         onOpenChange={setOpen}
         modalProps={{ destroyOnHidden: true }}
@@ -122,7 +122,7 @@ export default function Teams() {
         <ProFormText
           name="name"
           label={t('名称')}
-          rules={[{ required: true, message: t('请输入团队名称') }]}
+          rules={[{ required: true, message: t('请输入测试团队名称') }]}
         />
         <ProFormTextArea name="description" label={t('描述')} fieldProps={{ rows: 3 }} />
       </ModalForm>

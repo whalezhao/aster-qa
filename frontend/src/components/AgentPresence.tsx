@@ -30,7 +30,7 @@ function voiceEnabled(): boolean {
   return localStorage.getItem(VOICE_KEY) !== '0';
 }
 
-/** 把团队当前的数据翻译成几句人话 —— 不调模型，本地即时生成。 */
+/** 把测试团队当前的数据翻译成几句人话 —— 不调模型，本地即时生成。 */
 function buildLines(
   overview: Awaited<ReturnType<typeof getStatsOverview>> | undefined,
   batches: Awaited<ReturnType<typeof getBatches>> | undefined,
@@ -77,9 +77,9 @@ function buildLines(
     }
   }
   if (lines.length === 0) {
-    lines.push({ text: t('这个团队还没有执行记录，先跑一次回归，我就能告诉你情况了。'), mood: 'idle' });
+    lines.push({ text: t('这个测试团队还没有执行记录，先跑一次回归，我就能告诉你情况了。'), mood: 'idle' });
   }
-  lines.push({ text: t('我可以帮你写用例、看执行结果、做团队复盘。点我就能听我说。'), mood: 'happy' });
+  lines.push({ text: t('我可以帮你写用例、看执行结果、做测试团队复盘。点我就能听我说。'), mood: 'happy' });
   return lines;
 }
 
@@ -87,7 +87,7 @@ function buildLines(
  * 顶栏上的 AI 小助手：logo + 会冒出的话。
  *
  * 「说话」= 气泡文字 + 浏览器朗读（用户点击后才出声 —— 浏览器不允许自动播报）。
- * 内容不调模型，直接读当前团队的统计和执行记录，所以是即时的、不用等。
+ * 内容不调模型，直接读当前测试团队的统计和执行记录，所以是即时的、不用等。
  */
 export default function AgentPresence({ size = 42 }: { size?: number }) {
   const { teamId } = useActiveTeam();
@@ -202,7 +202,7 @@ export default function AgentPresence({ size = 42 }: { size?: number }) {
               {t('AI 助手')} ·{' '}
               {running > 0
                 ? t('正在盯 {count} 个执行', { count: running })
-                : t('实时读取团队数据')}
+                : t('实时读取测试团队数据')}
             </Typography.Text>
           </div>
           <Typography.Text style={{ fontSize: 13, lineHeight: 1.7 }}>{line.text}</Typography.Text>

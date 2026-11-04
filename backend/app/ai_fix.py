@@ -54,7 +54,7 @@ async def _case_project(db: AsyncSession, case: TestCase) -> tuple[uuid.UUID, uu
         )
     ).first()
     if row is None:
-        raise ValueError("用例所属功能/项目不存在")
+        raise ValueError("用例所属功能/系统不存在")
     return row[0], row[1]
 
 
@@ -110,7 +110,7 @@ async def propose_case_fix(
 
     config = await db.get(ProjectModelConfig, project_id)
     if missing_fields(config):
-        raise ValueError("项目模型配置不完整，无法调用 AI")
+        raise ValueError("系统模型配置不完整，无法调用 AI")
     await ensure_quota(db, project_id, config)
 
     # 延迟导入避免 API 层与工具层循环依赖

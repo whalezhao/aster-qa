@@ -3,7 +3,7 @@ import { http } from './client';
 export interface AppSettings {
   /** 全局并发上限：所有 worker 加起来最多同时跑多少个 run */
   max_concurrent_runs: number;
-  /** 单项目任务的分片粒度：0 表示不拆 run（一个项目一个 run） */
+  /** 单系统任务的分片粒度：0 表示不拆 run（一个系统一个 run） */
   run_shard_size: number;
   /** 只评估有失败的批次：全绿批次不再调模型，省一次真实调用 */
   ai_assess_failures_only: boolean;

@@ -156,7 +156,7 @@ export default function Login() {
               }}
             >
               {t(
-                '团队、项目、功能、用例一条链管到底：AI 生成用例、执行产生报告、人工签名背书、webhook 把结果送回你的工单系统。',
+                '测试团队、系统、功能、用例一条链管到底：AI 生成用例、执行产生报告、人工签名背书、webhook 把结果送回你的工单系统。',
               )}
             </Typography.Paragraph>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 32 }}>
@@ -203,7 +203,7 @@ export default function Login() {
             type="secondary"
             style={{ margin: '8px 0 28px', fontSize: 13, lineHeight: 1.6 }}
           >
-            {t('账号由团队管理员在「人员」里维护，忘记密码也找管理员重置。')}
+            {t('账号由测试团队管理员在「人员」里维护，忘记密码也找管理员重置。')}
           </Typography.Paragraph>
 
           <Form layout="vertical" onFinish={onFinish} requiredMark={false} size="large">

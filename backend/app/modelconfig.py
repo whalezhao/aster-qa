@@ -27,7 +27,7 @@ REQUIRED_FIELDS: tuple[tuple[str, str], ...] = (
 
 
 def configured_condition() -> ColumnElement[bool]:
-    """一个项目算「已配置模型」的 SQL 条件。"""
+    """一个系统算「已配置模型」的 SQL 条件。"""
     return and_(
         *[getattr(ProjectModelConfig, field).is_not(None) for field, _ in REQUIRED_FIELDS]
     )
@@ -86,6 +86,6 @@ async def assert_projects_configured(
 
     raise HTTPException(
         status.HTTP_400_BAD_REQUEST,
-        f"以下项目还没配置好大模型：{'；'.join(details)}。"
-        "请到「项目详情 → 大模型配置」补齐后再执行。",
+        f"以下系统还没配置好大模型：{'；'.join(details)}。"
+        "请到「系统详情 → 大模型配置」补齐后再执行。",
     )

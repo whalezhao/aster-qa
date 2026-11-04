@@ -140,7 +140,7 @@ export default function ExecutionDetail() {
           <ProDescriptions.Item label={t('开始')}>{fmtDateTime(batch.started_at)}</ProDescriptions.Item>
           <ProDescriptions.Item label={t('结束')}>{fmtDateTime(batch.ended_at)}</ProDescriptions.Item>
           <ProDescriptions.Item label={t('耗时')}>{fmtDuration(batch.duration_ms)}</ProDescriptions.Item>
-          <ProDescriptions.Item label={t('项目数')}>{batch.project_count}</ProDescriptions.Item>
+          <ProDescriptions.Item label={t('系统数')}>{batch.project_count}</ProDescriptions.Item>
           <ProDescriptions.Item label={t('触发方式')}>
             {t(
               {
@@ -214,7 +214,7 @@ export default function ExecutionDetail() {
             <Statistic title={t('通过率')} value={fmtPercent(batch.total ? batch.passed / batch.total : null)} />
           </Col>
           <Col span={6}>
-            <Statistic title={t('涉及项目')} value={batch.project_count} />
+            <Statistic title={t('涉及系统')} value={batch.project_count} />
           </Col>
         </Row>
       </ProCard>
@@ -283,9 +283,9 @@ export default function ExecutionDetail() {
         )}
       </ProCard>
 
-      <ProCard title={t('各项目的执行明细')} style={{ marginTop: 16 }}>
+      <ProCard title={t('各系统的执行明细')} style={{ marginTop: 16 }}>
         <Typography.Paragraph type="secondary">
-          {t('跨项目或用例分片的任务会拆成多次运行（一个 run 只跑一个项目的一部分用例），下面是每一份运行的结果。点「报告」查看该项目报告；需要归档签章时用右上角的「测试报告」。')}
+          {t('跨系统或用例分片的任务会拆成多次运行（一个 run 只跑一个系统的一部分用例），下面是每一份运行的结果。点「报告」查看该系统报告；需要归档签章时用右上角的「测试报告」。')}
         </Typography.Paragraph>
         {batch.run_items.length === 0 ? (
           <Empty description={t('没有运行明细')} />
@@ -297,7 +297,7 @@ export default function ExecutionDetail() {
             size="small"
             columns={[
               {
-                title: t('项目'),
+                title: t('系统'),
                 dataIndex: 'project_name',
                 sorter: byText<BatchRun>((r) => r.project_name),
                 render: (v: string | null, r) => (

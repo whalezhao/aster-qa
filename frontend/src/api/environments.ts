@@ -6,7 +6,7 @@ export async function getProjectEnvironments(projectId: string): Promise<Environ
   return data;
 }
 
-/** 团队下所有项目的环境（新建/编辑任务时选环境名用）。 */
+/** 测试团队下所有系统的环境（新建/编辑任务时选环境名用）。 */
 export async function getTeamEnvironments(teamId: string): Promise<Environment[]> {
   const { data } = await http.get<Environment[]>(`/api/teams/${teamId}/environments`);
   return data;

@@ -1,4 +1,4 @@
-"""CI 使用的团队 API Token。"""
+"""CI 使用的测试团队 API Token。"""
 
 import hashlib
 import secrets

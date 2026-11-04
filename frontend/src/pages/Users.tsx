@@ -23,11 +23,11 @@ export default function Users() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
 
-  // 与后端 require_people_admin 同一个口径：在任一团队里不是 member 就能维护人员
+  // 与后端 require_people_admin 同一个口径：在任一测试团队里不是 member 就能维护人员
   const canMaintain = Boolean(me?.teams.some((team) => team.role !== 'member'));
 
   const { data: users = [], isLoading } = useQuery({
-    // 与团队页那个不带团队的 ['users'] 分开缓存：同一个 key 两种形状会互相覆盖
+    // 与测试团队页那个不带测试团队的 ['users'] 分开缓存：同一个 key 两种形状会互相覆盖
     queryKey: ['users', 'with-teams'],
     queryFn: () => getUsers(true),
   });
@@ -68,7 +68,7 @@ export default function Users() {
       content: (
         <div>
           <p style={{ marginTop: 8 }}>
-            {t('这是')}<b>{t('物理删除')}</b>{t('，不可恢复：账号、它的团队关系都会消失；历史记录（谁建的用例、谁签的名）会变成「未知」，但记录本身保留。')}
+            {t('这是')}<b>{t('物理删除')}</b>{t('，不可恢复：账号、它的测试团队关系都会消失；历史记录（谁建的用例、谁签的名）会变成「未知」，但记录本身保留。')}
           </p>
           <p style={{ marginBottom: 0 }}>{t('只是想让这个人不能登录，用「停用」就行。')}</p>
         </div>
@@ -83,7 +83,7 @@ export default function Users() {
       ghost
       header={{
         title: t('人员维护'),
-        subTitle: t('人员是全局的：一个账号可以同时属于多个团队，在团队里加人就是从这份名单里挑'),
+        subTitle: t('人员是全局的：一个账号可以同时属于多个测试团队，在测试团队里加人就是从这份名单里挑'),
         extra: [
           <Input.Search
             key="search"
@@ -115,8 +115,8 @@ export default function Users() {
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message={t('只有团队管理员能维护人员')}
-          description={t('你当前在这些团队里都是普通成员，只能查看名单。新建、改资料、重置密码、停用需要 owner 或 admin。')}
+          message={t('只有测试团队管理员能维护人员')}
+          description={t('你当前在这些测试团队里都是普通成员，只能查看名单。新建、改资料、重置密码、停用需要 owner 或 admin。')}
         />
       )}
 
@@ -153,7 +153,7 @@ export default function Users() {
             render: (_, r) => r.email || <Typography.Text type="secondary">-</Typography.Text>,
           },
           {
-            title: t('所属团队'),
+            title: t('所属测试团队'),
             sorter: byNumber<User>((r) => r.teams?.length),
             render: (_, r) =>
               r.teams?.length ? (

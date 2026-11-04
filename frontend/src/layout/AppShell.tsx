@@ -29,26 +29,26 @@ import { getLocale, t } from '../i18n';
 
 const TITLE = 'Aster QA';
 
-// 菜单要复数（Projects / Test tasks），而正文里的「项目」是单数表头，故单独一张表
+// 菜单要复数（Systems / Test tasks），而正文里的「系统」是单数表头，故单独一张表
 const NAV_EN: Record<string, string> = {
   工作台: 'Dashboard',
-  项目: 'Projects',
+  系统: 'Systems',
   测试任务: 'Test tasks',
   执行记录: 'Executions',
   统计: 'Stats',
-  团队: 'Teams',
+  测试团队: 'Test teams',
   人员: 'Users',
   执行器: 'Runners',
 };
 
-// 入口顺序按使用频率：干活（项目/任务/执行）在前，组织和配置（团队/人员）在后
+// 入口顺序按使用频率：干活（系统/任务/执行）在前，组织和配置（测试团队/人员）在后
 const menuRoutes = [
   { path: '/', name: '工作台', icon: <DashboardOutlined /> },
-  { path: '/projects', name: '项目', icon: <AppstoreOutlined /> },
+  { path: '/projects', name: '系统', icon: <AppstoreOutlined /> },
   { path: '/tasks', name: '测试任务', icon: <FileSearchOutlined /> },
   { path: '/executions', name: '执行记录', icon: <PlayCircleOutlined /> },
   { path: '/stats', name: '统计', icon: <BarChartOutlined /> },
-  { path: '/teams', name: '团队', icon: <TeamOutlined /> },
+  { path: '/teams', name: '测试团队', icon: <TeamOutlined /> },
   { path: '/users', name: '人员', icon: <UserOutlined /> },
 ];
 
@@ -66,7 +66,7 @@ const MENU_PREFIXES = [
 
 /**
  * 应用外壳：Ant Design Pro 的 ProLayout（浅色侧栏 + 顶栏），
- * 菜单/折叠/响应式都由 Pro 提供，这里只补三件事：团队切换、主题切换、用户菜单。
+ * 菜单/折叠/响应式都由 Pro 提供，这里只补三件事：测试团队切换、主题切换、用户菜单。
  */
 export default function AppShell() {
   const { user, logout } = useAuth();
@@ -81,7 +81,7 @@ export default function AppShell() {
   const [pwdOpen, setPwdOpen] = useState(false);
   const [form] = Form.useForm<{ old_password: string; new_password: string }>();
 
-  // 首次进入或当前团队失效时，落到第一个团队
+  // 首次进入或当前测试团队失效时，落到第一个测试团队
   useEffect(() => {
     if (teams.length === 0) return;
     if (!activeTeam || !teams.some((t) => t.id === activeTeam)) {
@@ -95,7 +95,7 @@ export default function AppShell() {
     if (!id) return;
     setActiveTeam(id);
     setActiveTeamId(id);
-    // 切团队只换数据范围，不把人踢到团队页
+    // 切测试团队只换数据范围，不把人踢到测试团队页
     queryClient.invalidateQueries();
   }
 
@@ -157,7 +157,7 @@ export default function AppShell() {
             variant="borderless"
             style={{ minWidth: 150 }}
             value={activeTeam ?? undefined}
-            placeholder={t('选择团队')}
+            placeholder={t('选择测试团队')}
             onChange={onSwitchTeam}
             options={teams.map((item) => ({ value: item.id, label: item.name }))}
           />,
@@ -210,7 +210,7 @@ export default function AppShell() {
           },
         }}
       >
-        {/* 当前团队只在这里提供，页面不再各存一份 */}
+        {/* 当前测试团队只在这里提供，页面不再各存一份 */}
         <TeamProvider value={{ teamId: activeTeam, setTeamId: onSwitchTeam }}>
           <Outlet />
         </TeamProvider>

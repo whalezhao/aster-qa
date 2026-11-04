@@ -118,7 +118,7 @@ export default function Executions() {
       ghost
       header={{
         title: t('执行记录'),
-        subTitle: t('每行是一次执行（一个任务点一次「执行」）；跨项目的任务会拆成多次运行，但在这里算一件事'),
+        subTitle: t('每行是一次执行（一个任务点一次「执行」）；跨系统的任务会拆成多次运行，但在这里算一件事'),
         extra: taskId
           ? [
               <Typography.Text key="hint" type="secondary">
@@ -135,7 +135,7 @@ export default function Executions() {
       <Space wrap style={{ marginBottom: 16 }}>
         <Select
           allowClear
-          placeholder={t('全部项目')}
+          placeholder={t('全部系统')}
           style={{ minWidth: 180 }}
           value={projectId}
           onChange={(value) => updateParams({ project_id: value })}
@@ -298,7 +298,7 @@ export default function Executions() {
               if (r.ai_status === 'pending') return <Tag color="processing">{t('分析中')}</Tag>;
               if (r.ai_status === 'failed') {
                 return (
-                  <Tooltip title={t('这次执行没有拿到 AI 结论（可能是项目没配模型）')}>
+                  <Tooltip title={t('这次执行没有拿到 AI 结论（可能是系统没配模型）')}>
                     <Tag>{t('未评估')}</Tag>
                   </Tooltip>
                 );
@@ -324,7 +324,7 @@ export default function Executions() {
               ),
           },
           {
-            title: t('项目'),
+            title: t('系统'),
             width: 90,
             sorter: byNumber<Batch>((r) => r.project_count),
             render: (_, r) =>

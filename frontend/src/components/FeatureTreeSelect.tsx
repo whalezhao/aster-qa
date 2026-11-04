@@ -5,16 +5,16 @@ import { getProjects } from '../api/projects';
 import { t } from '../i18n';
 
 /**
- * 「项目 → 功能」两级多选。新建任务和新建回归都用它。
+ * 「系统 → 功能」两级多选。新建任务和新建回归都用它。
  *
- * 没配好大模型的项目，其下功能直接不可选 —— 选了也跑不了，不如一开始就拦住。
+ * 没配好大模型的系统，其下功能直接不可选 —— 选了也跑不了，不如一开始就拦住。
  * 判定口径以后端的 has_model_config 为准。
  */
 export default function FeatureTreeSelect({
   teamId,
   value,
   onChange,
-  placeholder = '按项目选择功能',
+  placeholder = '按系统选择功能',
   style,
   disabled = false,
 }: {
@@ -43,7 +43,7 @@ export default function FeatureTreeSelect({
     const ready = p.has_model_config;
     return {
       title: ready ? p.name : t('{name}（未配大模型，不可选）', { name: p.name }),
-      // 父节点要有 value，否则 antd 报 "TreeNode value is invalidate"；但它是项目不是功能，
+      // 父节点要有 value，否则 antd 报 "TreeNode value is invalidate"；但它是系统不是功能，
       // 所以标成不可选，配合 SHOW_CHILD 策略，选中值里只会出现功能的 id
       value: `project:${p.id}`,
       selectable: false,
@@ -76,7 +76,7 @@ export default function FeatureTreeSelect({
       />
       {blocked.length > 0 && (
         <Typography.Text type="warning" style={{ display: 'block', marginTop: 4 }}>
-          {t('有 {count} 个项目未配大模型，其下功能已禁选：{names}', {
+          {t('有 {count} 个系统未配大模型，其下功能已禁选：{names}', {
             count: blocked.length,
             names: blocked.map((p) => p.name).join(t('、')),
           })}

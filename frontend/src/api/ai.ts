@@ -19,7 +19,7 @@ export async function runTaskPrecheck(taskId: string): Promise<AiCheckResult> {
   return data;
 }
 
-/** 生成团队复盘（Markdown）。同步调用模型。 */
+/** 生成测试团队复盘（Markdown）。同步调用模型。 */
 export async function runTeamReview(teamId: string, days: number): Promise<AiCheckResult> {
   const { data } = await http.post<AiCheckResult>(
     `/api/teams/${teamId}/ai/review`,
@@ -29,7 +29,7 @@ export async function runTeamReview(teamId: string, days: number): Promise<AiChe
   return data;
 }
 
-/** 最近一次团队复盘，打开页面先展示，不用每次重新生成。 */
+/** 最近一次测试团队复盘，打开页面先展示，不用每次重新生成。 */
 export async function getLatestTeamReview(teamId: string): Promise<AiCheckResult> {
   const { data } = await http.get<AiCheckResult>(`/api/teams/${teamId}/ai/review/latest`);
   return data;

@@ -142,14 +142,14 @@ export default function Stats() {
             patch({ dimension: value as string, project_id: undefined })
           }
           options={[
-            { label: t('团队维度'), value: 'team' },
-            { label: t('项目维度'), value: 'project' },
+            { label: t('测试团队维度'), value: 'team' },
+            { label: t('系统维度'), value: 'project' },
           ]}
         />
         {dimension === 'project' && (
           <Select
             style={{ minWidth: 220 }}
-            placeholder={t('选择项目')}
+            placeholder={t('选择系统')}
             value={projectId}
             onChange={(value) => patch({ project_id: value })}
             options={projects.map((p) => ({ value: p.id, label: p.name }))}
@@ -523,7 +523,7 @@ function OverviewTab({
               sorter: byText((r: { feature_name: string }) => r.feature_name),
               render: (_, r) => <Link to={`/features/${r.feature_id}`}>{r.feature_name}</Link>,
             },
-            { title: t('项目'), dataIndex: 'project_name', width: 220 },
+            { title: t('系统'), dataIndex: 'project_name', width: 220 },
             {
               title: t('失败次数'),
               dataIndex: 'failures',
@@ -784,7 +784,7 @@ function RegressionTab({
   );
 }
 
-/** 团队近况的 AI 复盘：按需生成，结果落库，再打开时先展示上一次。 */
+/** 测试团队近况的 AI 复盘：按需生成，结果落库，再打开时先展示上一次。 */
 function AiReviewSection({ teamId }: { teamId: string | null }) {
   const { message } = App.useApp();
   const { token } = theme.useToken();

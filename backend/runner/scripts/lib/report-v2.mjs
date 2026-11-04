@@ -496,7 +496,7 @@ export function buildReport(htmlPath, options = {}) {
       const cases = projectCases(project, shotMap, byId);
       return {
         id: `${source.runId || 'project'}-${projectIndex}`,
-        name: project.name || `项目 ${projectIndex + 1}`,
+        name: project.name || `系统 ${projectIndex + 1}`,
         projectName: source.projectName || '',
         runId: source.runId || cases.find((item) => item.runId)?.runId || null,
         status: project.status === 'success' ? 'passed' : project.status === 'failed' ? 'failed' : project.status || 'passed',

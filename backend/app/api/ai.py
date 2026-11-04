@@ -108,7 +108,7 @@ async def run_team_review(
     db: DbSession,
     days: int = Query(default=7, ge=1, le=90),
 ) -> AiCheckOut:
-    """按需生成团队复盘（Markdown）。同步调用模型。"""
+    """按需生成测试团队复盘（Markdown）。同步调用模型。"""
     await require_team_role(team_id, user, db, "member")
     try:
         markdown, model_name = await team_review(db, team_id, days)
@@ -123,6 +123,6 @@ async def run_team_review(
 async def get_latest_team_review(
     team_id: uuid.UUID, user: CurrentUser, db: DbSession
 ) -> AiCheckOut:
-    """最近一次团队复盘，打开统计页时先展示它，不用每次重新生成。"""
+    """最近一次测试团队复盘，打开统计页时先展示它，不用每次重新生成。"""
     await require_team_role(team_id, user, db, "member")
     return _out(await latest_check(db, "team", team_id))

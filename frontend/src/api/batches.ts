@@ -61,7 +61,7 @@ export interface Batch {
   features: BatchFeature[];
 }
 
-/** 批次下的单个 run —— 一次 midscene 执行，只属于一个项目。 */
+/** 批次下的单个 run —— 一次 midscene 执行，只属于一个系统。 */
 export interface BatchRun {
   id: string;
   project_id: string | null;

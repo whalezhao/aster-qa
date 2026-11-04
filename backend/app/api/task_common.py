@@ -58,7 +58,7 @@ async def resolve_run_groups(db, task: TestTask) -> dict[uuid.UUID, int]:
 
 
 async def _cases_by_project(db, task: TestTask) -> dict[uuid.UUID, list[uuid.UUID]]:
-    """按项目列出任务快照里的用例 id，顺序沿用任务里的 position。"""
+    """按系统列出任务快照里的用例 id，顺序沿用任务里的 position。"""
     rows = (
         await db.execute(
             select(Feature.project_id, TestCase.id)
@@ -153,12 +153,12 @@ async def _ensure_base_url_available(
         if any("${BASE_URL}" in (yaml_by_id.get(cid) or "") for cid in ids):
             project_name = project.name if project is not None else str(project_id)
             env_name = env.name if env is not None else DEFAULT_ENVIRONMENT
-            problems.append(f"项目「{project_name}」的环境「{env_name}」没有配置被测地址")
+            problems.append(f"系统「{project_name}」的环境「{env_name}」没有配置被测地址")
     if problems:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "；".join(problems)
-            + "，但用例里引用了 ${BASE_URL}；请到项目环境里补上地址后再执行",
+            + "，但用例里引用了 ${BASE_URL}；请到系统环境里补上地址后再执行",
         )
 
 
@@ -370,4 +370,4 @@ async def active_task_ids(db, task_ids: list[uuid.UUID]) -> set[uuid.UUID]:
 async def check_iteration(db, iteration_id: uuid.UUID, team_id: uuid.UUID) -> None:
     iteration = await db.get(Iteration, iteration_id)
     if iteration is None or iteration.team_id != team_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "迭代不存在或不属于该团队")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "迭代不存在或不属于该测试团队")

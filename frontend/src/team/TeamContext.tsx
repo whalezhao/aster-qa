@@ -2,10 +2,10 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { getActiveTeamId } from '../storage';
 
 /**
- * 当前团队的唯一来源。
+ * 当前测试团队的唯一来源。
  *
  * 之前旧布局顶栏有一份自己的 useState、各个页面又各自 useState 读 localStorage，
- * 两边互不同步 —— 表现就是「一个页面里出现两个团队选择器」，而且顶栏切了团队，
+ * 两边互不同步 —— 表现就是「一个页面里出现两个测试团队选择器」，而且顶栏切了测试团队，
  * 页面数据不跟着变。这里收敛成一份，由 AppShell 提供，页面只读。
  */
 export interface TeamContextValue {

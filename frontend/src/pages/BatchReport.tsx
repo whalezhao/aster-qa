@@ -246,7 +246,7 @@ export default function BatchReport() {
                   </td>
                 </tr>
                 <tr>
-                  <th>{t('涉及项目')}</th>
+                  <th>{t('涉及系统')}</th>
                   <td>{t('{n} 个', { n: batch.project_count })}</td>
                   <th>{t('执行耗时')}</th>
                   <td>{fmtDuration(batch.duration_ms)}</td>
@@ -277,7 +277,7 @@ export default function BatchReport() {
               <Kpi label={t('耗时')} value={fmtDuration(report.stats.durationMs)} />
             </div>
             <p className="qa-formal-note">
-              {t('本次执行覆盖 {projects} 个项目、{cases} 个用例，共 {steps} 个执行步骤；使用模型 {models}。详细执行证据（关键帧、参数、日志）可在平台按执行 ID 追溯。', {
+              {t('本次执行覆盖 {projects} 个系统、{cases} 个用例，共 {steps} 个执行步骤；使用模型 {models}。详细执行证据（关键帧、参数、日志）可在平台按执行 ID 追溯。', {
                 projects: batch.project_count,
                 cases: report.stats.cases,
                 steps: report.stats.steps,
@@ -377,7 +377,7 @@ export default function BatchReport() {
                     ? t('聚合报告尚未生成（老批次没有聚合产物），暂不能签章。')
                     : signoff.can_sign
                       ? t('签章只作用于当前执行记录；请在执行记录列表或本页选择要签章的执行记录。')
-                      : t('如需归档留存，请联系团队管理员完成签章。')}
+                      : t('如需归档留存，请联系测试团队管理员完成签章。')}
                 </div>
               </div>
             )}
@@ -473,7 +473,7 @@ function CaseTable({ report }: { report: ReportStructured }) {
       <thead>
         <tr>
           <th>#</th>
-          <th>{t('项目')}</th>
+          <th>{t('系统')}</th>
           <th>{t('用例')}</th>
           <th>{t('步骤')}</th>
           <th>{t('耗时')}</th>

@@ -16,7 +16,7 @@ interface FormValues {
 
 /**
  * 新建 / 编辑人员。新建和编辑的差异只有两处：编辑时用户名不可改、密码留空表示不改。
- * 加团队成员时也用这个弹窗直接把人建出来 —— 只给一个「选已有用户」的下拉，
+ * 加测试团队成员时也用这个弹窗直接把人建出来 —— 只给一个「选已有用户」的下拉，
  * 新人就永远进不来。
  *
  * 头像是内置的卡通脸（不做上传）：选一个 key 存库，前端按 key 画 SVG。
@@ -172,7 +172,7 @@ export default function UserModal({
       </Form>
       {!editing && (
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0, fontSize: 12 }}>
-          {t('建完可以在团队页把它加进团队。')}
+          {t('建完可以在测试团队页把它加进测试团队。')}
         </Typography.Paragraph>
       )}
     </Modal>

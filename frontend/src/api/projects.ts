@@ -32,11 +32,11 @@ export async function deleteProject(id: string): Promise<void> {
   await http.delete(`/api/projects/${id}`);
 }
 
-// ------------------------------------------------------ 项目级模型配置
+// ------------------------------------------------------ 系统级模型配置
 // 注意：后端**永远不会**返回 api_key 本身，只给 api_key_set 表示配没配。
 
 export interface ModelConfig {
-  /** 必填项齐全；false 表示该项目还不能执行 */
+  /** 必填项齐全；false 表示该系统还不能执行 */
   configured: boolean;
   /** 还缺哪些必填项的中文名，界面直接展示「差什么」 */
   missing: string[];

@@ -1,4 +1,4 @@
-"""团队 CI Token 管理。"""
+"""测试团队 CI Token 管理。"""
 
 import uuid
 from datetime import UTC, datetime

@@ -181,7 +181,7 @@ async def list_tasks(
     task_status: str | None = Query(default=None, alias="status"),
     name: str | None = None,
 ) -> list[TaskOut]:
-    """任务粒度的列表。默认支持按项目 / 分期 / 状态 / 名称筛。"""
+    """任务粒度的列表。默认支持按系统 / 分期 / 状态 / 名称筛。"""
     await get_team_membership(db, team_id, user)
     stmt = select(TestTask).where(TestTask.team_id == team_id)
     if project_id is not None:
@@ -269,7 +269,7 @@ async def create_task(
         )
         if missing := set(body.feature_ids) - {f.id for f in features}:
             raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, f"{len(missing)} 个功能不存在或不属于该团队"
+                status.HTTP_400_BAD_REQUEST, f"{len(missing)} 个功能不存在或不属于该测试团队"
             )
 
     project_ids = {f.project_id for f in features}
@@ -279,7 +279,7 @@ async def create_task(
         (await db.execute(select(Project).where(Project.id.in_(project_ids)))).scalars()
     )
     if any(p.team_id != team_id for p in projects):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "项目不存在或不属于该团队")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "系统不存在或不属于该测试团队")
 
     task = TestTask(
         team_id=team_id,
@@ -313,7 +313,7 @@ async def create_task(
     for tag_id in body.tag_ids:
         tag = await db.get(Tag, tag_id)
         if tag is None or tag.team_id != team_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "标签不存在或不属于该团队")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "标签不存在或不属于该测试团队")
         db.add(TaskTag(task_id=task.id, tag_id=tag_id))
 
     batch_id: str | None = None
@@ -461,7 +461,7 @@ async def set_task_cases(
         found = {row[0] for row in rows}
         if missing := set(body.case_ids) - found:
             raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, f"{len(missing)} 个用例不存在或不属于该团队"
+                status.HTTP_400_BAD_REQUEST, f"{len(missing)} 个用例不存在或不属于该测试团队"
             )
         for position, (case_id, feature_id) in enumerate(rows):
             db.add(
@@ -485,7 +485,7 @@ async def set_task_tags(
     for tag_id in body.tag_ids:
         tag = await db.get(Tag, tag_id)
         if tag is None or tag.team_id != task.team_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "标签不存在或不属于该团队")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "标签不存在或不属于该测试团队")
         db.add(TaskTag(task_id=task_id, tag_id=tag_id))
     await db.commit()
     return {"count": len(body.tag_ids)}
@@ -534,7 +534,7 @@ async def set_task_features(
         found = set(rows)
         if missing := set(body.feature_ids) - found:
             raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, f"{len(missing)} 个功能不存在或不属于该团队"
+                status.HTTP_400_BAD_REQUEST, f"{len(missing)} 个功能不存在或不属于该测试团队"
             )
         for feature_id in body.feature_ids:
             db.add(TaskFeature(task_id=task_id, feature_id=feature_id))

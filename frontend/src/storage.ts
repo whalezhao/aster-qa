@@ -1,4 +1,4 @@
-// 当前选中团队持久化到 localStorage。
+// 当前选中测试团队持久化到 localStorage。
 export const TEAM_KEY = 'qa_team_id';
 
 export function getActiveTeamId(): string | null {

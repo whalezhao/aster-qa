@@ -57,7 +57,7 @@ async def get_team_membership(
     member = (await db.execute(stmt)).scalar_one_or_none()
     if member is None:
         # 不区分「团队不存在」和「你不是成员」，避免泄露团队是否存在
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "团队不存在")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "测试团队不存在")
     return member
 
 
@@ -100,7 +100,7 @@ async def require_people_admin(db: AsyncSession, user: User) -> None:
         .limit(1)
     )
     if (await db.execute(stmt)).first() is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "需要团队管理员权限")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "需要测试团队管理员权限")
 
 
 # ---------------------------------------------- 沿父子链上溯到 team 再判权限
@@ -112,7 +112,7 @@ async def require_project_access(
 ) -> Project:
     project = await db.get(Project, project_id)
     if project is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "项目不存在")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "系统不存在")
     await require_team_role(project.team_id, user, db, minimum)
     return project
 
@@ -125,7 +125,7 @@ async def require_feature_access(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "功能不存在")
     project = await db.get(Project, feature.project_id)
     if project is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "功能所属项目不存在")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "功能所属系统不存在")
     await require_team_role(project.team_id, user, db, minimum)
     return feature
 
@@ -141,7 +141,7 @@ async def require_case_access(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "用例所属功能不存在")
     project = await db.get(Project, feature.project_id)
     if project is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "用例所属项目不存在")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "用例所属系统不存在")
     await require_team_role(project.team_id, user, db, minimum)
     # effective_stage 派生自 feature，序列化前必须已加载，否则触发异步懒加载报错
     case.feature = feature

@@ -62,7 +62,7 @@ EVENTS: dict[str, str] = {
     "batch.assessed": "AI 评估完成（给出结果结论与建议）",
     "quality_gate.failed": "质量门禁未通过",
     "schedule.failed": "定时执行失败",
-    "model.unhealthy": "项目模型不可用",
+    "model.unhealthy": "系统模型不可用",
     "ping": "测试投递（配好之后点一下看通不通）",
 }
 
@@ -103,7 +103,7 @@ async def case_set_hash(db: AsyncSession, task_id: uuid.UUID) -> tuple[str, int]
 
 
 async def _task_context(db: AsyncSession, task: TestTask, include_yaml: bool) -> dict[str, Any]:
-    """团队 / 项目 / 迭代 / 标签 / 任务 / 功能 / 用例 —— 签名事件要发的全套。"""
+    """测试团队 / 系统 / 迭代 / 标签 / 任务 / 功能 / 用例 —— 签名事件要发的全套。"""
     team = await db.get(Team, task.team_id)
     project = await db.get(Project, task.project_id) if task.project_id else None
     iteration = await db.get(Iteration, task.iteration_id) if task.iteration_id else None
@@ -368,7 +368,7 @@ async def build_payload(
         project = await db.get(Project, ref_id)
         health = await db.get(ProjectModelHealth, ref_id)
         if project is None or health is None:
-            raise ValueError("项目或健康记录不存在")
+            raise ValueError("系统或健康记录不存在")
         return {
             **envelope,
             "data": {

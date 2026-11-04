@@ -94,7 +94,7 @@ async def run_preflight(
         }
 
     checks.append(
-        _check("cases", True, f"共 {len(project_ids)} 个项目有待执行用例")
+        _check("cases", True, f"共 {len(project_ids)} 个系统有待执行用例")
     )
 
     environments = {}
@@ -103,7 +103,7 @@ async def run_preflight(
             db, task, project_ids, environment_name=environment_name
         )
         checks.append(
-            _check("environment", True, f"环境「{environment_name}」在所选项目下都存在")
+            _check("environment", True, f"环境「{environment_name}」在所选系统下都存在")
         )
     except EnvironmentResolutionError as exc:
         checks.append(_check("environment", False, str(exc)))

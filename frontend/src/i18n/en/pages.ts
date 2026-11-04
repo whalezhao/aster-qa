@@ -4,7 +4,7 @@ export const pages: Record<string, string> = {
   编码: 'Code',
   描述: 'Description',
   操作: 'Actions',
-  项目: 'Projects',
+  系统: 'Systems',
   任务: 'Task',
   测试任务: 'Test tasks',
   执行记录: 'Executions',
@@ -46,9 +46,9 @@ export const pages: Record<string, string> = {
   配置: 'config',
 
   // ---- 工作台 ----
-  未选择团队: 'No team selected',
+  未选择测试团队: 'No test team selected',
   '欢迎回来，{name} 👋': 'Welcome back, {name} 👋',
-  'Aster QA · 当前团队「{team}」': 'Aster QA · Current team "{team}"',
+  'Aster QA · 当前测试团队「{team}」': 'Aster QA · Current test team "{team}"',
   '{n} 个任务正在跑': '{n} task(s) running',
   统计数据样本不足: 'Not enough samples for stats',
   从这里开始: 'Start here',
@@ -71,7 +71,7 @@ export const pages: Record<string, string> = {
   '这些执行里的用例失败不代表缺陷，不计入上面的通过率。':
     'Failures in these runs do not indicate defects and are not counted in the pass rate above.',
   最近执行: 'Recent runs',
-  '这个团队还没有执行记录。': 'This team has no runs yet.',
+  '这个测试团队还没有执行记录。': 'This test team has no runs yet.',
   读数的正确姿势: 'How to read these numbers',
   '用例由 AI 驱动执行，': 'Cases are executed by AI; ',
   '同一个用例时过时不过属于常态，单次失败不等价于缺陷':
@@ -82,12 +82,12 @@ export const pages: Record<string, string> = {
   '，或 ': ', or ',
   ' 看每一份报告。': ' to see every report.',
 
-  // ---- 项目 ----
-  '项目「{name}」已创建': 'Project "{name}" created',
-  '功能、用例和模型配置都在项目里；顶栏可以切换团队':
-    'Features, test cases and model config live in projects; switch teams from the top bar',
-  新建项目: 'New project',
-  请输入项目名称: 'Enter a project name',
+  // ---- 系统 ----
+  '系统「{name}」已创建': 'System "{name}" created',
+  '功能、用例和模型配置都在系统里；顶栏可以切换测试团队':
+    'Features, test cases and model config live in systems; switch test teams from the top bar',
+  新建系统: 'New system',
+  请输入系统名称: 'Enter a system name',
   '可留空，例如 pansoft-demo': 'Optional, e.g. pansoft-demo',
   '被测地址（Base URL）': 'Target URL (Base URL)',
   '用例里的 ${BASE_URL} 会替换成它': '${BASE_URL} in cases is replaced with this',
@@ -98,31 +98,31 @@ export const pages: Record<string, string> = {
   模型异常: 'Model unhealthy',
   未检测: 'Not checked',
   进入: 'Open',
-  返回团队: 'Back to team',
+  返回测试团队: 'Back to test team',
   '环境与变量': 'Environments and variables',
 
   // ---- 模型配置 ----
   跟随全局: 'Follow global',
   关闭思考: 'Thinking off',
   开启思考: 'Thinking on',
-  '已保存，该项目下次执行起生效': "Saved; takes effect on this project's next run",
-  '已清除该项目的 API Key': 'API key cleared for this project',
-  '已清空模型配置，该项目下用例将无法执行':
-    'Model config cleared; cases in this project can no longer run',
+  '已保存，该系统下次执行起生效': "Saved; takes effect on this system's next run",
+  '已清除该系统的 API Key': 'API key cleared for this system',
+  '已清空模型配置，该系统下用例将无法执行':
+    'Model config cleared; cases in this system can no longer run',
   大模型配置: 'Model configuration',
-  '未配置 · 该项目无法执行': 'Not configured · project cannot run',
-  '清空该项目的模型配置？': "Clear this project's model config?",
-  '清空后该项目下所有用例都无法执行，直到重新配置。':
-    'After clearing, no cases in this project can run until it is reconfigured.',
+  '未配置 · 该系统无法执行': 'Not configured · system cannot run',
+  '清空该系统的模型配置？': "Clear this system's model config?",
+  '清空后该系统下所有用例都无法执行，直到重新配置。':
+    'After clearing, no cases in this system can run until it is reconfigured.',
   清空配置: 'Clear config',
-  '配置完整，该项目下的用例可以执行': 'Configuration complete; cases in this project can run',
+  '配置完整，该系统下的用例可以执行': 'Configuration complete; cases in this system can run',
   '模型族、额外请求配置、思考模式可以留空；模型名为 {model}。':
     'Model family, extra request config and reasoning mode may be blank; model name is {model}.',
   '还差：{items}': 'Missing: {items}',
-  '平台不提供全局大模型，每个项目必须自己指定。三项补齐后该项目下的用例才能执行。':
-    'The platform does not provide a global model; each project must specify its own. Cases can run only after all three fields are filled in.',
+  '平台不提供全局大模型，每个系统必须自己指定。三项补齐后该系统下的用例才能执行。':
+    'The platform does not provide a global model; each system must specify its own. Cases can run only after all three fields are filled in.',
   模型名: 'Model name',
-  执行该项目的用例时用这个模型名: "Model name used when running this project's cases",
+  执行该系统的用例时用这个模型名: "Model name used when running this system's cases",
   '如 qwen-vl-max': 'e.g. qwen-vl-max',
   模型族: 'Model family',
   '执行器会校验这个取值，填错会直接执行失败。':
@@ -150,9 +150,9 @@ export const pages: Record<string, string> = {
   '如 {"defaultHeaders":{"x-foo":"bar"}}': 'e.g. {"defaultHeaders":{"x-foo":"bar"}}',
   '用当前表单里的值实际请求一次模型': 'Make a real model request with the current form values',
   测试连接: 'Test connection',
-  '清除该项目的 API Key？': "Clear this project's API key?",
-  '清除后配置就不完整了，该项目下的用例将无法执行，直到重新填入。':
-    "After clearing, the config is incomplete and this project's cases cannot run until a key is entered again.",
+  '清除该系统的 API Key？': "Clear this system's API key?",
+  '清除后配置就不完整了，该系统下的用例将无法执行，直到重新填入。':
+    "After clearing, the config is incomplete and this system's cases cannot run until a key is entered again.",
   清除密钥: 'Clear secret',
   连接成功: 'Connection succeeded',
   连接失败: 'Connection failed',
@@ -190,7 +190,7 @@ export const pages: Record<string, string> = {
     'Global run concurrency set to {n}; workers catch up within 10 seconds',
   '单 run 用例数已设为 {n}，新执行会按此分片':
     'Cases per run set to {n}; new runs are sharded accordingly',
-  '已关闭分片：一个项目一个 run': 'Sharding disabled: one run per project',
+  '已关闭分片：一个系统一个 run': 'Sharding disabled: one run per system',
   '已开启：只有出现失败的批次才会调用 AI 评估':
     'Enabled: only batches with failures call AI assessment',
   '已关闭：每个批次都会调用 AI 评估': 'Disabled: every batch calls AI assessment',
@@ -220,31 +220,31 @@ export const pages: Record<string, string> = {
     'A task is a combination of features; select several tasks to trigger them at once',
   '开启后，全部通过的批次不再调用模型做评估 —— 每批评估都是一次真实成本':
     'When on, fully passing batches skip model assessment — every assessment costs real money',
-  只有团队管理员能调整: 'Only team admins can change this',
+  只有测试团队管理员能调整: 'Only test team admins can change this',
   'AI 评估': 'AI assessment',
   仅有失败时: 'Only on failures',
   每批都评: 'Every batch',
   '全局并发上限：所有 worker 加起来最多同时跑多少个 run（每个 run 一个浏览器）。改完 10 秒内生效。':
     'Global concurrency cap: max runs all workers run at once (one browser per run). Takes effect within 10 seconds.',
-  只有团队管理员能调整并发数: 'Only team admins can change concurrency',
+  只有测试团队管理员能调整并发数: 'Only test team admins can change concurrency',
   全局执行并发: 'Global run concurrency',
-  '一个项目里的用例按这个数量拆成多个 run 并行跑；0 表示不分片。只影响之后新建的执行。':
-    "Split a project's cases into runs of this size to run in parallel; 0 disables sharding. Affects only new executions.",
-  只有团队管理员能调整分片: 'Only team admins can change sharding',
+  '一个系统里的用例按这个数量拆成多个 run 并行跑；0 表示不分片。只影响之后新建的执行。':
+    "Split a system's cases into runs of this size to run in parallel; 0 disables sharding. Affects only new executions.",
+  只有测试团队管理员能调整分片: 'Only test team admins can change sharding',
   '单 run 用例数': 'Cases per run',
   不分片: 'No sharding',
   快速多任务执行: 'Run selected tasks',
   '（{n}）': ' ({n})',
   批量删除: 'Delete selected',
   新建任务: 'New task',
-  全部项目: 'All projects',
+  全部系统: 'All systems',
   全部分期: 'All stages',
   全部状态: 'All statuses',
   按任务名搜索: 'Search by task name',
   这个任务已有执行在进行中: 'This task already has a run in progress',
   '已签名 · {time}': 'Signed · {time}',
   已签名: 'Signed',
-  ' · 跨项目': ' · Cross-project',
+  ' · 跨系统': ' · Cross-system',
   组合: 'Composition',
   '任务里包含的功能数': 'Number of features in the task',
   '{n} 个功能': '{n} feature(s)',
@@ -265,12 +265,12 @@ export const pages: Record<string, string> = {
   '任务就是一堆功能的组合。选中后会把功能下启用中的用例快照进任务 —— 之后再给功能加用例，不会影响这个已定稿的任务。':
     "A task is a combination of features. The selected features' active cases are snapshotted into the task — adding cases to a feature later does not affect this finalized task.",
   '保存后可以立即执行': 'Run immediately after saving',
-  '打开下面的开关，保存的同时就会按项目拆分成多次执行并开始跑。':
-    'Turn on the switch below to split into per-project executions and start running on save.',
-  跨项目可留空: 'Leave blank for cross-project',
+  '打开下面的开关，保存的同时就会按系统拆分成多次执行并开始跑。':
+    'Turn on the switch below to split into per-system executions and start running on save.',
+  跨系统可留空: 'Leave blank for cross-system',
   重试次数: 'Retries',
-  '跨项目任务要求每个项目都有同名环境；留空使用「默认」':
-    'Cross-project tasks require each project to have an environment with the same name; blank uses "Default"',
+  '跨系统任务要求每个系统都有同名环境；留空使用「默认」':
+    'Cross-system tasks require each system to have an environment with the same name; blank uses "Default"',
   质量门禁: 'Quality gate',
   '最低通过率 (%)': 'Minimum pass rate (%)',
   'P0 失败即拒绝': 'Reject on P0 failure',
@@ -280,8 +280,8 @@ export const pages: Record<string, string> = {
   '已签章（仅该执行记录）': 'Signed off (this execution only)',
   '已提交执行：{n} 个环境（{envs}）各一条执行记录':
     'Run submitted: one execution record per environment ({n} environments: {envs})',
-  '已提交执行：拆成 {n} 次运行（跨项目 / 用例分片）':
-    'Run submitted: split into {n} runs (cross-project / case sharding)',
+  '已提交执行：拆成 {n} 次运行（跨系统 / 用例分片）':
+    'Run submitted: split into {n} runs (cross-system / case sharding)',
   '已提交执行（环境 {envs}）': 'Run submitted (environment {envs})',
   '签名已撤回（记录保留）': 'Signature revoked (record kept)',
   '{passed}/{total} 通过': '{passed}/{total} passed',
@@ -315,8 +315,8 @@ export const pages: Record<string, string> = {
   这个任务还没有人工签名: 'This task has no manual sign-off yet',
   '签名会把「谁、何时、签的是哪版用例」钉下来，之后可对外证明这份用例集经过了人工审核。':
     'The sign-off pins down who signed, when, and which version of the cases, proving externally that this case set was manually reviewed.',
-  '签名是团队管理员的动作，你当前是普通成员。':
-    'Sign-off is a team admin action; you are currently a regular member.',
+  '签名是测试团队管理员的动作，你当前是普通成员。':
+    'Sign-off is a test team admin action; you are currently a regular member.',
   已离职账号: 'Departed account',
   '签名已失效：{who} 签完之后用例被改了':
     'Signature invalid: cases were changed after {who} signed',
@@ -342,7 +342,7 @@ export const pages: Record<string, string> = {
   '通过 / 总数': 'Passed / Total',
   '这个任务还没选功能。编辑任务即可添加。':
     'This task has no features yet. Edit the task to add some.',
-  所属项目: 'Project',
+  所属系统: 'System',
 
   // ---- 执行记录 ----
   健康: 'Healthy',
@@ -351,8 +351,8 @@ export const pages: Record<string, string> = {
   未判定: 'Undetermined',
   '迭代中': 'In iteration',
   '{name}（{stage}）通过 {passed}/{total}': '{name} ({stage}) passed {passed}/{total}',
-  '每行是一次执行（一个任务点一次「执行」）；跨项目的任务会拆成多次运行，但在这里算一件事':
-    'Each row is one execution (one "Run" click on a task); cross-project tasks split into several runs but count as one here',
+  '每行是一次执行（一个任务点一次「执行」）；跨系统的任务会拆成多次运行，但在这里算一件事':
+    'Each row is one execution (one "Run" click on a task); cross-system tasks split into several runs but count as one here',
   '只看任务「{name}」': 'Showing task "{name}" only',
   清除筛选: 'Clear filter',
   回归: 'Regression',
@@ -366,12 +366,12 @@ export const pages: Record<string, string> = {
   '全部通过：不需要 AI 分析': 'All passed: no AI analysis needed',
   全部通过: 'All passed',
   分析中: 'Analyzing',
-  '这次执行没有拿到 AI 结论（可能是项目没配模型）':
-    'No AI verdict for this execution (the project may have no model configured)',
+  '这次执行没有拿到 AI 结论（可能是系统没配模型）':
+    'No AI verdict for this execution (the system may have no model configured)',
   未评估: 'Not assessed',
   '功能（各功能通过情况）': 'Features (pass status)',
-  '{n} 个': '{n} project(s)',
-  '1 个': '1 project',
+  '{n} 个': '{n} system(s)',
+  '1 个': '1 system',
   '还没有执行记录。到「测试任务」里点一次执行就有了。':
     'No executions yet. Go to Test tasks and click Run to create one.',
   '共 {total} 次执行，本页只加载了最近 {loaded} 条：分页与排序都在这 {loaded} 条之内。':
@@ -389,7 +389,7 @@ export const pages: Record<string, string> = {
   仅重跑失败用例: 'Rerun failed cases only',
   测试报告: 'Test report',
   查看任务: 'View task',
-  项目数: 'Projects',
+  系统数: 'Systems',
   触发方式: 'Trigger',
   手动: 'Manual',
   '执行 ID': 'Run ID',
@@ -402,16 +402,16 @@ export const pages: Record<string, string> = {
     'Running; the page refreshes every 3 seconds. A single case usually takes 40 seconds to a few minutes.',
   用例通过: 'Cases passed',
   通过率: 'Pass rate',
-  涉及项目: 'Projects',
+  涉及系统: 'Systems',
   'AI 正在读这次执行的产物和失败步骤…': "AI is reading this run's artifacts and failed steps…",
   '这次执行完成后会自动生成 AI 评估': 'AI assessment is generated automatically when this run finishes',
   重新评估: 'Re-assess',
   各功能结果: 'Feature results',
   这次执行没有产生功能维度的结果: 'This run produced no feature-level results',
   通过: 'Passed',
-  各项目的执行明细: 'Per-project run details',
-  '跨项目或用例分片的任务会拆成多次运行（一个 run 只跑一个项目的一部分用例），下面是每一份运行的结果。点「报告」查看该项目报告；需要归档签章时用右上角的「测试报告」。':
-    'Cross-project or sharded tasks split into several runs (one run covers part of one project\'s cases); below are the results of each run. Click "Report" to view that project\'s report; for archival sign-off use "Test report" in the top right.',
+  各系统的执行明细: 'Per-system run details',
+  '跨系统或用例分片的任务会拆成多次运行（一个 run 只跑一个系统的一部分用例），下面是每一份运行的结果。点「报告」查看该系统报告；需要归档签章时用右上角的「测试报告」。':
+    'Cross-system or sharded tasks split into several runs (one run covers part of one system\'s cases); below are the results of each run. Click "Report" to view that project\'s report; for archival sign-off use "Test report" in the top right.',
   没有运行明细: 'No run details',
   '分片 {index}/{count}': 'Shard {index}/{count}',
   用例结果: 'Case results',
@@ -446,7 +446,7 @@ export const pages: Record<string, string> = {
   'AI 修复': 'AI fix',
   // ---- feature detail ----
   用例已删除: 'Test case deleted',
-  返回项目: 'Back to project',
+  返回系统: 'Back to system',
   测试用例: 'Test cases',
   '用 AI 新建用例': 'New test case with AI',
   '手动写 YAML': 'Write YAML manually',

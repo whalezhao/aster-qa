@@ -72,7 +72,7 @@ async def _config_for(db: AsyncSession, project_id: uuid.UUID | None) -> Project
 
 
 async def _config_for_batch(db: AsyncSession, batch: RunBatch) -> ProjectModelConfig | None:
-    """批次对应的项目：任务的项目优先，跨项目任务取第一个 run 的项目。"""
+    """批次对应的系统：任务的系统优先，跨系统任务取第一个 run 的系统。"""
     task = await db.get(TestTask, batch.task_id) if batch.task_id else None
     if task is not None:
         config = await _config_for(db, task.project_id)
@@ -199,7 +199,7 @@ async def assess_batch(db: AsyncSession, batch: RunBatch) -> tuple[dict[str, Any
     """返回 (结论, 模型名)。"""
     config = await _config_for_batch(db, batch)
     if config is None:
-        raise RuntimeError("该批次所属项目未配置模型，跳过 AI 评估")
+        raise RuntimeError("该批次所属系统未配置模型，跳过 AI 评估")
     # 额度用尽就不调模型；run_check 会把这条 RuntimeError 记成 check 失败原因
     await ensure_quota(db, config.project_id, config)
     facts = await _batch_facts(db, batch)
@@ -230,7 +230,7 @@ async def assess_batch(db: AsyncSession, batch: RunBatch) -> tuple[dict[str, Any
 async def task_precheck(db: AsyncSession, task: TestTask) -> tuple[dict[str, Any], str]:
     config = await _config_for(db, task.project_id)
     if config is None:
-        raise RuntimeError("该项目未配置模型，无法做 AI 预检")
+        raise RuntimeError("该系统未配置模型，无法做 AI 预检")
     await ensure_quota(db, config.project_id, config)
 
     case_count = (
@@ -349,10 +349,10 @@ async def team_review(db: AsyncSession, team_id: uuid.UUID, days: int) -> tuple[
         config = candidate
         break
     if config is None:
-        raise RuntimeError("这个团队下的项目都没配模型，或本月 token 额度都已用尽")
+        raise RuntimeError("这个测试团队下的系统都没配模型，或本月 token 额度都已用尽")
 
     system = (
-        "你是测试团队负责人，要给团队写一份最近测试情况的复盘。\n"
+        "你是测试团队负责人，要给测试团队写一份最近测试情况的复盘。\n"
         "要求：200~350 字；用 Markdown（小标题 + 少量表格或列表）；\n"
         "结构：1) 一句话结论 2) 主要发现（2~3 条，讲因果，不要只报数字） 3) 可执行的改进建议（2~3 条）。\n"
         "注意 AI 执行时过时不过属于常态，不要把单次失败当缺陷；要区分「用例不稳」和「功能有问题」。\n"

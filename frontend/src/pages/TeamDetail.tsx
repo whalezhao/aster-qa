@@ -12,7 +12,7 @@ import TagsTab from './team/TagsTab';
 import WebhooksTab from './team/WebhooksTab';
 import ApiTokensTab from './team/ApiTokensTab';
 
-// 页签用复数，正文里的「项目」等是单数表头
+// 页签用复数，正文里的「系统」等是单数表头
 const tab = (zh: string, en: string) => (getLocale() === 'en' ? en : zh);
 
 export default function TeamDetail() {
@@ -22,8 +22,8 @@ export default function TeamDetail() {
   return (
     <ProCard
       style={{ margin: 20 }}
-      title={team ? team.name : t('团队')}
-      extra={<Link to="/teams">{t('返回团队列表')}</Link>}
+      title={team ? team.name : t('测试团队')}
+      extra={<Link to="/teams">{t('返回测试团队列表')}</Link>}
     >
       {team?.description && (
         <ProDescriptions column={1} style={{ marginBottom: 16 }}>
@@ -33,7 +33,7 @@ export default function TeamDetail() {
       <Tabs
         items={[
           { key: 'members', label: tab('成员', 'Members'), children: <MembersTab tid={tid} /> },
-          { key: 'projects', label: tab('项目', 'Projects'), children: <ProjectsTab tid={tid} /> },
+          { key: 'projects', label: tab('系统', 'Projects'), children: <ProjectsTab tid={tid} /> },
           { key: 'iterations', label: tab('迭代', 'Iterations'), children: <IterationsTab tid={tid} /> },
           { key: 'tags', label: tab('标签', 'Tags'), children: <TagsTab tid={tid} /> },
           { key: 'webhooks', label: 'Webhook', children: <WebhooksTab tid={tid} /> },

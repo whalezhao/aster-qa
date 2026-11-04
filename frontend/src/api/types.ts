@@ -28,7 +28,7 @@ export interface User {
   display_name: string;
   avatar: string | null;
   is_active: boolean;
-  /** 只有人员维护页会请求（?with_teams=1），且只含调用者自己看得到的团队 */
+  /** 只有人员维护页会请求（?with_teams=1），且只含调用者自己看得到的测试团队 */
   teams?: { id: string; name: string; role: Role }[];
 }
 
@@ -61,8 +61,8 @@ export interface Project {
   description: string | null;
   base_url: string | null;
   status: string;
-  /** 项目是否已配好大模型（模型名 + 接入地址 + API Key 齐全）。
-   *  没有全局兜底：没配就不允许执行该项目的用例。 */
+  /** 系统是否已配好大模型（模型名 + 接入地址 + API Key 齐全）。
+   *  没有全局兜底：没配就不允许执行该系统的用例。 */
   has_model_config: boolean;
   model_health?: ProjectHealth | null;
 }
@@ -111,7 +111,7 @@ export interface TestCase {
   is_active: boolean;
   /** 后端派生字段：COALESCE(stage_override, 功能.stage)，只读 */
   effective_stage: FeatureStage;
-  /** 用例本身不存项目，后端从 feature 上溯带出来，供「该项目未配模型」的提示用 */
+  /** 用例本身不存系统，后端从 feature 上溯带出来，供「该系统未配模型」的提示用 */
   project_id: string | null;
   /** 最新版本号（版本历史） */
   version_no?: number | null;
@@ -125,7 +125,7 @@ export interface ValidateResult {
 
 export interface CaseHistoryItem {
   run_id: string;
-  /** 这次执行所属的批次 —— 点进去能看到同一次执行里其他功能/项目的结果 */
+  /** 这次执行所属的批次 —— 点进去能看到同一次执行里其他功能/系统的结果 */
   batch_id: string | null;
   batch_name: string | null;
   team_name: string | null;
@@ -220,7 +220,7 @@ export interface RegressionTaskResult {
   case_count: number;
   feature_count: number;
   run_ids: string[];
-  /** 用户视角的「一次执行」批次；跨项目时 run 会有多个但批次只有一个 */
+  /** 用户视角的「一次执行」批次；跨系统时 run 会有多个但批次只有一个 */
   batch_id: string | null;
 }
 
@@ -457,7 +457,7 @@ export interface WebhookDelivery {
   finished_at: string | null;
 }
 
-/** AI 结论的统一形状：执行评估 / 签名预检 / 团队复盘共用。 */
+/** AI 结论的统一形状：执行评估 / 签名预检 / 测试团队复盘共用。 */
 export interface AiDiagnosis {
   case?: string;
   cause?: string;
@@ -474,7 +474,7 @@ export interface AiCheckResult {
   advice: string[];
   /** 执行评估的逐条失败诊断 */
   diagnoses?: AiDiagnosis[];
-  /** 团队复盘是整段 Markdown */
+  /** 测试团队复盘是整段 Markdown */
   markdown: string | null;
   model_name: string | null;
   error: string | null;

@@ -85,7 +85,7 @@ export interface CaseDraftResult {
 }
 
 /**
- * 通过对话生成用例 YAML。用的是项目上配好的模型。
+ * 通过对话生成用例 YAML。用的是系统上配好的模型。
  * 对话历史由前端保存并整段回传，后端不存会话状态。
  */
 export async function draftCaseWithAi(

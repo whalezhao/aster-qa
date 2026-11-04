@@ -61,7 +61,7 @@ export default function PreflightModal({
     setSelected([(defaultEnvironmentName || '').trim() || '默认']);
   }, [open, taskId, defaultEnvironmentName]);
 
-  // 可选环境 = 任务所有项目下同名的环境（跨项目任务要求每个项目都有）
+  // 可选环境 = 任务所有系统下同名的环境（跨系统任务要求每个系统都有）
   const { data: features = [] } = useQuery({
     queryKey: ['task-features', taskId],
     queryFn: () => getTaskFeatures(taskId),

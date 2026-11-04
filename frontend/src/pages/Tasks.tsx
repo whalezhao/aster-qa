@@ -56,7 +56,7 @@ export default function Tasks() {
   const { message, modal } = App.useApp();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  // 团队只从上下文取，页面不再自带一个选择器
+  // 测试团队只从上下文取，页面不再自带一个选择器
   const { teamId } = useActiveTeam();
   const { user: me } = useAuth();
 
@@ -88,7 +88,7 @@ export default function Tasks() {
       message.success(
         saved.run_shard_size
           ? t('单 run 用例数已设为 {n}，新执行会按此分片', { n: saved.run_shard_size })
-          : t('已关闭分片：一个项目一个 run'),
+          : t('已关闭分片：一个系统一个 run'),
       );
       queryClient.invalidateQueries({ queryKey: ['app-settings'] });
     },
@@ -176,7 +176,7 @@ export default function Tasks() {
         payload.gate_min_pass_rate = payload.gate_min_pass_rate / 100;
       }
       if (editing) {
-        // 类型/功能/项目在创建时就固化了（用例是快照），PATCH 不接受这些字段
+        // 类型/功能/系统在创建时就固化了（用例是快照），PATCH 不接受这些字段
         return updateTask(editing.id, {
           name: payload.name,
           description: payload.description,
@@ -374,7 +374,7 @@ export default function Tasks() {
             title={
               canTuneConcurrency
                 ? t('开启后，全部通过的批次不再调用模型做评估 —— 每批评估都是一次真实成本')
-                : t('只有团队管理员能调整')
+                : t('只有测试团队管理员能调整')
             }
           >
             <Space size={6}>
@@ -396,7 +396,7 @@ export default function Tasks() {
             title={
               canTuneConcurrency
                 ? t('全局并发上限：所有 worker 加起来最多同时跑多少个 run（每个 run 一个浏览器）。改完 10 秒内生效。')
-                : t('只有团队管理员能调整并发数')
+                : t('只有测试团队管理员能调整并发数')
             }
           >
             <Space size={6}>
@@ -416,8 +416,8 @@ export default function Tasks() {
             key="shard"
             title={
               canTuneConcurrency
-                ? t('一个项目里的用例按这个数量拆成多个 run 并行跑；0 表示不分片。只影响之后新建的执行。')
-                : t('只有团队管理员能调整分片')
+                ? t('一个系统里的用例按这个数量拆成多个 run 并行跑；0 表示不分片。只影响之后新建的执行。')
+                : t('只有测试团队管理员能调整分片')
             }
           >
             <Space size={6}>
@@ -467,7 +467,7 @@ export default function Tasks() {
       <Space wrap style={{ marginBottom: 16 }}>
         <Select
           allowClear
-          placeholder={t('全部项目')}
+          placeholder={t('全部系统')}
           style={{ minWidth: 180 }}
           value={projectId}
           onChange={(value) => updateParams({ project_id: value })}
@@ -540,7 +540,7 @@ export default function Tasks() {
                 </Space>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                   {taskTypeLabel(r.type)}
-                  {r.project_id ? ` · ${projectName(r.project_id) ?? ''}` : t(' · 跨项目')}
+                  {r.project_id ? ` · ${projectName(r.project_id) ?? ''}` : t(' · 跨系统')}
                   {r.iteration_id ? ` · ${iterationName(r.iteration_id) ?? ''}` : ''}
                 </Typography.Text>
               </Space>
@@ -704,15 +704,15 @@ export default function Tasks() {
               showIcon
               style={{ marginBottom: 16 }}
               message={t('保存后可以立即执行')}
-              description={t('打开下面的开关，保存的同时就会按项目拆分成多次执行并开始跑。')}
+              description={t('打开下面的开关，保存的同时就会按系统拆分成多次执行并开始跑。')}
             />
           )}
 
           <Space style={{ display: 'flex' }} align="start" wrap>
-            <Form.Item name="project_id" label={t('项目')} style={{ width: 220 }}>
+            <Form.Item name="project_id" label={t('系统')} style={{ width: 220 }}>
               <Select
                 allowClear
-                placeholder={t('跨项目可留空')}
+                placeholder={t('跨系统可留空')}
                 disabled={Boolean(editing)}
                 options={projects.map((p) => ({ value: p.id, label: p.name }))}
               />
@@ -731,7 +731,7 @@ export default function Tasks() {
               name="environment_name"
               label={t('环境')}
               style={{ width: 180 }}
-              tooltip={t('跨项目任务要求每个项目都有同名环境；留空使用「默认」')}
+              tooltip={t('跨系统任务要求每个系统都有同名环境；留空使用「默认」')}
             >
               <Select
                 allowClear

@@ -79,7 +79,7 @@ async def delete_iteration(
 
 @router.get("/api/iterations", response_model=list[IterationOut])
 async def list_my_iterations(user: CurrentUser, db: DbSession) -> list[Iteration]:
-    """跨团队列出当前用户可见的全部迭代 —— 统计页和标签选择器需要。"""
+    """跨测试团队列出当前用户可见的全部迭代 —— 统计页和标签选择器需要。"""
     ids = await visible_team_ids(db, user)
     if not ids:
         return []

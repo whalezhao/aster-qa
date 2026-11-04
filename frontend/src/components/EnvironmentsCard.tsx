@@ -185,7 +185,7 @@ function VariablesModal({
   );
 }
 
-/** 项目环境与变量管理卡片。 */
+/** 系统环境与变量管理卡片。 */
 export default function EnvironmentsCard({ projectId }: { projectId: string }) {
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -243,7 +243,7 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
           {t('新建环境')}
         </Button>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {t('任务按环境名执行；跨项目任务要求每个项目都有同名环境。')}
+          {t('任务按环境名执行；跨系统任务要求每个系统都有同名环境。')}
         </Typography.Text>
       </Space>
       <Table
@@ -321,7 +321,7 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
           <Form.Item
             name="base_url"
             label="Base URL"
-            extra={editing?.is_default ? t('默认环境地址跟随项目 Base URL') : undefined}
+            extra={editing?.is_default ? t('默认环境地址跟随系统 Base URL') : undefined}
           >
             <Input disabled={editing?.is_default} placeholder="https://staging.example.com" />
           </Form.Item>

@@ -54,19 +54,19 @@ export const server: Record<string, string> = {
 
   // ---- app/api/environments.py ----
   '环境不存在': 'Environment not found',
-  '项目不存在': 'Project not found',
+  '系统不存在': 'System not found',
   '「默认」环境已存在': 'The "Default" environment already exists',
   '同名环境已存在': 'An environment with this name already exists',
   '默认环境不能改名': 'The default environment cannot be renamed',
   '仍有任务在使用这个环境名，不能改名':
     'Tasks still use this environment name; cannot rename',
-  '默认环境的地址跟随项目 Base URL，请到项目设置修改':
-    'The default environment URL follows the project Base URL. Change it in project settings',
+  '默认环境的地址跟随系统 Base URL，请到系统设置修改':
+    'The default environment URL follows the system Base URL. Change it in system settings',
   '默认环境不能删除': 'The default environment cannot be deleted',
   '仍有任务在使用这个环境，不能删除': 'Tasks still use this environment; cannot delete',
 
   // ---- app/api/features.py ----
-  '该项目下已有同名功能': 'A feature with this name already exists in this project',
+  '该系统下已有同名功能': 'A feature with this name already exists in this system',
   '该功能已是正式功能': 'This feature is already a formal feature',
   '该功能已处于迭代中': 'This feature is already in an iteration',
 
@@ -75,7 +75,7 @@ export const server: Record<string, string> = {
   '该迭代名已存在': 'This iteration name already exists',
 
   // ---- app/api/projects.py ----
-  '该项目名已存在': 'This project name already exists',
+  '该系统名已存在': 'This system name already exists',
   '还没有填写模型接入地址': 'The model base URL is not filled in yet',
   '还没有填写模型名': 'The model name is not filled in yet',
   '模型健康检查未通过': 'Model health check failed',
@@ -100,12 +100,12 @@ export const server: Record<string, string> = {
   '模型服务': 'Model service',
   '网络': 'Network',
   '未知': 'Unknown',
-  '请选择团队或项目': 'Select a team or project',
-  '没有可访问的团队': 'No accessible teams',
+  '请选择测试团队或系统': 'Select a test team or system',
+  '没有可访问的测试团队': 'No accessible test teams',
 
   // ---- app/api/tags.py ----
   '标签不存在': 'Tag not found',
-  '迭代不存在或不属于该团队': 'Iteration not found in this team',
+  '迭代不存在或不属于该测试团队': 'Iteration not found in this test team',
   '该标签名已存在': 'This tag name already exists',
 
   // ---- app/api/task_common.py ----
@@ -113,10 +113,10 @@ export const server: Record<string, string> = {
 
   // ---- app/api/task_runs.py ----
   '该任务已有执行在进行中': 'This task already has a run in progress',
-  '所选功能必须都属于同一个团队':
-    'Selected features must all belong to the same team',
+  '所选功能必须都属于同一个测试团队':
+    'Selected features must all belong to the same test team',
   '所选功能下没有启用中的用例': 'Selected features have no enabled cases',
-  '标签不存在或不属于该团队': 'Tag not found in this team',
+  '标签不存在或不属于该测试团队': 'Tag not found in this test team',
 
   // ---- app/api/task_signoff.py ----
   '这个任务还没有用例，没什么可签的': 'This task has no cases; nothing to sign',
@@ -124,25 +124,25 @@ export const server: Record<string, string> = {
 
   // ---- app/api/tasks.py ----
   '非法任务类型': 'Invalid task type',
-  '项目不存在或不属于该团队': 'Project not found in this team',
+  '系统不存在或不属于该测试团队': 'System not found in this test team',
   '该任务有执行正在进行或排队中，请先取消再删除':
     'This task has a run in progress or queued. Cancel it before deleting',
   '有执行正在进行或排队中': 'A run is in progress or queued',
 
   // ---- app/api/teams.py ----
-  '团队名已存在': 'Team name already exists',
-  '团队不存在': 'Team not found',
+  '测试团队名已存在': 'Test team name already exists',
+  '测试团队不存在': 'Test team not found',
   '非法角色': 'Invalid role',
   '用户不存在': 'User not found',
-  '该用户已在团队中': 'This user is already in the team',
-  '团队至少需要保留一名 owner': 'A team must keep at least one owner',
+  '该用户已在测试团队中': 'This user is already in the test team',
+  '测试团队至少需要保留一名 owner': 'A test team must keep at least one owner',
 
   // ---- app/api/users.py ----
   '用户名或邮箱已被占用': 'Username or email is already taken',
   '不能停用自己的账号': 'You cannot disable your own account',
   '不能删除自己': 'You cannot delete yourself',
-  '该用户是某个团队唯一的 owner，停用后团队将无人可管理':
-    'This user is the only owner of a team; disabling them would leave the team unmanaged',
+  '该用户是某个测试团队唯一的 owner，停用后测试团队将无人可管理':
+    'This user is the only owner of a test team; disabling them would leave the test team unmanaged',
 
   // ---- app/api/webhooks.py ----
   '未知通知渠道类型': 'Unknown notification channel type',
@@ -151,7 +151,7 @@ export const server: Record<string, string> = {
   '至少要订阅一个事件': 'Subscribe to at least one event',
   '通用 Webhook 必须设置签名密钥': 'A generic webhook must have a signing secret',
   'webhook 不存在': 'Webhook not found',
-  '这个任务不属于该 webhook 的团队': 'This task does not belong to the webhook team',
+  '这个任务不属于该 webhook 的测试团队': 'This task does not belong to the webhook test team',
   '投递记录不存在': 'Delivery record not found',
 
   // ---- app/deps.py ----
@@ -159,12 +159,12 @@ export const server: Record<string, string> = {
   '凭证无效或已过期': 'Invalid or expired credentials',
   '凭证无效': 'Invalid credentials',
   '用户不存在或已停用': 'User not found or disabled',
-  '需要团队管理员权限': 'Team administrator permission required',
+  '需要测试团队管理员权限': 'Test team administrator permission required',
   '功能不存在': 'Feature not found',
-  '功能所属项目不存在': 'The project of this feature does not exist',
+  '功能所属系统不存在': 'The system of this feature does not exist',
   '用例不存在': 'Test case not found',
   '用例所属功能不存在': 'The feature of this test case does not exist',
-  '用例所属项目不存在': 'The project of this test case does not exist',
+  '用例所属系统不存在': 'The system of this test case does not exist',
 
   // ---- app/preflight.py ----
   '没有配置被测地址': 'No target URL configured',
@@ -226,7 +226,7 @@ export const server: Record<string, string> = {
     'AI assessment completed (with conclusions and suggestions)',
   '质量门禁未通过': 'Quality gate failed',
   '定时执行失败': 'Scheduled execution failed',
-  '项目模型不可用': 'Project model unavailable',
+  '系统模型不可用': 'System model unavailable',
   '测试投递（配好之后点一下看通不通）':
     'Test delivery (click to verify the connection)',
 };

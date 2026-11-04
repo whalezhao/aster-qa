@@ -8,14 +8,14 @@ export const common: Record<string, string> = {
   // ---- 骨架 / 通用 ----
   'Aster QA · AI 测试管理平台': 'Aster QA · AI Test Management Platform',
   工作台: 'Dashboard',
-  项目: 'Projects',
+  系统: 'Systems',
   测试任务: 'Test tasks',
   执行记录: 'Executions',
   统计: 'Stats',
-  团队: 'Teams',
+  测试团队: 'Test teams',
   人员: 'Users',
   执行器: 'Runners',
-  选择团队: 'Select team',
+  选择测试团队: 'Select test team',
   切换主题: 'Toggle theme',
   切换语言: 'Switch language',
   修改密码: 'Change password',
@@ -37,11 +37,11 @@ export const common: Record<string, string> = {
     'One run traces down to every feature, every case and every report',
   '统计口径带 Wilson 下界，不被偶发失败带偏':
     'Stats use a Wilson lower bound so occasional failures do not skew the numbers',
-  '团队、项目、功能、用例一条链管到底：AI 生成用例、执行产生报告、人工签名背书、webhook 把结果送回你的工单系统。':
-    'Teams, projects, features and cases in one chain: AI writes cases, runs produce reports, people sign off, and webhooks send results back to your issue tracker.',
+  '测试团队、系统、功能、用例一条链管到底：AI 生成用例、执行产生报告、人工签名背书、webhook 把结果送回你的工单系统。':
+    'Test teams, systems, features and cases in one chain: AI writes cases, runs produce reports, people sign off, and webhooks send results back to your issue tracker.',
   登录: 'Sign in',
-  '账号由团队管理员在「人员」里维护，忘记密码也找管理员重置。':
-    'Accounts are managed by your team admin under Users; ask them to reset a forgotten password.',
+  '账号由测试团队管理员在「人员」里维护，忘记密码也找管理员重置。':
+    'Accounts are managed by your test team admin under Users; ask them to reset a forgotten password.',
   用户名: 'Username',
   '请输入用户名': 'Enter your username',
   密码: 'Password',

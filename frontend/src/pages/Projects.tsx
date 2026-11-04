@@ -12,8 +12,8 @@ import { PAGE, byNumber, byText } from '../lib/table';
 import type { Project } from '../api/types';
 
 /**
- * 项目入口。之前只能「团队 → 项目 tab」才能点到项目，路径太深；
- * 团队切换在顶栏，所以这里直接展示当前团队的项目。
+ * 系统入口。之前只能「测试团队 → 系统 tab」才能点到系统，路径太深；
+ * 测试团队切换在顶栏，所以这里直接展示当前测试团队的系统。
  */
 export default function Projects() {
   const { message } = App.useApp();
@@ -30,7 +30,7 @@ export default function Projects() {
     mutationFn: (values: ProjectInput) =>
       createProject(teamId as string, { ...values, name: values.name! }),
     onSuccess: (saved) => {
-      message.success(t('项目「{name}」已创建', { name: saved.name }));
+      message.success(t('系统「{name}」已创建', { name: saved.name }));
       queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
     onError: (e) => message.error(apiError(e)),
@@ -40,15 +40,15 @@ export default function Projects() {
     <PageContainer
       ghost
       header={{
-        title: t('项目'),
-        subTitle: t('功能、用例和模型配置都在项目里；顶栏可以切换团队'),
+        title: t('系统'),
+        subTitle: t('功能、用例和模型配置都在系统里；顶栏可以切换测试团队'),
         extra: [
           <ModalForm<ProjectInput>
             key="create"
-            title={t('新建项目')}
+            title={t('新建系统')}
             trigger={
               <Button type="primary" icon={<PlusOutlined />}>
-                {t('新建项目')}
+                {t('新建系统')}
               </Button>
             }
             modalProps={{ destroyOnHidden: true }}
@@ -60,7 +60,7 @@ export default function Projects() {
             <ProFormText
               name="name"
               label={t('名称')}
-              rules={[{ required: true, message: t('请输入项目名称') }]}
+              rules={[{ required: true, message: t('请输入系统名称') }]}
             />
             <ProFormText name="code" label={t('编码')} placeholder={t('可留空，例如 pansoft-demo')} />
             <ProFormText
@@ -100,7 +100,7 @@ export default function Projects() {
                 {r.has_model_config ? (
                   <Tag color="success">{t('已配置')}</Tag>
                 ) : (
-                  // 没配模型的项目跑不了任何用例，列表里要一眼能扫出来
+                  // 没配模型的系统跑不了任何用例，列表里要一眼能扫出来
                   <Link to={`/projects/${r.id}`}>
                     <Tag color="warning">{t('未配置')}</Tag>
                   </Link>

@@ -1,5 +1,5 @@
 export const team: Record<string, string> = {
-  // ---- 通用（团队 / 组织） ----
+  // ---- 通用（测试团队 / 组织） ----
   名称: 'Name',
   描述: 'Description',
   操作: 'Actions',
@@ -15,7 +15,7 @@ export const team: Record<string, string> = {
   必填: 'Required',
   可选: 'Optional',
   成员: 'Member',
-  项目: 'Project',
+  系统: 'System',
   迭代: 'Iteration',
   标签: 'Tag',
   功能: 'Feature',
@@ -32,20 +32,20 @@ export const team: Record<string, string> = {
   已发布: 'Released',
   已归档: 'Archived',
 
-  // ---- 团队列表 ----
-  团队: 'Teams',
-   '删除团队需要拥有者（owner）权限': 'Deleting a team requires owner permission',
-  新建团队: 'New team',
-  编辑团队: 'Edit team',
-  团队已更新: 'Team updated',
-  团队已创建: 'Team created',
-  团队已删除: 'Team deleted',
-  '确定删除该团队？': 'Delete this team?',
+  // ---- 测试团队列表 ----
+  测试团队: 'Test teams',
+   '删除测试团队需要拥有者（owner）权限': 'Deleting a test team requires owner permission',
+  新建测试团队: 'New test team',
+  编辑测试团队: 'Edit test team',
+  测试团队已更新: 'Test team updated',
+  测试团队已创建: 'Test team created',
+  测试团队已删除: 'Test team deleted',
+  '确定删除该测试团队？': 'Delete this test team?',
   '删除后不可恢复。': 'This cannot be undone.',
-  请输入团队名称: 'Enter a team name',
-  返回团队列表: 'Back to teams',
+  请输入测试团队名称: 'Enter a test team name',
+  返回测试团队列表: 'Back to test teams',
 
-  // ---- 团队成员 ----
+  // ---- 测试团队成员 ----
   成员已添加: 'Member added',
   角色已更新: 'Role updated',
   成员已移除: 'Member removed',
@@ -60,12 +60,12 @@ export const team: Record<string, string> = {
   按用户名搜索: 'Search by username',
   '{name}（{username}）': '{name} ({username})',
 
-  // ---- 团队项目 ----
-  项目已更新: 'Project updated',
-  项目已创建: 'Project created',
-  项目已删除: 'Project deleted',
-  新建项目: 'New project',
-  编辑项目: 'Edit project',
+  // ---- 测试团队系统 ----
+  系统已更新: 'System updated',
+  系统已创建: 'System created',
+  系统已删除: 'System deleted',
+  新建系统: 'New system',
+  编辑系统: 'Edit system',
   编码: 'Code',
   大模型: 'Model',
   已配置: 'Configured',
@@ -73,10 +73,10 @@ export const team: Record<string, string> = {
   模型正常: 'Model healthy',
   模型异常: 'Model unhealthy',
   未检测: 'Not checked',
-  '确定删除该项目？': 'Delete this project?',
-  请输入项目名称: 'Enter a project name',
+  '确定删除该系统？': 'Delete this system?',
+  请输入系统名称: 'Enter a system name',
 
-  // ---- 团队迭代 ----
+  // ---- 测试团队迭代 ----
   迭代已更新: 'Iteration updated',
   迭代已创建: 'Iteration created',
   迭代已删除: 'Iteration deleted',
@@ -91,7 +91,7 @@ export const team: Record<string, string> = {
   请输入迭代名称: 'Enter an iteration name',
   '如 v1.2.0': 'e.g. v1.2.0',
 
-  // ---- 团队标签 ----
+  // ---- 测试团队标签 ----
   标签已更新: 'Tag updated',
   标签已创建: 'Tag created',
   标签已删除: 'Tag deleted',
@@ -175,13 +175,13 @@ export const team: Record<string, string> = {
   'AI 评估完成（给出结果结论与建议）': 'AI assessment completed (verdict and suggestions)',
   质量门禁未通过: 'Quality gate failed',
   定时执行失败: 'Scheduled run failed',
-  项目模型不可用: 'Project model unavailable',
+  系统模型不可用: 'System model unavailable',
   '测试投递（配好之后点一下看通不通）':
     'Test delivery (click after configuring to check connectivity)',
 
   // ---- API Token ----
   'Token 已吊销': 'Token revoked',
-  '给 CI 使用的团队 Token': 'Team tokens for CI',
+  '给 CI 使用的测试团队 Token': 'Test team tokens for CI',
   '在 CI 里通过': 'In CI, use',
   或: 'or',
   调用: 'to call',
@@ -214,21 +214,21 @@ export const team: Record<string, string> = {
   '永久删除「{name}」？': 'Permanently delete “{name}”?',
   这是: 'This is a',
   物理删除: 'permanent deletion',
-  '，不可恢复：账号、它的团队关系都会消失；历史记录（谁建的用例、谁签的名）会变成「未知」，但记录本身保留。':
-    ' and cannot be undone: the account and its team memberships disappear. Historical records (who created a case, who signed off) become “Unknown”, but the records themselves remain.',
+  '，不可恢复：账号、它的测试团队关系都会消失；历史记录（谁建的用例、谁签的名）会变成「未知」，但记录本身保留。':
+    ' and cannot be undone: the account and its test team memberships disappear. Historical records (who created a case, who signed off) become “Unknown”, but the records themselves remain.',
   '只是想让这个人不能登录，用「停用」就行。':
     'To simply prevent sign-in, use Disable instead.',
   人员维护: 'Users',
-  '人员是全局的：一个账号可以同时属于多个团队，在团队里加人就是从这份名单里挑':
-    'Users are global: one account can belong to multiple teams, and adding people to a team picks from this list',
+  '人员是全局的：一个账号可以同时属于多个测试团队，在测试团队里加人就是从这份名单里挑':
+    'Users are global: one account can belong to multiple test teams, and adding people to a test team picks from this list',
   '搜用户名 / 姓名 / 邮箱': 'Search username / name / email',
-  只有团队管理员能维护人员: 'Only team admins can manage users',
-  '你当前在这些团队里都是普通成员，只能查看名单。新建、改资料、重置密码、停用需要 owner 或 admin。':
-    'You are a regular member in all your teams and can only view the list. Creating users, editing profiles, resetting passwords and disabling accounts require owner or admin.',
+  只有测试团队管理员能维护人员: 'Only test team admins can manage users',
+  '你当前在这些测试团队里都是普通成员，只能查看名单。新建、改资料、重置密码、停用需要 owner 或 admin。':
+    'You are a regular member in all your test teams and can only view the list. Creating users, editing profiles, resetting passwords and disabling accounts require owner or admin.',
   我: 'You',
   姓名: 'Full name',
   邮箱: 'Email',
-  所属团队: 'Teams',
+  所属测试团队: 'Test teams',
   '停用后该账号无法登录，确定？':
     'Disable this account? The user will not be able to sign in.',
   '确定启用该账号？': 'Enable this account?',
@@ -249,14 +249,14 @@ export const team: Record<string, string> = {
   '至少 6 位': 'At least 6 characters',
   请设置初始密码: 'Set an initial password',
   留空则不改: 'Leave blank to keep',
-  '建完可以在团队页把它加进团队。':
-    'After creating, you can add them to a team on the team page.',
+  '建完可以在测试团队页把它加进测试团队。':
+    'After creating, you can add them to a test team on the test team page.',
 
   // ---- 统计 · 筛选与总览 ----
   统计: 'Stats',
-  团队维度: 'Team view',
-  项目维度: 'Project view',
-  选择项目: 'Select a project',
+  测试团队维度: 'Test team view',
+  系统维度: 'System view',
+  选择系统: 'Select a system',
   全部迭代: 'All iterations',
   刷新: 'Refresh',
   总览: 'Overview',
@@ -351,8 +351,8 @@ export const team: Record<string, string> = {
 
   // ---- 需求覆盖 ----
   还没有可统计的需求编号: 'No requirement IDs to report on yet',
-  '到「项目 → 功能」里给功能填上需求编号（禅道/Jira），这里就会生成覆盖矩阵。':
-    'Add requirement IDs (ZenTao/Jira) to features under Project → Features and the coverage matrix will appear here.',
+  '到「系统 → 功能」里给功能填上需求编号（禅道/Jira），这里就会生成覆盖矩阵。':
+    'Add requirement IDs (ZenTao/Jira) to features under System → Features and the coverage matrix will appear here.',
   需求总数: 'Requirements',
   已覆盖: 'Covered',
   部分执行: 'Partially run',
@@ -404,8 +404,8 @@ export const team: Record<string, string> = {
   环境已创建: 'Environment created',
   环境已删除: 'Environment deleted',
   新建环境: 'New environment',
-  '任务按环境名执行；跨项目任务要求每个项目都有同名环境。':
-    'Tasks run by environment name; cross-project tasks require every project to have an environment with the same name.',
+  '任务按环境名执行；跨系统任务要求每个系统都有同名环境。':
+    'Tasks run by environment name; cross-system tasks require every system to have an environment with the same name.',
   默认: 'Default',
   变量: 'Variables',
   '删除这个环境？': 'Delete this environment?',
@@ -415,7 +415,7 @@ export const team: Record<string, string> = {
   环境名: 'Environment name',
   默认环境不能改名: 'The default environment cannot be renamed',
   '如 staging': 'e.g. staging',
-  '默认环境地址跟随项目 Base URL': 'The default environment follows the project Base URL',
+  '默认环境地址跟随系统 Base URL': 'The default environment follows the system Base URL',
 
   // ---- 定时任务 ----
   定时计划已保存: 'Schedule saved',

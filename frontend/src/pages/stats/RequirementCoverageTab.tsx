@@ -30,7 +30,7 @@ export default function RequirementCoverageTab({ params }: { params: CoveragePar
             <Space direction="vertical" size={0}>
               <Typography.Text>{t('还没有可统计的需求编号')}</Typography.Text>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {t('到「项目 → 功能」里给功能填上需求编号（禅道/Jira），这里就会生成覆盖矩阵。')}
+                {t('到「系统 → 功能」里给功能填上需求编号（禅道/Jira），这里就会生成覆盖矩阵。')}
               </Typography.Text>
             </Space>
           }
@@ -99,7 +99,7 @@ export default function RequirementCoverageTab({ params }: { params: CoveragePar
             ),
           },
           {
-            title: t('项目'),
+            title: t('系统'),
             dataIndex: 'projects',
             render: (projects: string[]) => projects.join(t('、')) || '-',
           },

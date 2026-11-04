@@ -35,7 +35,7 @@ interface FeatureFormValues {
 }
 
 /**
- * 项目级模型配置。
+ * 系统级模型配置。
  *
  * 语义是「逐字段覆盖全局」：留空的项继续用 runner/.env 里的值。
  * 后端不返回密钥本身，所以密钥框永远是空的 —— 留空表示不改动，要清空得按「清除密钥」。
@@ -125,9 +125,9 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
     },
     onSuccess: () => {
       setTestResult(null);
-      message.success(t('已保存，该项目下次执行起生效'));
+      message.success(t('已保存，该系统下次执行起生效'));
       queryClient.invalidateQueries({ queryKey: ['model-config', projectId] });
-      // 项目列表上的「已配置/未配置」标记、以及各处提示都依赖它，一并刷新
+      // 系统列表上的「已配置/未配置」标记、以及各处提示都依赖它，一并刷新
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
@@ -153,7 +153,7 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
   const clearKey = useMutation({
     mutationFn: () => setModelConfig(projectId, { clear_api_key: true }),
     onSuccess: () => {
-      message.success(t('已清除该项目的 API Key'));
+      message.success(t('已清除该系统的 API Key'));
       queryClient.invalidateQueries({ queryKey: ['model-config', projectId] });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
@@ -163,7 +163,7 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
   const reset = useMutation({
     mutationFn: () => clearModelConfig(projectId),
     onSuccess: () => {
-      message.success(t('已清空模型配置，该项目下用例将无法执行'));
+      message.success(t('已清空模型配置，该系统下用例将无法执行'));
       // 不用 resetFields()：那会重置回陈旧值，交给上面那个 useEffect 从新数据驱动
       queryClient.invalidateQueries({ queryKey: ['model-config', projectId] });
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
@@ -182,7 +182,7 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
           {config?.configured ? (
             <Tag color="success">{t('已配置')}</Tag>
           ) : (
-            <Tag color="warning">{t('未配置 · 该项目无法执行')}</Tag>
+            <Tag color="warning">{t('未配置 · 该系统无法执行')}</Tag>
           )}
           {config?.model_health && (
             <Tag
@@ -208,8 +208,8 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
       extra={
         config?.configured ? (
           <Popconfirm
-            title={t('清空该项目的模型配置？')}
-            description={t('清空后该项目下所有用例都无法执行，直到重新配置。')}
+            title={t('清空该系统的模型配置？')}
+            description={t('清空后该系统下所有用例都无法执行，直到重新配置。')}
             onConfirm={() => reset.mutate()}
           >
             <Button size="small" danger loading={reset.isPending}>
@@ -224,7 +224,7 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
           type="success"
           showIcon
           style={{ marginBottom: 16 }}
-          message={t('配置完整，该项目下的用例可以执行')}
+          message={t('配置完整，该系统下的用例可以执行')}
           description={t('模型族、额外请求配置、思考模式可以留空；模型名为 {model}。', {
             model: config.model_name ?? '-',
           })}
@@ -237,7 +237,7 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
           message={t('还差：{items}', {
             items: (config?.missing ?? []).join('、') || t('配置'),
           })}
-          description={t('平台不提供全局大模型，每个项目必须自己指定。三项补齐后该项目下的用例才能执行。')}
+          description={t('平台不提供全局大模型，每个系统必须自己指定。三项补齐后该系统下的用例才能执行。')}
         />
       )}
       <Form
@@ -251,7 +251,7 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
             label={t('模型名')}
             style={{ width: 260 }}
             rules={[{ required: true, message: t('必填') }]}
-            tooltip={t('执行该项目的用例时用这个模型名')}
+            tooltip={t('执行该系统的用例时用这个模型名')}
           >
             <Input placeholder={t('如 qwen-vl-max')} allowClear />
           </Form.Item>
@@ -353,8 +353,8 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
           </Button>
           {config?.api_key_set && (
             <Popconfirm
-              title={t('清除该项目的 API Key？')}
-              description={t('清除后配置就不完整了，该项目下的用例将无法执行，直到重新填入。')}
+              title={t('清除该系统的 API Key？')}
+              description={t('清除后配置就不完整了，该系统下的用例将无法执行，直到重新填入。')}
               onConfirm={() => clearKey.mutate()}
             >
               <Button danger loading={clearKey.isPending}>
@@ -477,7 +477,7 @@ export default function ProjectDetail() {
 
   return (
     <div style={{ padding: 20 }}>
-      <ProCard title={project ? project.name : t('项目')} extra={<Link to={`/teams/${project?.team_id ?? ''}`}>{t('返回团队')}</Link>}>
+      <ProCard title={project ? project.name : t('系统')} extra={<Link to={`/teams/${project?.team_id ?? ''}`}>{t('返回测试团队')}</Link>}>
         {project && (
           <ProDescriptions column={2} size="small">
             <ProDescriptions.Item label={t('编码')}>{project.code || '-'}</ProDescriptions.Item>

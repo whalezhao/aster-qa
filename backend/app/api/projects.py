@@ -77,7 +77,7 @@ async def create_project(
         )
     ).first()
     if exists is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "该项目名已存在")
+        raise HTTPException(status.HTTP_409_CONFLICT, "该系统名已存在")
     project = Project(team_id=team_id, **body.model_dump())
     db.add(project)
     await db.flush()
@@ -134,7 +134,7 @@ async def get_model_config(
 async def set_model_config(
     project_id: uuid.UUID, body: ModelConfigIn, user: CurrentUser, db: DbSession
 ) -> ModelConfigOut:
-    """设置项目级模型配置。逐字段覆盖全局，留空的字段继续用全局值。"""
+    """设置系统级模型配置。逐字段覆盖全局，留空的字段继续用全局值。"""
     # 写密钥属于敏感操作，要求 admin
     await require_project_access(db, project_id, user, "admin")
 
@@ -254,7 +254,7 @@ def _test_failure(exc: Exception, *, timeout: float) -> str:
 async def clear_model_config(
     project_id: uuid.UUID, user: CurrentUser, db: DbSession
 ) -> None:
-    """整条清掉，该项目回到全局配置。"""
+    """整条清掉，该系统回到全局配置。"""
     await require_project_access(db, project_id, user, "admin")
     row = await db.get(ProjectModelConfig, project_id)
     if row is not None:

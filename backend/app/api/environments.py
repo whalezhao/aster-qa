@@ -1,4 +1,4 @@
-"""项目环境与变量。"""
+"""系统环境与变量。"""
 
 import uuid
 
@@ -80,7 +80,7 @@ async def list_environments(
     await require_project_access(db, project_id, user)
     project = await db.get(Project, project_id)
     if project is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "项目不存在")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "系统不存在")
     await ensure_default_environment(db, project_id)
     await db.commit()
     rows = list(
@@ -127,7 +127,7 @@ async def create_environment(
     await require_project_access(db, project_id, user, "admin")
     project = await db.get(Project, project_id)
     if project is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "项目不存在")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "系统不存在")
     name = body.name.strip()
     if name == DEFAULT_ENVIRONMENT:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "「默认」环境已存在")
@@ -195,7 +195,7 @@ async def update_environment(
         if env.is_default:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                "默认环境的地址跟随项目 Base URL，请到项目设置修改",
+                "默认环境的地址跟随系统 Base URL，请到系统设置修改",
             )
         env.base_url = body.base_url.strip() or None
     await db.commit()

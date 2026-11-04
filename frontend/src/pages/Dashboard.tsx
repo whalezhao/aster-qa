@@ -38,7 +38,7 @@ export default function Dashboard() {
     enabled: Boolean(teamId),
   });
 
-  const teamName = teams.find((team) => team.id === teamId)?.name ?? t('未选择团队');
+  const teamName = teams.find((team) => team.id === teamId)?.name ?? t('未选择测试团队');
   const running = tasks.filter((task) => task.status === 'queued' || task.status === 'running').length;
   const insufficient = overview ? !overview.sample_sufficient : false;
   const passRate = overview?.final_pass_rate ?? null;
@@ -66,7 +66,7 @@ export default function Dashboard() {
               description={
                 <Space size={8} wrap>
                   <Typography.Text type="secondary">
-                    {t('Aster QA · 当前团队「{team}」', { team: teamName })}
+                    {t('Aster QA · 当前测试团队「{team}」', { team: teamName })}
                   </Typography.Text>
                   {running > 0 && (
                     <Tag color="processing">{t('{n} 个任务正在跑', { n: running })}</Tag>
@@ -193,7 +193,7 @@ export default function Dashboard() {
             bodyStyle={{ paddingTop: 8, paddingBottom: 8 }}
           >
             {(recent?.items ?? []).length === 0 ? (
-              <Typography.Text type="secondary">{t('这个团队还没有执行记录。')}</Typography.Text>
+              <Typography.Text type="secondary">{t('这个测试团队还没有执行记录。')}</Typography.Text>
             ) : (
               <Space direction="vertical" style={{ width: '100%' }} size={4}>
                 {(recent?.items ?? []).map((batch) => (

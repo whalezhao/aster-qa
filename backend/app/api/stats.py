@@ -721,7 +721,7 @@ async def requirement_coverage(
     """需求 → 功能 → 用例 → 最近结果的覆盖矩阵。"""
     await _authorize(db, user, team_id, project_id)
     if team_id is None and project_id is None:
-        raise HTTPException(400, "请选择团队或项目")
+        raise HTTPException(400, "请选择测试团队或系统")
 
     stmt = (
         select(
@@ -865,4 +865,4 @@ async def _authorize(
         await require_team_role(team_id, user, db, "member")
     else:
         if not await visible_team_ids(db, user):
-            raise HTTPException(403, "没有可访问的团队")
+            raise HTTPException(403, "没有可访问的测试团队")

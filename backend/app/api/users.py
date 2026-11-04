@@ -159,5 +159,5 @@ async def _guard_team_without_owner(db: AsyncSession, target: User) -> None:
         if others == 0:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                "该用户是某个团队唯一的 owner，停用后团队将无人可管理",
+                "该用户是某个测试团队唯一的 owner，停用后测试团队将无人可管理",
             )

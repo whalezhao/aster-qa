@@ -22,7 +22,7 @@ async def list_teams(user: CurrentUser, db: DbSession) -> list[Team]:
 @router.post("", response_model=TeamOut, status_code=status.HTTP_201_CREATED)
 async def create_team(body: TeamCreate, user: CurrentUser, db: DbSession) -> Team:
     if (await db.execute(select(Team.id).where(Team.name == body.name))).first() is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "团队名已存在")
+        raise HTTPException(status.HTTP_409_CONFLICT, "测试团队名已存在")
     team = Team(name=body.name, description=body.description)
     db.add(team)
     await db.flush()
@@ -38,7 +38,7 @@ async def get_team(team_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Team
     await get_team_membership(db, team_id, user)
     team = await db.get(Team, team_id)
     if team is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "团队不存在")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "测试团队不存在")
     return team
 
 
@@ -49,7 +49,7 @@ async def update_team(
     await require_team_role(team_id, user, db, "admin")
     team = await db.get(Team, team_id)
     if team is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "团队不存在")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "测试团队不存在")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(team, field, value)
     await db.commit()
@@ -62,7 +62,7 @@ async def delete_team(team_id: uuid.UUID, user: CurrentUser, db: DbSession) -> N
     await require_team_role(team_id, user, db, "owner")
     team = await db.get(Team, team_id)
     if team is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "团队不存在")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "测试团队不存在")
     await db.delete(team)
     await db.commit()
 
@@ -102,7 +102,7 @@ async def add_member(
         )
     ).scalar_one_or_none()
     if existing is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "该用户已在团队中")
+        raise HTTPException(status.HTTP_409_CONFLICT, "该用户已在测试团队中")
     member = TeamMember(team_id=team_id, user_id=body.user_id, role=body.role)
     db.add(member)
     await db.commit()
@@ -140,7 +140,7 @@ async def remove_member(
 
 
 async def _guard_last_owner(db, team_id, member, new_role: str | None) -> None:
-    """不允许把团队最后一个 owner 降级或移出，否则团队永久失去管理权。"""
+    """不允许把测试团队最后一个 owner 降级或移出，否则测试团队永久失去管理权。"""
     if member.role != "owner" or new_role == "owner":
         return
     owners = (
@@ -151,4 +151,4 @@ async def _guard_last_owner(db, team_id, member, new_role: str | None) -> None:
         )
     ).all()
     if len(owners) <= 1:
-        raise HTTPException(status.HTTP_409_CONFLICT, "团队至少需要保留一名 owner")
+        raise HTTPException(status.HTTP_409_CONFLICT, "测试团队至少需要保留一名 owner")

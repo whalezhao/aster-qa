@@ -135,7 +135,7 @@ async def _project_team(db: AsyncSession, project_id: uuid.UUID) -> uuid.UUID:
 
     project = await db.get(Project, project_id)
     if project is None:
-        raise ValueError("项目不存在")
+        raise ValueError("系统不存在")
     return project.team_id
 
 

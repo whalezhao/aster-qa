@@ -48,7 +48,7 @@ async def create_feature(
         )
     ).first()
     if exists is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "该项目下已有同名功能")
+        raise HTTPException(status.HTTP_409_CONFLICT, "该系统下已有同名功能")
     feature = Feature(project_id=project_id, created_by=user.id, **body.model_dump())
     db.add(feature)
     await db.commit()

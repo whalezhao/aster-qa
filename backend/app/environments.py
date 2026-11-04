@@ -47,7 +47,7 @@ FORBIDDEN_SECRET_PREFIXES = ("MIDSCENE_", "OPENAI_", "LD_", "DYLD_", "PYTHON", "
 
 
 class EnvironmentResolutionError(ValueError):
-    """任务环境在部分项目下不存在。消息直接给用户看。"""
+    """任务环境在部分系统下不存在。消息直接给用户看。"""
 
 
 def validate_variable_key(key: str, *, is_secret: bool) -> str:
@@ -78,7 +78,7 @@ async def ensure_default_environment(
         return row
     project = await db.get(Project, project_id)
     if project is None:
-        raise ValueError("项目不存在")
+        raise ValueError("系统不存在")
     row = ProjectEnvironment(
         project_id=project_id,
         name=DEFAULT_ENVIRONMENT,
@@ -123,7 +123,7 @@ async def resolve_run_environments(
     *,
     environment_name: str | None = None,
 ) -> dict[uuid.UUID, ProjectEnvironment]:
-    """按任务的环境名解析每个项目的环境；缺一个就整体拒绝。"""
+    """按任务的环境名解析每个系统的环境；缺一个就整体拒绝。"""
     if not project_ids:
         return {}
     env_name = (environment_name or task.environment_name or "").strip() or DEFAULT_ENVIRONMENT
@@ -151,7 +151,7 @@ async def resolve_run_environments(
             ).scalars()
         )
         raise EnvironmentResolutionError(
-            f"环境「{env_name}」在以下项目下不存在：{'、'.join(names) or '未知项目'}"
+            f"环境「{env_name}」在以下系统下不存在：{'、'.join(names) or '未知系统'}"
         )
     return found
 

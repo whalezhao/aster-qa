@@ -1,4 +1,4 @@
-"""CI 触发与门禁查询。认证用团队 API Token，不走 JWT。"""
+"""CI 触发与门禁查询。认证用测试团队 API Token，不走 JWT。"""
 
 import uuid
 from typing import Annotated

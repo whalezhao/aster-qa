@@ -23,7 +23,7 @@ async def _check_iteration_belongs(db, iteration_id: uuid.UUID | None, team_id: 
         return
     iteration = await db.get(Iteration, iteration_id)
     if iteration is None or iteration.team_id != team_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "迭代不存在或不属于该团队")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "迭代不存在或不属于该测试团队")
 
 
 @router.get("/api/teams/{team_id}/tags", response_model=list[TagOut])

@@ -29,7 +29,7 @@ export default function ProjectsTab({ tid }: { tid: string }) {
     mutationFn: (v: ProjectFormValues) =>
       editing ? updateProject(editing.id, v) : createProject(tid, { ...v, name: v.name }),
     onSuccess: () => {
-      message.success(editing ? t('项目已更新') : t('项目已创建'));
+      message.success(editing ? t('系统已更新') : t('系统已创建'));
       setOpen(false);
       invalidate();
     },
@@ -39,7 +39,7 @@ export default function ProjectsTab({ tid }: { tid: string }) {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteProject(id),
     onSuccess: () => {
-      message.success(t('项目已删除'));
+      message.success(t('系统已删除'));
       invalidate();
     },
     onError: (e) => message.error(apiError(e)),
@@ -57,7 +57,7 @@ export default function ProjectsTab({ tid }: { tid: string }) {
           setOpen(true);
         }}
       >
-        {t('新建项目')}
+        {t('新建系统')}
       </Button>
       <QaTable<Project>
         rowKey="id"
@@ -86,7 +86,7 @@ export default function ProjectsTab({ tid }: { tid: string }) {
                 {r.has_model_config ? (
                   <Tag color="success">{t('已配置')}</Tag>
                 ) : (
-                  // 没配模型的项目跑不了任何用例，列表里要一眼能扫出来
+                  // 没配模型的系统跑不了任何用例，列表里要一眼能扫出来
                   <Link to={`/projects/${r.id}`}>
                     <Tag color="warning">{t('未配置')}</Tag>
                   </Link>
@@ -145,7 +145,7 @@ export default function ProjectsTab({ tid }: { tid: string }) {
                 >
                   {t('编辑')}
                 </Button>
-                <Popconfirm title={t('确定删除该项目？')} onConfirm={() => deleteMutation.mutate(r.id)}>
+                <Popconfirm title={t('确定删除该系统？')} onConfirm={() => deleteMutation.mutate(r.id)}>
                   <Button size="small" danger>
                     {t('删除')}
                   </Button>
@@ -157,7 +157,7 @@ export default function ProjectsTab({ tid }: { tid: string }) {
       />
 
       <Modal
-        title={editing ? t('编辑项目') : t('新建项目')}
+        title={editing ? t('编辑系统') : t('新建系统')}
         open={open}
         onCancel={() => setOpen(false)}
         onOk={() => form.submit()}
@@ -165,7 +165,7 @@ export default function ProjectsTab({ tid }: { tid: string }) {
         forceRender
       >
         <Form form={form} layout="vertical" onFinish={(v) => saveMutation.mutate(v)} preserve={false}>
-          <Form.Item name="name" label={t('名称')} rules={[{ required: true, message: t('请输入项目名称') }]}>
+          <Form.Item name="name" label={t('名称')} rules={[{ required: true, message: t('请输入系统名称') }]}>
             <Input />
           </Form.Item>
           <Form.Item name="code" label={t('编码')}>

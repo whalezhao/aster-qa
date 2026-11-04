@@ -72,7 +72,7 @@ export default function FeatureDetail() {
       <ModelConfigNotice projectId={feature?.project_id} action={t('执行该功能下的用例')} />
       <ProCard
         title={feature ? feature.name : t('功能')}
-        extra={<Link to={`/projects/${feature?.project_id ?? ''}`}>{t('返回项目')}</Link>}
+        extra={<Link to={`/projects/${feature?.project_id ?? ''}`}>{t('返回系统')}</Link>}
       >
         {feature && (
           <ProDescriptions column={2} size="small">

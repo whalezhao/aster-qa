@@ -51,8 +51,8 @@ async def _draft_ready(feature_id, user, db):
     if gaps:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"该项目还没配好大模型（缺：{'、'.join(gaps)}），无法生成用例。"
-            "请先到「项目详情 → 大模型配置」补齐。",
+            f"该系统还没配好大模型（缺：{'、'.join(gaps)}），无法生成用例。"
+            "请先到「系统详情 → 大模型配置」补齐。",
         )
     try:
         await ensure_quota(db, feature.project_id, config)

@@ -173,7 +173,7 @@ class ProjectModelConfig(Timestamped, Base):
 
 
 class ProjectModelHealth(Base):
-    """项目模型接通的最近一次探测结果（每项目一行，只保留最新）。"""
+    """系统模型接通的最近一次探测结果（每系统一行，只保留最新）。"""
 
     __tablename__ = "project_model_health"
     __table_args__ = (
@@ -262,7 +262,7 @@ class ProjectEnvironmentVariable(Timestamped, Base):
 
 
 class TeamApiToken(Base):
-    """CI 用的团队级 token。库里只存 SHA-256，明文只在创建时返回一次。"""
+    """CI 用的测试团队级 token。库里只存 SHA-256，明文只在创建时返回一次。"""
 
     __tablename__ = "team_api_tokens"
     __table_args__ = (
@@ -393,7 +393,7 @@ class TestCase(Timestamped, Base):
 
     @property
     def project_id(self) -> uuid.UUID | None:
-        """用例本身不存项目，靠 feature 上溯。序列化需要它来判断所属项目的模型配置。"""
+        """用例本身不存系统，靠 feature 上溯。序列化需要它来判断所属系统的模型配置。"""
         return self.feature.project_id if self.feature else None
 
 
@@ -899,7 +899,7 @@ class BatchReportSignoff(Base):
 
 
 class Webhook(Timestamped, Base):
-    """团队级的 webhook 配置 —— 形如 GitLab：一个地址勾选订阅哪些事件。"""
+    """测试团队级的 webhook 配置 —— 形如 GitLab：一个地址勾选订阅哪些事件。"""
 
     __tablename__ = "webhooks"
     __table_args__ = (

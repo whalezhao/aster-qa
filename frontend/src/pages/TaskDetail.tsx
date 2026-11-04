@@ -127,7 +127,7 @@ export default function TaskDetail() {
       }
       message.success(
         res.run_ids.length > 1
-          ? t('已提交执行：拆成 {n} 次运行（跨项目 / 用例分片）', { n: res.run_ids.length })
+          ? t('已提交执行：拆成 {n} 次运行（跨系统 / 用例分片）', { n: res.run_ids.length })
           : t('已提交执行（环境 {envs}）', { envs }),
       );
       navigate(`/executions/${res.batch_id}`);
@@ -160,7 +160,7 @@ export default function TaskDetail() {
     onError: (e) => message.error(apiError(e)),
   });
 
-  // 与后端一致：签的是团队管理员（owner/admin）
+  // 与后端一致：签的是测试团队管理员（owner/admin）
   const role = me?.teams.find((team) => team.team_id === task?.team_id)?.role;
   const canSign = Boolean(role && role !== 'member');
   const batchOptions = (signBatches?.items ?? []).map((b) => ({
@@ -380,7 +380,7 @@ function SignoffBanner({
         description={
           canSign
             ? t('签名会把「谁、何时、签的是哪版用例」钉下来，之后可对外证明这份用例集经过了人工审核。')
-            : t('签名是团队管理员的动作，你当前是普通成员。')
+            : t('签名是测试团队管理员的动作，你当前是普通成员。')
         }
       />
     );
@@ -706,7 +706,7 @@ function FeaturesTab({ tid }: { tid: string }) {
           render: (v: string, r) => <Link to={`/features/${r.id}`}>{v}</Link>,
         },
         {
-          title: t('所属项目'),
+          title: t('所属系统'),
           dataIndex: 'project_name',
           sorter: byText<TaskFeature>((r) => r.project_name),
         },

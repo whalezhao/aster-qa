@@ -24,7 +24,7 @@ def month_start(now: datetime | None = None) -> datetime:
 
 
 async def project_month_usage(db: AsyncSession, project_id: uuid.UUID) -> int:
-    """该项目本自然月已消耗的 token（执行器 + 平台侧）。"""
+    """该系统本自然月已消耗的 token（执行器 + 平台侧）。"""
     runner = (
         await db.execute(
             select(func.coalesce(func.sum(AiCall.total_tokens), 0))
@@ -56,8 +56,8 @@ async def ensure_quota(
     used = await project_month_usage(db, project_id)
     if used >= quota:
         raise RuntimeError(
-            f"项目本月 AI token 已用尽（{used:,} / {quota:,}），"
-            "请到「项目 → 大模型配置」调高限额，或等下月重置"
+            f"系统本月 AI token 已用尽（{used:,} / {quota:,}），"
+            "请到「系统 → 大模型配置」调高限额，或等下月重置"
         )
 
 

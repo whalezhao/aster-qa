@@ -194,7 +194,7 @@ async def test_webhook(
         if task is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "任务不存在")
         if task.team_id != hook.team_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "这个任务不属于该 webhook 的团队")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "这个任务不属于该 webhook 的测试团队")
         payload = await task_ping_payload(
             db, task, hook.include_yaml and hook.kind == "generic"
         )

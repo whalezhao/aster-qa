@@ -135,7 +135,7 @@ export const cases: Record<string, string> = {
   未启用: 'Disabled',
   执行人: 'Executed by',
   ' 至 {time}': ' to {time}',
-  涉及项目: 'Projects involved',
+  涉及系统: 'Systems involved',
   '{n} 个': '{n}',
   执行耗时: 'Duration',
   '执行 ID': 'Run ID',
@@ -143,8 +143,8 @@ export const cases: Record<string, string> = {
   用例总数: 'Total test cases',
   通过率: 'Pass rate',
   步骤数: 'Steps',
-  '本次执行覆盖 {projects} 个项目、{cases} 个用例，共 {steps} 个执行步骤；使用模型 {models}。详细执行证据（关键帧、参数、日志）可在平台按执行 ID 追溯。':
-    'This run covered {projects} project(s) and {cases} test case(s), {steps} steps in total; models used: {models}. Detailed evidence (keyframes, parameters, logs) can be traced in the platform by Run ID.',
+  '本次执行覆盖 {projects} 个系统、{cases} 个用例，共 {steps} 个执行步骤；使用模型 {models}。详细执行证据（关键帧、参数、日志）可在平台按执行 ID 追溯。':
+    'This run covered {projects} system(s) and {cases} test case(s), {steps} steps in total; models used: {models}. Detailed evidence (keyframes, parameters, logs) can be traced in the platform by Run ID.',
   '二、测试范围与功能结果': '2. Test scope and feature results',
   '本次执行没有功能维度的结果。': 'This run has no feature-level results.',
   功能: 'Feature',
@@ -166,8 +166,8 @@ export const cases: Record<string, string> = {
     'The aggregated report has not been generated yet (older batches have no aggregate), so sign-off is not available.',
   '签章只作用于当前执行记录；请在执行记录列表或本页选择要签章的执行记录。':
     'Sign-off applies only to the current run record; select the run record to sign off in the run list or on this page.',
-  '如需归档留存，请联系团队管理员完成签章。':
-    'To archive this report, ask your team admin to sign off.',
+  '如需归档留存，请联系测试团队管理员完成签章。':
+    'To archive this report, ask your test team admin to sign off.',
   '执行人（签字）：': 'Executed by (signature): ',
   '审核人（签章）：': 'Reviewed by (sign-off): ',
   '日期：': 'Date: ',
@@ -183,7 +183,7 @@ export const cases: Record<string, string> = {
   '签章备注（可选），例如：本次回归结论已审核':
     'Sign-off note (optional), e.g. regression conclusion reviewed',
   '报告里没有用例结果。': 'The report contains no test case results.',
-  项目: 'Project',
+  系统: 'System',
   步骤: 'Step',
   失败信息: 'Failure',
   未执行: 'Not run',

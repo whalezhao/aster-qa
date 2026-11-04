@@ -625,7 +625,7 @@ class BatchOut(BaseModel):
 
 
 class BatchRunOut(BaseModel):
-    """批次下的单个 run —— 一次 midscene 执行，只属于一个项目。"""
+    """批次下的单个 run —— 一次 midscene 执行，只属于一个系统。"""
 
     id: uuid.UUID
     project_id: uuid.UUID | None = None
@@ -761,7 +761,7 @@ class SettingsOut(BaseModel):
 
 
 class SettingsIn(In):
-    """并发是全局上限；分片大小 0 表示一个项目一个 run，不分片。"""
+    """并发是全局上限；分片大小 0 表示一个系统一个 run，不分片。"""
 
     # 两个字段都是可选的：只改其中一个时不用把另一个也带上
     max_concurrent_runs: int | None = Field(default=None, ge=1, le=32)
@@ -770,7 +770,7 @@ class SettingsIn(In):
 
 
 class AiCheckOut(BaseModel):
-    """AI 结论的统一形状：执行评估 / 签名预检 / 团队复盘共用。"""
+    """AI 结论的统一形状：执行评估 / 签名预检 / 测试团队复盘共用。"""
 
     status: str
     verdict: str | None = None

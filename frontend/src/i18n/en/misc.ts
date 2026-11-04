@@ -3,7 +3,7 @@ export const misc: Record<string, string> = {
   'AI 助手，点击听一句话': 'AI assistant, click to hear a line',
   'AI 助手': 'AI assistant',
   '正在盯 {count} 个执行': 'Watching {count} run(s)',
-  '实时读取团队数据': 'Reading team data live',
+  '实时读取测试团队数据': 'Reading test team data live',
   '静音': 'Mute',
   '开声音': 'Unmute',
   '念一遍': 'Read it aloud',
@@ -11,13 +11,13 @@ export const misc: Record<string, string> = {
   '收起': 'Collapse',
 
   // ---- model config notice ----
-  '该项目还没配好大模型，无法{action}':
-    'This project\'s model configuration is incomplete; cannot {action}',
+  '该系统还没配好大模型，无法{action}':
+    'This system\'s model configuration is incomplete; cannot {action}',
   '缺少：': 'Missing: ',
-  '平台不提供全局模型，每个项目必须自己指定模型。':
-    'The platform does not provide a global model; each project must specify its own. ',
+  '平台不提供全局模型，每个系统必须自己指定模型。':
+    'The platform does not provide a global model; each system must specify its own. ',
   '到': 'Go to',
-  '项目详情 → 大模型配置': 'Project details → Model configuration',
+  '系统详情 → 大模型配置': 'System details → Model configuration',
   '补齐后即可{action}。': ', then you can {action}.',
   '执行': 'run',
   '执行用例': 'run the test case',
@@ -25,11 +25,11 @@ export const misc: Record<string, string> = {
   '用 AI 生成用例': 'generate a test case with AI',
 
   // ---- feature tree select ----
-  '按项目选择功能': 'Select features by project',
+  '按系统选择功能': 'Select features by system',
   '{name}（未配大模型，不可选）': '{name} (model not configured, not selectable)',
   '{name}（{stage}）': '{name} ({stage})',
-    '有 {count} 个项目未配大模型，其下功能已禁选：{names}':
-    '{count} project(s) have no model configuration; their features are disabled: {names}',
+    '有 {count} 个系统未配大模型，其下功能已禁选：{names}':
+    '{count} system(s) have no model configuration; their features are disabled: {names}',
 
   // ---- environment variable hint ----
   '环境变量怎么用（不同环境跑不同数据）':
@@ -43,8 +43,8 @@ export const misc: Record<string, string> = {
   '各环境可用变量：': 'Variables available per environment:',
   '无': 'none',
   '（密钥）': ' (secret)',
-  '想让登录账号、搜索词、测试数据随环境变化，就把它们配成项目环境变量，用例里只写变量名 —— 别把值写死在 YAML 里。':
-    'To make login accounts, search terms and test data vary by environment, configure them as project environment variables and reference only the variable names in test cases — never hard-code the values in YAML.',
+  '想让登录账号、搜索词、测试数据随环境变化，就把它们配成系统环境变量，用例里只写变量名 —— 别把值写死在 YAML 里。':
+    'To make login accounts, search terms and test data vary by environment, configure them as system environment variables and reference only the variable names in test cases — never hard-code the values in YAML.',
 
   // ---- shared punctuation ----
   '、': ', ',
@@ -103,8 +103,8 @@ export const misc: Record<string, string> = {
     'Recent pass rate is only {pct}% — we need to find out what went wrong.',
   '有 {n} 次执行是模型额度或网络问题，没计入通过率，别当成产品缺陷。':
     '{n} run(s) failed due to model quota or network issues and are excluded from the pass rate — not product defects.',
-  '这个团队还没有执行记录，先跑一次回归，我就能告诉你情况了。':
-    'This team has no runs yet; start a regression and I will tell you how things look.',
-  '我可以帮你写用例、看执行结果、做团队复盘。点我就能听我说。':
-    'I can help write test cases, review results and run team retrospectives. Click me to hear it.',
+  '这个测试团队还没有执行记录，先跑一次回归，我就能告诉你情况了。':
+    'This test team has no runs yet; start a regression and I will tell you how things look.',
+  '我可以帮你写用例、看执行结果、做测试团队复盘。点我就能听我说。':
+    'I can help write test cases, review results and run test team retrospectives. Click me to hear it.',
 };

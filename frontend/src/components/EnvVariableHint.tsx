@@ -68,7 +68,7 @@ export default function EnvVariableHint({
                 </Space>
               )}
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                {t('想让登录账号、搜索词、测试数据随环境变化，就把它们配成项目环境变量，用例里只写变量名 —— 别把值写死在 YAML 里。')}
+                {t('想让登录账号、搜索词、测试数据随环境变化，就把它们配成系统环境变量，用例里只写变量名 —— 别把值写死在 YAML 里。')}
               </Typography.Text>
             </Space>
           ),

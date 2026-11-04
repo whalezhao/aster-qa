@@ -343,10 +343,10 @@ async def call_model(
     timeout: float = 180.0,
     max_tokens: int = 4096,
 ) -> tuple[str, dict]:
-    """调项目配置的模型。走 OpenAI 兼容的 chat/completions。"""
+    """调系统配置的模型。走 OpenAI 兼容的 chat/completions。"""
     base = (config.base_url or "").rstrip("/")
     if not base:
-        raise ValueError("项目没有配置模型接入地址")
+        raise ValueError("系统没有配置模型接入地址")
 
     payload: dict = {
         "model": config.model_name,
@@ -473,7 +473,7 @@ async def stream_model(
     """
     base = (config.base_url or "").rstrip("/")
     if not base:
-        raise ValueError("项目没有配置模型接入地址")
+        raise ValueError("系统没有配置模型接入地址")
 
     payload: dict = {
         "model": config.model_name,

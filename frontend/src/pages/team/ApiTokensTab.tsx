@@ -60,7 +60,7 @@ export default function ApiTokensTab({ tid }: { tid: string }) {
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message={t('给 CI 使用的团队 Token')}
+        message={t('给 CI 使用的测试团队 Token')}
         description={
           <span>
             {t('在 CI 里通过')} <Typography.Text code>X-API-Token</Typography.Text> {t('或')}

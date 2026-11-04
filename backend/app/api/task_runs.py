@@ -80,7 +80,7 @@ async def create_regression(
         (await db.execute(select(Project).where(Project.id.in_(project_ids)))).scalars()
     )
     if any(p.team_id != team_id for p in projects):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "所选功能必须都属于同一个团队")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "所选功能必须都属于同一个测试团队")
 
     # 用例集合在这里**快照**下来：保证历史回归可复现，功能后续新增的用例
     # 不会偷偷混进一个已经定稿的回归计划里
@@ -128,7 +128,7 @@ async def create_regression(
     for tag_id in body.tag_ids:
         tag = await db.get(Tag, tag_id)
         if tag is None or tag.team_id != team_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "标签不存在或不属于该团队")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "标签不存在或不属于该测试团队")
         db.add(TaskTag(task_id=task.id, tag_id=tag_id))
 
     run_ids: list[str] = []
