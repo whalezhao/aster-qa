@@ -1,6 +1,14 @@
 FROM node:20-alpine AS build
 
 WORKDIR /app
+
+# 企业网络里 npmjs 慢或不通，构建时传国内源：--build-arg NPM_REGISTRY=...
+# 内网链路容易断，多试几次比整层重建便宜
+ARG NPM_REGISTRY=
+RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi \
+    && npm config set fetch-retries 5 \
+    && npm config set fetch-retry-maxtimeout 120000
+
 COPY package.json package-lock.json ./
 RUN npm ci
 

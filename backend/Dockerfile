@@ -12,12 +12,15 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     PYTHONUNBUFFERED=1
 
+# pypi.org 在部分内网不通，构建时传国内镜像：--build-arg UV_INDEX_URL=...
+ARG UV_INDEX_URL=
+
 # 依赖层单独缓存：只改代码时不用重装依赖
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN if [ -n "$UV_INDEX_URL" ]; then export UV_INDEX_URL; fi; uv sync --frozen --no-dev --no-install-project
 
 COPY . .
-RUN uv sync --frozen --no-dev
+RUN if [ -n "$UV_INDEX_URL" ]; then export UV_INDEX_URL; fi; uv sync --frozen --no-dev
 
 ENV PATH="/app/.venv/bin:$PATH"
 
