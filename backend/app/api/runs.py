@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 
 from ..config import get_settings
 from ..deps import CurrentUser, DbSession, require_team_role, visible_team_ids
-from ..models import AiCall, CaseResult, Run, RunBatch, TestCase, TestTask
+from ..models import AiCall, CaseResult, Run, RunBatch, TestTask
 from ..runner import parsers, persist
 from ..schemas import CaseResultOut, RunDetailOut, RunListOut, RunProgressOut
 from ..taskstatus import ACTIVE_RUN_STATUSES, refresh_task_status
@@ -170,49 +170,17 @@ async def get_run(run_id: uuid.UUID, user: CurrentUser, db: DbSession) -> RunDet
     return payload
 
 
-async def _current_case_names(
-    db: DbSession, case_ids: set[uuid.UUID | None]
-) -> dict[uuid.UUID, str]:
-    """用例改名后，历史执行也显示当前名字；用例已被删掉的仍用执行时的快照。"""
-    ids = {case_id for case_id in case_ids if case_id is not None}
-    if not ids:
-        return {}
-    rows = await db.execute(select(TestCase.id, TestCase.name).where(TestCase.id.in_(ids)))
-    return {row.id: row.name for row in rows}
-
-
-def _case_uuid(case: dict[str, object]) -> uuid.UUID | None:
-    try:
-        return uuid.UUID(str(case.get("caseUuid")))
-    except ValueError:
-        return None
-
-
-def _apply_case_names(cases: list[dict], names: dict[uuid.UUID, str]) -> None:
-    for case in cases:
-        current = names.get(_case_uuid(case))
-        if current:
-            case["name"] = current
-
-
 @router.get("/api/runs/{run_id}/cases", response_model=list[CaseResultOut])
 async def list_run_cases(
     run_id: uuid.UUID, user: CurrentUser, db: DbSession
-) -> list[CaseResultOut]:
+) -> list[CaseResult]:
     await _require_run(db, run_id, user)
     stmt = (
         select(CaseResult)
         .where(CaseResult.run_id == run_id)
         .order_by(CaseResult.case_index, CaseResult.name)
     )
-    rows = list((await db.execute(stmt)).scalars())
-    names = await _current_case_names(db, {row.test_case_id for row in rows})
-    return [
-        CaseResultOut.model_validate(row).model_copy(
-            update={"name": names.get(row.test_case_id) or row.name}
-        )
-        for row in rows
-    ]
+    return list((await db.execute(stmt)).scalars())
 
 
 @router.get("/api/runs/{run_id}/report-url")
@@ -300,14 +268,6 @@ async def get_report_structured(
     # v1 是按执行段平铺的旧结构，前端已经只认 v2（用例 → 步骤），让老数据走 Markdown
     if not isinstance(data, dict) or data.get("version") != 2:
         return {"available": False, "data": None}
-    # report.json 里存的是执行时的用例名；改名后用 caseUuid 换成当前名字
-    cases = [
-        case
-        for project in data.get("projects") or []
-        for case in project.get("cases") or []
-    ]
-    names = await _current_case_names(db, {_case_uuid(case) for case in cases})
-    _apply_case_names(cases, names)
     return {"available": True, "data": data}
 
 
