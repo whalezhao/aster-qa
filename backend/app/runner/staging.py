@@ -25,6 +25,8 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 _SAFE_RUN_ID = re.compile(r"[A-Za-z0-9._-]+")
 
 # 生成的 config 里不含任何密钥：后端读 .env 后用 subprocess 环境变量注入，
@@ -220,6 +222,25 @@ def render_config(
         .replace("__VARIABLES__", _json(merged))
         .replace("__TIMEOUT__", str(timeout_ms))
     )
+
+
+def with_case_name(yaml_text: str, name: str) -> str:
+    """把脚本文档里唯一用例的名字换成用例的当前名字。
+
+    改名只改 test_cases.name，而执行报告里的用例名读的是脚本里的 name；
+    不换这一处，改名后的执行仍然显示旧名字。多用例文档无法一一对应，保持原样。
+    """
+    try:
+        doc = yaml.safe_load(yaml_text)
+    except yaml.YAMLError:
+        return yaml_text
+    cases = doc.get("cases") if isinstance(doc, dict) else None
+    if not isinstance(cases, list) or len(cases) != 1 or not isinstance(cases[0], dict):
+        return yaml_text
+    if cases[0].get("name") == name:
+        return yaml_text
+    cases[0]["name"] = name
+    return yaml.safe_dump(doc, allow_unicode=True, sort_keys=False)
 
 
 def stage(

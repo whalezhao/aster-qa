@@ -196,7 +196,7 @@ async def claim_next(db) -> Run | None:
     return run
 
 
-async def collect_cases(db, run: Run) -> list[tuple[uuid.UUID, str]]:
+async def collect_cases(db, run: Run) -> list[tuple[uuid.UUID, str, str]]:
     """这个 run 实际要执行哪些用例。
 
     task_cases 是任务创建时的快照（权威），再按 run 所属项目过滤 —— 跨项目回归会拆成
@@ -205,7 +205,7 @@ async def collect_cases(db, run: Run) -> list[tuple[uuid.UUID, str]]:
     if run.task_id is None:
         return []
     stmt = (
-        select(TestCase.id, TestCase.yaml_content)
+        select(TestCase.id, TestCase.name, TestCase.yaml_content)
         .join(TaskCase, TaskCase.case_id == TestCase.id)
         .join(Feature, Feature.id == TestCase.feature_id)
         .where(TaskCase.task_id == run.task_id, TestCase.is_active.is_(True))
@@ -224,7 +224,7 @@ async def collect_cases(db, run: Run) -> list[tuple[uuid.UUID, str]]:
         if not case_ids:
             return []
         stmt = stmt.where(TestCase.id.in_(case_ids))
-    return [(row[0], row[1]) for row in (await db.execute(stmt)).all()]
+    return [(row[0], row[1], row[2]) for row in (await db.execute(stmt)).all()]
 
 
 
@@ -443,6 +443,11 @@ async def process(run_id: uuid.UUID) -> None:
         if not cases:
             await _fail(db, run, "任务下没有可执行的用例")
             return
+        # 报告里的用例名读脚本内的 name，改名不会自动同步过去，落盘前在这里对齐
+        cases = [
+            (case_id, staging.with_case_name(yaml_text, case_name))
+            for case_id, case_name, yaml_text in cases
+        ]
 
         project = await db.get(Project, run.project_id) if run.project_id else None
         task = await db.get(TestTask, run.task_id) if run.task_id else None

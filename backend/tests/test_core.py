@@ -7,6 +7,7 @@
 import uuid
 
 import httpx
+import yaml
 
 from app.ai_case import (
     _friendly_stream_error,
@@ -165,6 +166,26 @@ def test_purge_run_artifacts_stays_inside_runner(tmp_path):
     evil.write_text("x")
     staging.purge_run_artifacts(runner_root=tmp_path, work_dirs=[], midscene_run_ids=["../evil"])
     assert evil.exists()
+
+
+def test_with_case_name_renames_only_single_case_yaml():
+    renamed = staging.with_case_name(CASE_YAML, "新名字")
+    doc = yaml.safe_load(renamed)
+    assert doc["cases"][0]["name"] == "新名字"
+    assert doc["cases"][0]["steps"][0]["aiAct"]["prompt"] == "打开登录页"
+
+    multi = (
+        "cases:\n"
+        "  - name: a\n"
+        "    steps:\n"
+        "      - aiAssert: ok\n"
+        "  - name: b\n"
+        "    steps:\n"
+        "      - aiAssert: ok\n"
+    )
+    # 多用例文档没法一一对应到 test_cases.name，保持原样
+    assert staging.with_case_name(multi, "新名字") == multi
+    assert staging.with_case_name("cases: [ 语法错误", "新名字") == "cases: [ 语法错误"
 
 
 def test_referenced_variables_extracts_plain_secret_and_skips_local():
