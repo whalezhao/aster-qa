@@ -18,6 +18,7 @@ from app.ai_case import (
 from app.api.auth import _clear, _hit
 from app.api.projects import _test_failure
 from app.api.task_common import split_shards
+from app.environments import referenced_variables
 from app.runner import staging
 from app.taskstatus import aggregate
 from app.yamlcheck import validate
@@ -164,3 +165,19 @@ def test_purge_run_artifacts_stays_inside_runner(tmp_path):
     evil.write_text("x")
     staging.purge_run_artifacts(runner_root=tmp_path, work_dirs=[], midscene_run_ids=["../evil"])
     assert evil.exists()
+
+
+def test_referenced_variables_extracts_plain_secret_and_skips_local():
+    text = """\
+variables:
+  LOCAL_ONLY: 本地值
+cases:
+  - name: 登录
+    steps:
+      - aiAct:
+          prompt: 输入 ${ACCOUNT} 和 ${{PASSWORD}}，再用 ${LOCAL_ONLY}
+"""
+    # 普通变量和密钥都要能识别；用例自己 variables: 里定义的不算外部依赖
+    assert referenced_variables(text) == {"ACCOUNT", "PASSWORD"}
+    assert referenced_variables("cases: []") == set()
+    assert referenced_variables("cases: [ 语法错误") == set()

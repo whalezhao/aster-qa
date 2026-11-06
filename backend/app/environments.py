@@ -9,6 +9,7 @@
 import re
 import uuid
 
+import yaml
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -154,6 +155,25 @@ async def resolve_run_environments(
             f"环境「{env_name}」在以下系统下不存在：{'、'.join(names) or '未知系统'}"
         )
     return found
+
+
+_VAR_REF = re.compile(r"\$\{\{(\w+)\}\}|\$\{(\w+)\}")
+
+
+def referenced_variables(text: str) -> set[str]:
+    """用例 YAML 引用的外部变量名：${KEY}（普通）和 ${{KEY}}（密钥）。
+
+    用例自己顶层 variables: 里定义的不算 —— 那些不需要环境提供。
+    """
+    local: set[str] = set()
+    try:
+        doc = yaml.safe_load(text)
+    except yaml.YAMLError:
+        # 语法错误在保存用例时已拦过；这里只做尽力而为的提取
+        doc = None
+    if isinstance(doc, dict) and isinstance(doc.get("variables"), dict):
+        local = {str(key) for key in doc["variables"]}
+    return {plain or secret for plain, secret in _VAR_REF.findall(text)} - local
 
 
 async def load_environment_variables(

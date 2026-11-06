@@ -27,7 +27,12 @@ from sqlalchemy import and_, delete, func, or_, select, update
 
 from app.config import get_settings
 from app.db import SessionLocal, engine
-from app.environments import ensure_default_environment, load_environment_variables
+from app.environments import (
+    RESERVED_KEYS,
+    ensure_default_environment,
+    load_environment_variables,
+    referenced_variables,
+)
 from app.modelconfig import missing_fields
 from app.models import (
     AppSetting,
@@ -495,6 +500,19 @@ async def process(run_id: uuid.UUID) -> None:
             if env_row is not None and env_row.base_url
             else (project.base_url if project else None)
         )
+
+        # 用例引用了环境没配的变量时，midscene 在 collection 阶段就整份文件失败，
+        # 界面上只剩一句 Undefined environment variable，看不出该补哪儿。
+        referenced = {name for _, text in cases for name in referenced_variables(text)}
+        missing = sorted(referenced - set(plain_vars) - set(secret_vars) - RESERVED_KEYS)
+        if missing:
+            await _fail(
+                db,
+                run,
+                f"环境「{env_row.name if env_row is not None else '默认'}」缺少用例引用的变量："
+                f"{'、'.join(missing)}；请在项目 → 环境变量里补上后重试。",
+            )
+            return
 
         try:
             staged = staging.stage(
