@@ -17,6 +17,7 @@ from app.ai_case import (
 )
 from app.api.auth import _clear, _hit
 from app.api.projects import _test_failure
+from app.api.runs import _apply_case_names
 from app.api.task_common import split_shards
 from app.environments import referenced_variables
 from app.runner import staging
@@ -165,6 +166,20 @@ def test_purge_run_artifacts_stays_inside_runner(tmp_path):
     evil.write_text("x")
     staging.purge_run_artifacts(runner_root=tmp_path, work_dirs=[], midscene_run_ids=["../evil"])
     assert evil.exists()
+
+
+def test_apply_case_names_prefers_current_name_and_keeps_snapshot():
+    renamed = uuid.uuid4()
+    cases = [
+        {"caseUuid": str(renamed), "name": "旧名字"},
+        {"caseUuid": str(uuid.uuid4()), "name": "已删除的用例"},
+        {"name": "没有 caseUuid"},
+    ]
+    _apply_case_names(cases, {renamed: "新名字"})
+    assert cases[0]["name"] == "新名字"
+    # 用例被删了就退回执行时的快照，不能变空
+    assert cases[1]["name"] == "已删除的用例"
+    assert cases[2]["name"] == "没有 caseUuid"
 
 
 def test_referenced_variables_extracts_plain_secret_and_skips_local():
