@@ -133,6 +133,7 @@ export const cases: Record<string, string> = {
   '无有效执行：{reasons}': 'No valid runs: {reasons}',
   待执行完成: 'Waiting for the run to finish',
   未启用: 'Disabled',
+  启用状态: 'Active',
   执行人: 'Executed by',
   ' 至 {time}': ' to {time}',
   涉及系统: 'Systems involved',

@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Tag, Typography } from 'antd';
+import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Tag, Typography } from 'antd';
 import { ProCard, ProDescriptions } from '@ant-design/pro-components';
 import { PlusOutlined, RobotOutlined } from '@ant-design/icons';
-import { createCase, deleteCase, getCases, type CaseInput } from '../api/cases';
+import { createCase, deleteCase, getCases, updateCase, type CaseInput } from '../api/cases';
 import { getFeature } from '../api/features';
 import ModelConfigNotice from '../components/ModelConfigNotice';
 import { apiError } from '../api/client';
-import { PAGE, byRank, byText } from '../lib/table';
+import { PAGE, byNumber, byRank, byText } from '../lib/table';
 import type { FeatureStage, Priority, TestCase } from '../api/types';
 import QaTable from '../components/QaTable';
 import { t } from '../i18n';
@@ -64,6 +64,14 @@ export default function FeatureDetail() {
       message.success(t('用例已删除'));
       invalidate();
     },
+    onError: (e) => message.error(apiError(e)),
+  });
+
+  // 停用的用例不参与新的执行（任务/批次收集用例时按 is_active 过滤），已跑过的记录不变
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      updateCase(id, { is_active: active }),
+    onSuccess: invalidate,
     onError: (e) => message.error(apiError(e)),
   });
 
@@ -165,6 +173,22 @@ export default function FeatureDetail() {
               dataIndex: 'description',
               sorter: byText<TestCase>((r) => r.description),
               render: (v: string | null) => v || '-',
+            },
+            {
+              title: t('启用状态'),
+              dataIndex: 'is_active',
+              width: 100,
+              sorter: byNumber<TestCase>((r) => (r.is_active ? 1 : 0)),
+              render: (v: boolean, r) => (
+                <Switch
+                  size="small"
+                  checked={v}
+                  checkedChildren={t('启用')}
+                  unCheckedChildren={t('停用')}
+                  loading={toggleMutation.isPending && toggleMutation.variables?.id === r.id}
+                  onChange={(active) => toggleMutation.mutate({ id: r.id, active })}
+                />
+              ),
             },
             {
               title: t('操作'),

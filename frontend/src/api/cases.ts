@@ -15,6 +15,7 @@ export interface CaseInput {
   priority?: Priority | null;
   defect_ids?: string | null;
   stage_override?: FeatureStage | null;
+  is_active?: boolean;
   change_source?: 'manual' | 'ai_fix';
   change_note?: string | null;
 }
