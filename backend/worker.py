@@ -690,7 +690,7 @@ def _report_html(staged: staging.StagedRun) -> Path | None:
     优先 midscene 的 e2e 报告（自带截图时间线）；被 kill 掉、没生成 e2e 报告时
     退而用 playwright 的实时报告。
     """
-    for pattern in ("midscene-e2e-*/index.html", "playwright-*.html"):
+    for pattern in ("midscene-e2e-*/index.html", "midscene-e2e-*.html", "playwright-*.html"):
         matches = sorted(
             staged.report_dir.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True
         )

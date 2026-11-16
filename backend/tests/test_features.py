@@ -241,6 +241,29 @@ def test_relocate_report_handles_single_file(tmp_path):
     assert not (report_root / "midscene-e2e-abc123.html").exists()
 
 
+def test_relocate_report_from_private_run_dir(tmp_path):
+    """1.18 起报告直接落在 run 私有的 midscene_run/report，单文件也要搬成 index.html。"""
+    staged = staging.stage(
+        runner_root=tmp_path,
+        run_id=uuid.uuid4(),
+        cases=[],
+        base_url=None,
+        retry=0,
+        timeout_ms=1000,
+    )
+    staged.report_dir.mkdir(parents=True, exist_ok=True)
+    (staged.report_dir / "midscene-e2e-def456.html").write_text(
+        "<html></html>", encoding="utf-8"
+    )
+
+    index = staging.relocate_report(tmp_path, staged, "def456")
+
+    assert index is not None and index.name == "index.html"
+    assert index == staged.report_dir / "midscene-e2e-def456" / "index.html"
+    assert index.read_text(encoding="utf-8") == "<html></html>"
+    assert not (staged.report_dir / "midscene-e2e-def456.html").exists()
+
+
 def test_collection_errors_fail_the_run(tmp_path):
     summary_dir = tmp_path / "run-1"
     error_dir = summary_dir / "project-0" / "collection-errors"

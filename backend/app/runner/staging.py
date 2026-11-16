@@ -355,33 +355,37 @@ def purge_run_artifacts(
 def relocate_report(
     runner_root: Path, staged: StagedRun, midscene_run_id: str | None
 ) -> Path | None:
-    """把 midscene 最终的 HTML 报告搬进 run 私有目录，返回 index.html 路径。
+    """把 midscene 最终的 HTML 报告摆进 run 私有目录，返回 index.html 路径。
 
-    实测 log 与 report 的目录解析不一致：MIDSCENE_RUN_DIR 对 log/playwright 中间产物
-    生效，但最后那份 `midscene-e2e-<runId>/index.html` 固定落在
-    `<runner_root>/midscene_run/report/`。搬进来之后一个 run 的产物完全自包含，
-    托管和按需清理都简单。
+    1.15/1.17 的报告固定落在 <runner_root>/midscene_run/report；1.18 起 config 的
+    projectRoot 变成 .runs/<run_id>，报告直接落在 run 私有的 midscene_run/report。
+    两个位置都找，目录版和单文件版都接，最后统一摆成 <run>/midscene-e2e-<id>/index.html。
     """
     if not midscene_run_id:
         return None
-    report_root = runner_root / "midscene_run" / "report"
     name = f"midscene-e2e-{midscene_run_id}"
-    source_dir = report_root / name
-    source_file = report_root / f"{name}.html"
     destination = staged.report_dir / name
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
-        shutil.rmtree(destination)
 
-    if source_dir.is_dir():
-        shutil.move(str(source_dir), str(destination))
-        index = destination / "index.html"
-        return index if index.exists() else None
-    if source_file.is_file():
-        # 执行器 1.17 起报告是单文件 HTML（截图内联）。仍然摆成 <run>/index.html，
-        # 下游的托管路由、Markdown 转录都按这个约定走。
-        destination.mkdir(parents=True, exist_ok=True)
-        index = destination / "index.html"
-        shutil.move(str(source_file), str(index))
-        return index
+    for report_root in (staged.report_dir, runner_root / "midscene_run" / "report"):
+        source_dir = report_root / name
+        source_file = report_root / f"{name}.html"
+        if source_dir.is_dir():
+            if source_dir.resolve() == destination.resolve():
+                index = destination / "index.html"
+                return index if index.exists() else None
+            if destination.exists():
+                shutil.rmtree(destination)
+            shutil.move(str(source_dir), str(destination))
+            index = destination / "index.html"
+            return index if index.exists() else None
+        if source_file.is_file():
+            # 执行器 1.17+ 报告是单文件 HTML（截图内联）。仍然摆成 <run>/index.html，
+            # 下游的托管路由、Markdown 转录都按这个约定走。
+            if destination.exists():
+                shutil.rmtree(destination)
+            destination.mkdir(parents=True, exist_ok=True)
+            index = destination / "index.html"
+            shutil.move(str(source_file), str(index))
+            return index
     return None
