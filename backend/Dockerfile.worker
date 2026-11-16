@@ -39,7 +39,8 @@ ENV UV_COMPILE_BYTECODE=1 \
 # 先装执行器依赖和 Chromium，再拷业务代码 —— 改 Python 代码/版本号时不用重下浏览器
 WORKDIR /app/runner
 COPY runner/package.json runner/package-lock.json ./
-RUN npm ci
+# @midscene/core 1.18.0 还没同步到 npmmirror，构建时走官方源
+RUN npm ci --registry=https://registry.npmjs.org
 RUN npx playwright install --with-deps chromium
 
 WORKDIR /app
