@@ -6,8 +6,15 @@
  * 看不出「这是同一个用例」。v2 以用例为第一层，再从 case.step.agentDetails
  * 映射到 execution，这样关键帧、耗时、断言结果都归到用例下面。
  */
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';import { collectDedupedExecutions, deriveTaskStatus } from '@midscene/core';
+import { dirname, extname, join } from 'node:path';
+import { collectDedupedExecutions, deriveTaskStatus } from '@midscene/core';
+import {
+  imageFileExtensionForMimeType,
+  parseBase64ImageDataUrl,
+  resolveImageSource,
+} from '@midscene/core/dump';
 
 const MAX_STRING = 6000;
 const SCREENSHOT_ID = /-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(?:jpeg|jpg|png|webp)$/i;
@@ -162,6 +169,60 @@ function screenshotFileMap(markdownDir, reportDir) {
       if (match && !map.has(match[1])) map.set(match[1], name);
     }
   }
+  return map;
+}
+
+/**
+ * 1.18 起报告是单文件 HTML：截图以 inline ref 存在 dump 里，导出文件名是
+ * sha256(扩展名 + \0 + 图片字节)，不再带截图 id。这里按导出器同一套规则算出文件名，
+ * 才能把 keyframe 的 id 对到 screenshots/ 下的文件。
+ */
+function screenshotFileName(htmlPath, ref) {
+  try {
+    const source = resolveImageSource(ref, { reportPath: htmlPath });
+    let bytes;
+    let extension;
+    if (source.type === 'file') {
+      bytes = readFileSync(source.filePath);
+      extension = imageFileExtensionForMimeType(ref.mimeType) || extname(source.filePath).slice(1);
+    } else {
+      const parsed = parseBase64ImageDataUrl(source.dataUri);
+      bytes = Buffer.from(parsed.rawBase64, 'base64');
+      extension = parsed.extension;
+    }
+    const hash = createHash('sha256').update(extension).update('\0').update(bytes).digest('hex');
+    return `${hash}.${extension}`;
+  } catch {
+    // 单张截图解析失败不影响其他关键帧
+    return null;
+  }
+}
+
+/** 把 dump 里的 screenshot ref 映射到导出后的截图文件名（只收真正落盘的文件）。 */
+function inlineScreenshotMap(htmlPath, executions, screenshotDirs) {
+  const map = new Map();
+  const seen = new WeakSet();
+  const visit = (node) => {
+    if (!node || typeof node !== 'object' || seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    if (node.type === 'midscene_screenshot_ref' && node.id) {
+      if (!map.has(node.id)) {
+        const name = screenshotFileName(htmlPath, node);
+        if (name && screenshotDirs.some((dir) => existsSync(join(dir, name)))) {
+          map.set(node.id, name);
+        }
+      }
+      return;
+    }
+    for (const value of Object.values(node)) {
+      if (value && typeof value === 'object') visit(value);
+    }
+  };
+  for (const execution of executions) visit(execution);
   return map;
 }
 
@@ -481,8 +542,14 @@ export function buildReport(htmlPath, options = {}) {
   const { kind = 'run', sources = [] } = options;
   const reportDir = dirname(htmlPath);
   const markdownDir = options.markdownDir || reportDir;
-  const shotMap = screenshotFileMap(markdownDir, reportDir);
   const { baseDump, executions } = collectDedupedExecutions(htmlPath);
+  const shotMap = new Map([
+    ...screenshotFileMap(markdownDir, reportDir),
+    ...inlineScreenshotMap(htmlPath, executions, [
+      join(markdownDir, 'screenshots'),
+      join(reportDir, 'screenshots'),
+    ]),
+  ]);
   const byId = new Map(executions.map((execution) => [execution.id, execution]));
   const testRun = parseTestRunDump(htmlPath);
 
