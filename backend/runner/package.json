@@ -9,7 +9,7 @@
   "dependencies": {
     "@midscene/core": "1.17.3",
     "@midscene/shared": "1.17.3",
-    "@midscene/test": "1.17.3",
+    "@midscene/test": "1.18.0",
     "@midscene/web": "1.17.3",
     "@playwright/test": "1.64.1",
     "playwright": "1.64.1"
