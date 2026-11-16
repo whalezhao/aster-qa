@@ -39,7 +39,7 @@ async def main() -> None:
 
     env = dict(__import__("os").environ)
     env.update(runner_env)
-    env["MIDSCENE_RUN_DIR"] = staging.runner_relative_run_dir(staged, runner_root)
+    env["MIDSCENE_RUN_DIR"] = staging.runner_relative_run_dir(staged)
     env.setdefault("HEADLESS", "true")
     print(f"MIDSCENE_RUN_DIR={env['MIDSCENE_RUN_DIR']}")
     print(f"模型={env.get('MIDSCENE_MODEL_NAME')} family={env.get('MIDSCENE_MODEL_FAMILY')}")

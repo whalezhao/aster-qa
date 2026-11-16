@@ -214,8 +214,7 @@ def render_config(
 
     return (
         CONFIG_TEMPLATE.replace("__RUN_ID__", str(run_id))
-        # 实测：files.include 是相对 cwd（projectRoot）而不是相对 config 文件所在目录，
-        # 所以这里必须写从 runner 根算起的路径
+        # 1.18 起 projectRoot 是 config 文件所在目录，files.include 相对它解析
         .replace("__INCLUDE__", include_glob)
         .replace("__TAGS__", _json(tags))
         .replace("__RETRY__", str(max(0, retry)))
@@ -275,7 +274,7 @@ def stage(
     config_path.write_text(
         render_config(
             run_id=run_id,
-            include_glob=f".runs/{run_id}/cases/*.yaml",
+            include_glob="cases/*.yaml",
             retry=retry,
             tag_include=list(tag_include or []),
             tag_exclude=list(tag_exclude or []),
@@ -298,14 +297,13 @@ def stage(
     )
 
 
-def runner_relative_run_dir(staged: StagedRun, runner_root: Path) -> str:
-    """MIDSCENE_RUN_DIR 必须是**相对 cwd** 的路径。
+def runner_relative_run_dir(staged: StagedRun) -> str:
+    """MIDSCENE_RUN_DIR 相对 config 文件所在目录解析（1.18 起）。
 
-    实测 midscene 1.15.4 用 `path.resolve(process.cwd(), getMidsceneRunDir())` 解析它，
-    给绝对路径反而解析不到，所有 log 会落到 runner 根目录下的默认 midscene_run/ 里，
-    多次执行的 token 统计就会混在一起。
+    配置放在 .runs/<run_id>/ 下，给 midscene_run 就会落到 <work_dir>/midscene_run；
+    如果仍按 runner 根算路径，会变成 .runs/<id>/.runs/<id>/midscene_run，日志和报告都多一层。
     """
-    return str(staged.run_dir.relative_to(runner_root))
+    return str(staged.run_dir.relative_to(staged.work_dir))
 
 
 def shared_cache_dir(runner_root: Path, project_id: uuid.UUID | None = None) -> Path:

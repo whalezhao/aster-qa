@@ -184,7 +184,7 @@ def test_preflight_summary():
 def test_staging_writes_project_variables():
     config = staging.render_config(
         run_id=uuid.uuid4(),
-        include_glob=".runs/x/cases/*.yaml",
+        include_glob="cases/*.yaml",
         retry=1,
         tag_include=[],
         tag_exclude=[],
@@ -208,7 +208,7 @@ def test_shared_cache_dir_is_per_project(tmp_path):
 
     config = staging.render_config(
         run_id=uuid.uuid4(),
-        include_glob=".runs/x/cases/*.yaml",
+        include_glob="cases/*.yaml",
         retry=0,
         tag_include=[],
         tag_exclude=[],

@@ -132,7 +132,7 @@ def _build_env(
     env.update(secret_env or {})
     # 每个 run 一个独立的 MIDSCENE_RUN_DIR —— log 因此天然只含本次执行，
     # token 统计不需要记 offset、也不用按时间窗猜归属
-    env["MIDSCENE_RUN_DIR"] = staging.runner_relative_run_dir(staged, runner_root)
+    env["MIDSCENE_RUN_DIR"] = staging.runner_relative_run_dir(staged)
     # 缓存目录不能跟着 MIDSCENE_RUN_DIR 走，否则每次执行都是冷缓存
     env["QA_CACHE_DIR"] = str(staging.shared_cache_dir(runner_root, project_id))
     env.setdefault("HEADLESS", "true")
