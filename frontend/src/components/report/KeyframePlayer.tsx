@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Image } from 'antd';
+import { Button, Image, Segmented } from 'antd';
 import { PauseCircleFilled, PlayCircleFilled } from '@ant-design/icons';
 import type { ReportKeyframe } from '../../api/runs';
 import { t } from '../../i18n';
@@ -7,21 +7,28 @@ import { t } from '../../i18n';
 /**
  * 关键帧回放：原版报告里那个「视频」其实也是截图序列，没有 video 元素。
  * 这里用同样的方式——大图 + 播放/暂停 + 滑块 + 缩略帧，按截图时间节奏推进。
+ *
+ * autoPlay / initialSpeed 给报告页的「关键帧播放」tab 用：进入页面即 2x 播放。
  */
 export default function KeyframePlayer({
   frames,
   assetBase,
+  autoPlay = false,
+  initialSpeed = 1,
 }: {
   frames: ReportKeyframe[];
   assetBase: string;
+  autoPlay?: boolean;
+  initialSpeed?: number;
 }) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(initialSpeed);
 
   useEffect(() => {
     setIndex(0);
-    setPlaying(false);
-  }, [frames]);
+    setPlaying(autoPlay && frames.length > 1);
+  }, [frames, autoPlay]);
 
   useEffect(() => {
     if (!playing || frames.length < 2) return;
@@ -29,7 +36,8 @@ export default function KeyframePlayer({
     const next = frames[index + 1];
     const gap = (next?.time ?? 0) - (current?.time ?? 0);
     // 真实间隔可能几分钟（模型思考），回放时压到 1.6s 以内；太短也留 350ms 给人看清
-    const delay = Math.min(1600, Math.max(350, gap || 700));
+    const base = Math.min(1600, Math.max(350, gap || 700));
+    const delay = Math.max(120, base / speed);
     const timer = window.setTimeout(() => {
       if (index + 1 >= frames.length) {
         setPlaying(false);
@@ -38,7 +46,15 @@ export default function KeyframePlayer({
       setIndex((value) => value + 1);
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [playing, index, frames]);
+  }, [playing, index, frames, speed]);
+
+  const togglePlay = () => {
+    setPlaying((value) => {
+      // 播到头再点播放时从头开始，否则会停在最后一帧
+      if (!value && index >= frames.length - 1) setIndex(0);
+      return !value;
+    });
+  };
 
   if (frames.length === 0) return null;
 
@@ -61,7 +77,7 @@ export default function KeyframePlayer({
           <button
             type="button"
             className="qa-keyframe-toggle"
-            onClick={() => setPlaying((value) => !value)}
+            onClick={togglePlay}
             aria-label={playing ? t('暂停回放') : t('开始回放')}
           >
             {playing ? <PauseCircleFilled /> : <PlayCircleFilled />}
@@ -78,10 +94,16 @@ export default function KeyframePlayer({
             type="text"
             size="small"
             icon={playing ? <PauseCircleFilled /> : <PlayCircleFilled />}
-            onClick={() => setPlaying((value) => !value)}
+            onClick={togglePlay}
           >
             {playing ? t('暂停') : t('回放')}
           </Button>
+          <Segmented
+            size="small"
+            value={speed}
+            onChange={(value) => setSpeed(Number(value))}
+            options={[1, 2, 4].map((value) => ({ label: `${value}x`, value }))}
+          />
           <input
             type="range"
             className="qa-keyframe-range"

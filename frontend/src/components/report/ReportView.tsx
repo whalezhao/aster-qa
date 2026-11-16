@@ -12,8 +12,10 @@ import {
   Segmented,
   Space,
   Spin,
+  Tabs,
   Tag,
   Typography,
+  theme,
 } from 'antd';
 import {
   CheckCircleFilled,
@@ -139,8 +141,10 @@ export default function ReportView({
   assetBase: string;
   title: string;
 }) {
+  const [tab, setTab] = useState<'keyframes' | 'details'>('keyframes');
   const [query, setQuery] = useState('');
-  const [mode, setMode] = useState<'compact' | 'detailed'>('compact');
+  // 详情 tab 默认展开；「紧凑」把每个用例折叠成一行，方便扫失败项
+  const [mode, setMode] = useState<'compact' | 'detailed'>('detailed');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const q = query.trim().toLowerCase();
 
@@ -176,35 +180,12 @@ export default function ReportView({
     );
   };
 
-  const isOpen = (key: string) => (q ? true : mode === 'detailed' ? !collapsed.has(key) : collapsed.has(key));
+  const isOpen = (key: string) => (q ? true : !collapsed.has(key));
   const showProjectHead = data.projects.length > 1 || data.kind === 'batch';
 
   return (
     <div className="qa-report">
       <ReportHeader data={data} title={title} />
-
-      <Space wrap style={{ marginBottom: 16 }}>
-        <Input
-          allowClear
-          prefix={<SearchOutlined />}
-          placeholder={t('搜索用例、步骤、断言、报错…')}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          style={{ width: 320 }}
-        />
-        <Segmented
-          value={mode}
-          onChange={changeMode}
-          options={[
-            { label: t('紧凑'), value: 'compact' },
-            { label: t('详细'), value: 'detailed' },
-          ]}
-        />
-        <Tag>{t('{n} 个用例', { n: data.stats.cases })}</Tag>
-        <Tag>{t('{n} 个步骤', { n: data.stats.steps })}</Tag>
-        <Tag>{t('{n} 张关键帧', { n: data.stats.keyframes })}</Tag>
-        {data.sources.length > 1 && <Tag color="blue">{t('已聚合 {n} 份执行报告', { n: data.sources.length })}</Tag>}
-      </Space>
 
       {data.legacy && (
         <Alert
@@ -215,47 +196,201 @@ export default function ReportView({
         />
       )}
 
-      {groups.length === 0 ? (
-        <Empty description={q ? t('没有匹配「{query}」的步骤', { query }) : t('报告里没有用例结果')} />
+      <Tabs
+        activeKey={tab}
+        onChange={(key) => setTab(key as 'keyframes' | 'details')}
+        items={[
+          { key: 'keyframes', label: t('关键帧播放') },
+          { key: 'details', label: t('AI 执行细节') },
+        ]}
+      />
+
+      {tab === 'keyframes' ? (
+        <KeyframeTab data={data} assetBase={assetBase} onShowDetails={() => setTab('details')} />
       ) : (
-        <div className="qa-report-projects">
-          {groups.map(({ project, cases }) => (
-            <section className="qa-report-project" key={project.id}>
-              {showProjectHead && (
-                <div className="qa-report-project-head">
-                  <StatusDot status={project.status} />
-                  <span className="qa-report-project-name">
-                    {project.projectName || project.name}
-                  </span>
-                  {project.shardCount !== null && project.shardCount > 1 && (
-                    <Tag>{t('分片 {index}/{total}', { index: project.shardIndex ?? 0, total: project.shardCount })}</Tag>
+        <>
+          <Space wrap style={{ marginBottom: 16 }}>
+            <Input
+              allowClear
+              prefix={<SearchOutlined />}
+              placeholder={t('搜索用例、步骤、断言、报错…')}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              style={{ width: 320 }}
+            />
+            <Segmented
+              value={mode}
+              onChange={changeMode}
+              options={[
+                { label: t('紧凑'), value: 'compact' },
+                { label: t('详细'), value: 'detailed' },
+              ]}
+            />
+            {data.sources.length > 1 && (
+              <Tag color="blue">{t('已聚合 {n} 份执行报告', { n: data.sources.length })}</Tag>
+            )}
+          </Space>
+
+          {groups.length === 0 ? (
+            <Empty description={q ? t('没有匹配「{query}」的步骤', { query }) : t('报告里没有用例结果')} />
+          ) : (
+            <div className="qa-report-projects">
+              {groups.map(({ project, cases }) => (
+                <section className="qa-report-project" key={project.id}>
+                  {showProjectHead && (
+                    <div className="qa-report-project-head">
+                      <StatusDot status={project.status} />
+                      <span className="qa-report-project-name">
+                        {project.projectName || project.name}
+                      </span>
+                      {project.shardCount !== null && project.shardCount > 1 && (
+                        <Tag>{t('分片 {index}/{total}', { index: project.shardIndex ?? 0, total: project.shardCount })}</Tag>
+                      )}
+                      <span className="qa-report-project-meta">
+                        <span>{t('{n} 个用例', { n: project.cases.length })}</span>
+                        {cases.length !== project.cases.length && <span>{t('{n} 匹配', { n: cases.length })}</span>}
+                      </span>
+                    </div>
                   )}
-                  <span className="qa-report-project-meta">
-                    <span>{t('{n} 个用例', { n: project.cases.length })}</span>
-                    {cases.length !== project.cases.length && <span>{t('{n} 匹配', { n: cases.length })}</span>}
-                  </span>
-                </div>
-              )}
-              <div className="qa-report-cases">
-                {cases.map(({ item, steps }) => {
-                  const key = caseKey(project, item);
-                  const open = isOpen(key);
-                  return (
-                    <CaseCard
-                      key={key}
-                      item={item}
-                      steps={steps}
-                      open={open}
-                      assetBase={assetBase}
-                      onToggle={() => toggle(key)}
-                    />
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+                  <div className="qa-report-cases">
+                    {cases.map(({ item, steps }) => {
+                      const key = caseKey(project, item);
+                      const open = isOpen(key);
+                      return (
+                        <CaseCard
+                          key={key}
+                          item={item}
+                          steps={steps}
+                          open={open}
+                          assetBase={assetBase}
+                          onToggle={() => toggle(key)}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 报告的主视图：默认打开关键帧回放，直接以 2x 播放第一个有截图的用例。 */
+function KeyframeTab({
+  data,
+  assetBase,
+  onShowDetails,
+}: {
+  data: ReportStructured;
+  assetBase: string;
+  onShowDetails: () => void;
+}) {
+  const { token } = theme.useToken();
+  const cases = useMemo(
+    () =>
+      data.projects
+        .flatMap((project) =>
+          project.cases.map((item) => ({
+            key: `${project.id}:${item.id}`,
+            project,
+            item,
+            frames: caseKeyframes(item),
+          })),
+        )
+        .filter((entry) => entry.frames.length > 0),
+    [data],
+  );
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const selected = cases.find((entry) => entry.key === selectedKey) ?? cases[0] ?? null;
+
+  if (!selected) {
+    return (
+      <Empty description={t('这份报告没有可回放的关键帧')}>
+        <Button type="primary" onClick={onShowDetails}>
+          {t('查看 AI 执行细节')}
+        </Button>
+      </Empty>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+      {cases.length > 1 && (
+        <div
+          style={{
+            width: 280,
+            maxHeight: 560,
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}
+        >
+          {cases.map((entry) => {
+            const active = entry.key === selected.key;
+            return (
+              <button
+                key={entry.key}
+                type="button"
+                onClick={() => setSelectedKey(entry.key)}
+                aria-pressed={active}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  width: '100%',
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  border: `1px solid ${active ? token.colorPrimary : token.colorBorderSecondary}`,
+                  background: active ? token.colorPrimaryBg : token.colorBgContainer,
+                  color: token.colorText,
+                }}
+              >
+                <StatusDot status={entry.item.status} />
+                <span
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {entry.item.name}
+                </span>
+                <Tag bordered={false} style={{ marginInlineEnd: 0 }}>
+                  {t('{n} 帧', { n: entry.frames.length })}
+                </Tag>
+              </button>
+            );
+          })}
         </div>
       )}
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <StatusDot status={selected.item.status} />
+          <Typography.Text strong>{selected.item.name}</Typography.Text>
+          {selected.project.projectName && (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {selected.project.projectName}
+            </Typography.Text>
+          )}
+          <Tag>{t('{n} 张关键帧', { n: selected.frames.length })}</Tag>
+        </div>
+        <KeyframePlayer
+          key={selected.key}
+          frames={selected.frames}
+          assetBase={assetBase}
+          autoPlay
+          initialSpeed={2}
+        />
+      </div>
     </div>
   );
 }
@@ -275,6 +410,9 @@ function ReportHeader({ data, title }: { data: ReportStructured; title: string }
           {data.stats.failed > 0 && <Tag color="error">{t('{n} 个失败', { n: data.stats.failed })}</Tag>}
           <Tag>{t('耗时 {duration}', { duration: fmtDuration(data.stats.durationMs) })}</Tag>
           <Tag>{t('{n} 个步骤', { n: data.stats.steps })}</Tag>
+          {data.stats.keyframes > 0 && (
+            <Tag>{t('{n} 张关键帧', { n: data.stats.keyframes })}</Tag>
+          )}
           <Tag>{fmtTokens(data.stats.tokens.total)} tokens</Tag>
           {data.stats.models.length > 0 && <Tag>{data.stats.models.map((m) => m.model).join(' / ')}</Tag>}
         </Space>
