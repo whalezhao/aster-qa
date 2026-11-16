@@ -211,7 +211,13 @@ export default function Executions() {
         }}
         onRow={(r) => ({
           style: { cursor: 'pointer' },
-          onClick: () => navigate(`/executions/${r.id}`),
+          onClick: (event) => {
+            // 行内按钮/弹层（删除确认、任务链接等）的点击不要顺带进入详情页：
+            // antd 的 Popconfirm 虽然挂在 body 上，React 事件仍会沿组件树冒泡到这一行
+            const target = event.target as HTMLElement;
+            if (target.closest('button, a, input, .ant-popover, .ant-select, .ant-dropdown')) return;
+            navigate(`/executions/${r.id}`);
+          },
         })}
         columns={[
           {
