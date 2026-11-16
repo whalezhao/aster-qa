@@ -20,7 +20,12 @@ async def main(username: str, password: str, team_name: str) -> None:
     async with SessionLocal() as db:
         user = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
         if user is None:
-            user = User(username=username, display_name=username, password_hash=hash_password(password))
+            user = User(
+                username=username,
+                display_name=username,
+                password_hash=hash_password(password),
+                is_superuser=True,
+            )
             db.add(user)
             await db.flush()
             print(f"已创建用户 {username}")

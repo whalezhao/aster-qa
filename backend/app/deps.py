@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db import get_db
-from .models import Feature, Project, TeamMember, TestCase, User
+from .models import Feature, Project, Team, TeamMember, TestCase, User
 from .security import decode_access_token
 
 bearer = HTTPBearer(auto_error=False)
@@ -50,10 +50,11 @@ async def get_team_membership(
     更新 / 移除成员时手里只有目标的 user_id（team_id + user_id 本来就是这个表的语义），
     之前这里只认 User 对象，那两条路径一律 AttributeError -> 500。
     """
+    if isinstance(user, User) and user.is_superuser:
+        # 超级管理员不在成员表里也按 owner 处理；不落库，成员列表里不会凭空多出他
+        return TeamMember(team_id=team_id, user_id=user.id, role="owner")
     user_id = user if isinstance(user, uuid.UUID) else user.id
-    stmt = select(TeamMember).where(
-        TeamMember.team_id == team_id, TeamMember.user_id == user_id
-    )
+    stmt = select(TeamMember).where(TeamMember.team_id == team_id, TeamMember.user_id == user_id)
     member = (await db.execute(stmt)).scalar_one_or_none()
     if member is None:
         # 不区分「团队不存在」和「你不是成员」，避免泄露团队是否存在
@@ -83,6 +84,8 @@ def team_role_guard(minimum: str = "member"):
 
 
 async def visible_team_ids(db: AsyncSession, user: User) -> list[uuid.UUID]:
+    if user.is_superuser:
+        return list((await db.execute(select(Team.id))).scalars())
     stmt = select(TeamMember.team_id).where(TeamMember.user_id == user.id)
     return list((await db.execute(stmt)).scalars())
 
@@ -90,10 +93,13 @@ async def visible_team_ids(db: AsyncSession, user: User) -> list[uuid.UUID]:
 async def require_people_admin(db: AsyncSession, user: User) -> None:
     """人员维护（建号 / 改资料 / 重置密码 / 停用）的权限口径。
 
-    平台没有全局管理员，团队里的 owner/admin 是唯一的「管理者」来源，所以规则是
-    **在任一团队里是 owner 或 admin** 即可维护人员。不按团队隔离 —— 人员是全局实体，
-    建号是为了把人加进团队，按团队隔离会让「加一个新人」这件事做不成。
+    超级管理员天然可以维护人员。其余账号没有全局角色：团队里的 owner/admin 是
+    管理者的来源，规则是**在任一团队里是 owner 或 admin** 即可维护人员。不按团队
+    隔离 —— 人员是全局实体，建号是为了把人加进团队，按团队隔离会让「加一个新人」
+    这件事做不成。
     """
+    if user.is_superuser:
+        return
     stmt = (
         select(TeamMember.id)
         .where(TeamMember.user_id == user.id, TeamMember.role.in_(("owner", "admin")))

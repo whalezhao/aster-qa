@@ -83,6 +83,11 @@ class User(Timestamped, Base):
     # 为空时前端回退到「首字母」头像。
     avatar: Mapped[str | None] = mapped_column(String(32))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # 平台超级管理员：所有团队可见，并按 owner 管理。只由 seed / 迁移设置，
+    # 接口层不提供修改入口，避免团队管理员把人提升成超级管理员。
+    is_superuser: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
 
 
 class TeamMember(Base):

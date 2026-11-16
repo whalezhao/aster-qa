@@ -5,7 +5,7 @@ from collections import deque
 from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 
-from ..deps import CurrentUser, DbSession
+from ..deps import CurrentUser, DbSession, visible_team_ids
 from ..models import TeamMember, User
 from ..schemas import (
     LoginIn,
@@ -80,10 +80,17 @@ async def logout() -> None:
 
 @router.get("/me", response_model=MeOut)
 async def me(user: CurrentUser, db: DbSession) -> MeOut:
-    stmt = select(TeamMember).where(TeamMember.user_id == user.id)
-    memberships = [
-        TeamMembershipOut.model_validate(m) for m in (await db.execute(stmt)).scalars()
-    ]
+    if user.is_superuser:
+        # 与 deps.get_team_membership 一个口径：超级管理员在所有团队里都算 owner
+        memberships = [
+            TeamMembershipOut(team_id=team_id, role="owner")
+            for team_id in await visible_team_ids(db, user)
+        ]
+    else:
+        stmt = select(TeamMember).where(TeamMember.user_id == user.id)
+        memberships = [
+            TeamMembershipOut.model_validate(m) for m in (await db.execute(stmt)).scalars()
+        ]
     return MeOut(
         id=user.id,
         username=user.username,

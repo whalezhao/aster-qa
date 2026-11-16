@@ -7,6 +7,7 @@
 import uuid
 
 import httpx
+import pytest
 import yaml
 
 from app.ai_case import (
@@ -19,7 +20,9 @@ from app.ai_case import (
 from app.api.auth import _clear, _hit
 from app.api.projects import _test_failure
 from app.api.task_common import split_shards
+from app.deps import get_team_membership, visible_team_ids
 from app.environments import referenced_variables
+from app.models import User
 from app.runner import staging
 from app.taskstatus import aggregate
 from app.yamlcheck import validate
@@ -202,3 +205,24 @@ cases:
     assert referenced_variables(text) == {"ACCOUNT", "PASSWORD"}
     assert referenced_variables("cases: []") == set()
     assert referenced_variables("cases: [ 语法错误") == set()
+
+
+@pytest.mark.asyncio
+async def test_superuser_is_owner_of_every_team():
+    admin = User(username="admin", is_superuser=True)
+    team_id = uuid.uuid4()
+    # 不查成员表就能拿到 owner 权限 —— db 传 None 也通过，说明超级管理员分支没碰库
+    member = await get_team_membership(None, team_id, admin)
+    assert member.team_id == team_id
+    assert member.role == "owner"
+
+    class _Result:
+        def scalars(self):
+            return iter([team_id])
+
+    class _Db:
+        async def execute(self, _stmt):
+            return _Result()
+
+    # 团队可见性也不再按 team_members 过滤
+    assert await visible_team_ids(_Db(), admin) == [team_id]
