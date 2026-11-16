@@ -41,16 +41,17 @@ interface FeatureFormValues {
  * 后端不返回密钥本身，所以密钥框永远是空的 —— 留空表示不改动，要清空得按「清除密钥」。
  */
 /**
- * 执行器 1.17 实际接受的模型族。这份列表是从 @midscene/core 的
- * ai-model/models/ 适配器里逐个 grep 出来的，**不是**从报错信息里抄的 ——
+ * 执行器 1.18 实际接受的模型族。这份列表取自 @midscene/core 的
+ * ai-model/models/registry.mjs 里 MODEL_ADAPTER_CONFIGS 的键，**不是**从报错信息里抄的 ——
  * 报错信息给的集合和真实可用的并不一致（照它填 openai 会直接失败）。
  */
 const MODEL_FAMILY_SUGGESTIONS = [
-  { value: 'qwen3-vl' },
-  { value: 'qwen2.5-vl' },
-  { value: 'qwen3' },
-  { value: 'qwen3.5' },
+  { value: 'qwen4' },
   { value: 'qwen3.6' },
+  { value: 'qwen3.5' },
+  { value: 'qwen3-vl' },
+  { value: 'qwen3' },
+  { value: 'qwen2.5-vl' },
   { value: 'deepseek' },
   { value: 'doubao-vision' },
   { value: 'doubao-seed' },
@@ -61,6 +62,15 @@ const MODEL_FAMILY_SUGGESTIONS = [
   { value: 'kimi' },
   { value: 'kimi3' },
   { value: 'xiaomi-mimo' },
+  { value: 'step' },
+  { value: 'tencent-hy' },
+  { value: 'ant-ling' },
+  { value: 'auto-glm' },
+  { value: 'auto-glm-multilingual' },
+  { value: 'jev' },
+  { value: 'vlm-ui-tars' },
+  { value: 'vlm-ui-tars-doubao' },
+  { value: 'vlm-ui-tars-doubao-1.5' },
 ];
 
 function ModelConfigCard({ projectId }: { projectId: string }) {
