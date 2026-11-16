@@ -12,6 +12,7 @@ from sqlalchemy import text
 from .ai_review import assess_loop
 from .api import (
     ai,
+    ai_drafts,
     api_tokens,
     auth,
     batches,
@@ -124,6 +125,7 @@ app.include_router(batches.router)
 app.include_router(stats.router)
 app.include_router(webhooks.router)
 app.include_router(ai.router)
+app.include_router(ai_drafts.router)
 app.include_router(settings.router)
 app.include_router(environments.router)
 app.include_router(api_tokens.router)

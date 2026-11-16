@@ -14,6 +14,7 @@ from ..db import SessionLocal
 from ..deps import CurrentUser, DbSession, require_case_access, require_feature_access
 from ..modelconfig import missing_fields
 from ..models import (
+    CaseAiDraft,
     CaseResult,
     Iteration,
     Project,
@@ -219,6 +220,17 @@ async def create_case(
         note=body.change_note,
         user_id=user.id,
     )
+    # 这个功能下的对话草稿跟着新用例走，之后打开「AI 修改用例」还能看到刚才的对话
+    draft = (
+        await db.execute(
+            select(CaseAiDraft).where(
+                CaseAiDraft.user_id == user.id, CaseAiDraft.feature_id == feature_id
+            )
+        )
+    ).scalar_one_or_none()
+    if draft is not None:
+        draft.feature_id = None
+        draft.case_id = case.id
     await db.commit()
     case.feature = feature
     out = TestCaseOut.model_validate(case)

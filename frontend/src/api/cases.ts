@@ -76,6 +76,36 @@ export interface ChatMessage {
   content: string;
 }
 
+/** 服务端保存的 AI 对话草稿（按当前用户隔离）。 */
+export interface CaseAiDraft {
+  messages: ChatMessage[];
+  yaml: string | null;
+  input: string;
+}
+
+const EMPTY_AI_DRAFT: CaseAiDraft = { messages: [], yaml: null, input: '' };
+
+export async function getCaseAiDraft(caseId: string): Promise<CaseAiDraft> {
+  const { data } = await http.get<CaseAiDraft>(`/api/cases/${caseId}/ai-draft`);
+  return data ?? EMPTY_AI_DRAFT;
+}
+
+export async function saveCaseAiDraft(caseId: string, state: CaseAiDraft): Promise<void> {
+  await http.put(`/api/cases/${caseId}/ai-draft`, state);
+}
+
+export async function getFeatureAiDraft(featureId: string): Promise<CaseAiDraft> {
+  const { data } = await http.get<CaseAiDraft>(`/api/features/${featureId}/ai-draft`);
+  return data ?? EMPTY_AI_DRAFT;
+}
+
+export async function saveFeatureAiDraft(
+  featureId: string,
+  state: CaseAiDraft,
+): Promise<void> {
+  await http.put(`/api/features/${featureId}/ai-draft`, state);
+}
+
 export interface CaseDraftResult {
   reply: string;
   /** 这轮模型给出的 YAML；只回答问题时为 null */

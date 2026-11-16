@@ -376,7 +376,7 @@ class ChatMessage(BaseModel):
 
 
 class CaseDraftIn(In):
-    """对话历史由前端保存并整段回传，后端不存会话状态。"""
+    """对话历史由前端整段回传；草稿另存 case_ai_drafts，这条链路本身无状态。"""
 
     messages: list[ChatMessage] = Field(min_length=1)
     # 当前正在迭代的 YAML，模型据此在原有基础上改
@@ -390,6 +390,20 @@ class CaseDraftOut(BaseModel):
     yaml_ok: bool = False
     yaml_errors: list[str] = []
     usage: dict = {}
+
+
+class AiDraftIn(In):
+    """AI 对话草稿。对话原文会落库，敏感值请用 ${{KEY}} 占位符，不要发真实口令。"""
+
+    messages: list[ChatMessage] = []
+    yaml: str | None = None
+    input: str = ""
+
+
+class AiDraftOut(BaseModel):
+    messages: list[ChatMessage] = []
+    yaml: str | None = None
+    input: str = ""
 
 
 class YamlValidateOut(BaseModel):

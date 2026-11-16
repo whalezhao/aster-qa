@@ -4,7 +4,8 @@
 普通的 chat completion —— 不需要浏览器、不需要 midscene。用的是项目上配好的同一个模型，
 所以「项目用哪个模型」这件事仍然只有一个答案。
 
-对话历史由前端保存并整段回传，后端不存会话状态。
+对话历史由前端整段回传；草稿本身存在 case_ai_drafts（见 api/ai_drafts.py），
+这条生成链路仍然是无状态的。
 """
 
 import asyncio

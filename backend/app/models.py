@@ -402,6 +402,35 @@ class TestCase(Timestamped, Base):
         return self.feature.project_id if self.feature else None
 
 
+class CaseAiDraft(Timestamped, Base):
+    """AI 对话草稿：按用户 + 用例/功能保存，换浏览器或清缓存后还能看到之前的对话。"""
+
+    __tablename__ = "case_ai_drafts"
+    __table_args__ = (
+        # 一份草稿只能挂在一个目标上：修改用例挂 case，新建用例挂 feature
+        CheckConstraint(
+            "(case_id IS NOT NULL) <> (feature_id IS NOT NULL)",
+            name="ck_case_ai_drafts_target",
+        ),
+        UniqueConstraint("user_id", "case_id", name="uq_case_ai_drafts_case"),
+        UniqueConstraint("user_id", "feature_id", name="uq_case_ai_drafts_feature"),
+        Index("ix_case_ai_drafts_user", "user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    case_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("test_cases.id", ondelete="CASCADE")
+    )
+    feature_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("features.id", ondelete="CASCADE")
+    )
+    # {"messages": [{"role", "content"}], "yaml": str|null, "input": str}
+    state: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+
 class TestCaseVersion(Base):
     """用例的一次内容快照。创建、保存、AI 修复、回滚都会各留一版。"""
 

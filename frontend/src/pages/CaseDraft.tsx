@@ -10,8 +10,13 @@ import {
   createCase,
   draftCaseWithAiStream,
   getCase,
+  getCaseAiDraft,
+  getFeatureAiDraft,
+  saveCaseAiDraft,
+  saveFeatureAiDraft,
   updateCase,
   validateYaml,
+  type CaseAiDraft,
   type CaseDraftResult,
   type ChatMessage,
 } from '../api/cases';
@@ -70,10 +75,46 @@ export default function CaseDraft() {
   const [yaml, setYaml] = useState<string | null>(initial.yaml);
   const [input, setInput] = useState(initial.input);
 
-  // 任何一处变化都落盘
+  // 任何一处变化都先落本机，数据库请求失败时至少不丢
   useEffect(() => {
     saveDraft(draftKey, { messages, yaml, input });
   }, [draftKey, messages, yaml, input]);
+
+  // 数据库里的对话草稿（按当前用户 + 用例/功能），换浏览器/清缓存也能续上
+  const draftTarget = cid ? `case:${cid}` : fidParam ? `feature:${fidParam}` : '';
+  const { data: serverDraft, isLoading: draftLoading } = useQuery({
+    queryKey: ['ai-draft', draftTarget],
+    queryFn: () => (cid ? getCaseAiDraft(cid) : getFeatureAiDraft(fidParam as string)),
+    enabled: Boolean(draftTarget),
+    retry: false,
+  });
+  const [draftHydrated, setDraftHydrated] = useState(false);
+
+  useEffect(() => {
+    if (draftHydrated || draftLoading || !draftTarget) return;
+    const local = loadDraft(draftKey);
+    const serverHas =
+      Boolean(serverDraft?.messages.length) ||
+      Boolean(serverDraft?.yaml) ||
+      Boolean(serverDraft?.input);
+    if (serverDraft && serverHas) {
+      setMessages(serverDraft.messages);
+      setYaml(serverDraft.yaml);
+      setInput(serverDraft.input);
+    } else if (local.messages.length || local.yaml || local.input) {
+      // 老用户浏览器里的草稿第一次打开时迁到数据库
+      const state: CaseAiDraft = {
+        messages: local.messages,
+        yaml: local.yaml,
+        input: local.input,
+      };
+      void (cid
+        ? saveCaseAiDraft(cid, state)
+        : saveFeatureAiDraft(fidParam as string, state)
+      ).catch(() => {});
+    }
+    setDraftHydrated(true);
+  }, [draftHydrated, draftLoading, draftTarget, serverDraft, draftKey, cid, fidParam]);
 
   const { data: feature } = useQuery({
     queryKey: ['feature', fid],
@@ -106,6 +147,19 @@ export default function CaseDraft() {
   // 正在等模型 / 正在流式输出
   const [busy, setBusy] = useState(false);
 
+  // 对话/输入稳定 800ms 后写库；流式生成期间不写，避免把半截回复存进去
+  useEffect(() => {
+    if (!draftHydrated || busy) return;
+    const timer = window.setTimeout(() => {
+      const state: CaseAiDraft = { messages, yaml, input };
+      void (cid
+        ? saveCaseAiDraft(cid, state)
+        : saveFeatureAiDraft(fidParam as string, state)
+      ).catch(() => {});
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [draftHydrated, busy, cid, fidParam, messages, yaml, input]);
+
   function applyDraftYaml(res: CaseDraftResult) {
     // yaml 的三态：null=这轮没给 YAML，右侧别动；""=模型明确要清空；其他=替换
     if (res.yaml === '') {
@@ -120,12 +174,17 @@ export default function CaseDraft() {
   }
 
   const save = useMutation({
-    mutationFn: (v: { name: string }) =>
-      editing
+    mutationFn: async (v: { name: string }) => {
+      // 先把最新对话刷到数据库：新建时后端会把这份草稿挂到新用例上
+      const state: CaseAiDraft = { messages, yaml, input };
+      if (editing) await saveCaseAiDraft(cid as string, state);
+      else await saveFeatureAiDraft(fid, state);
+      return editing
         ? updateCase(cid as string, { name: v.name, yaml_content: yaml as string })
-        : createCase(fid, { name: v.name, yaml_content: yaml as string }),
+        : createCase(fid, { name: v.name, yaml_content: yaml as string });
+    },
     onSuccess: (saved) => {
-      // 草稿已经变成正式用例，留着反而下次进来会看到过期内容
+      // 本机缓存可以清；数据库里的对话保留，下次打开「AI 修改用例」还能看到
       clearDraft(draftKey);
       message.success(editing ? t('用例已更新') : t('用例已创建'));
       navigate(`/cases/${saved.id}`);
