@@ -1,10 +1,11 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Breadcrumb, Button, Col, Empty, Progress, Row, Space, Statistic, Tag, Tooltip, Typography, theme } from 'antd';
+import { Alert, App, Breadcrumb, Button, Col, Empty, Popconfirm, Progress, Row, Space, Statistic, Tag, Tooltip, Typography, theme } from 'antd';
 import { ProCard, ProDescriptions } from '@ant-design/pro-components';
-import { FileTextOutlined, TrophyOutlined } from '@ant-design/icons';
-import { getBatch, rerunFailedBatch, type BatchDetail, type BatchFeature, type BatchRun } from '../api/batches';
+import { DeleteOutlined, FileTextOutlined, TrophyOutlined } from '@ant-design/icons';
+import { deleteBatch, getBatch, rerunFailedBatch, type BatchDetail, type BatchFeature, type BatchRun } from '../api/batches';
 import { useActiveTeam } from '../team/TeamContext';
+import { useAuth } from '../auth/AuthContext';
 import { t } from '../i18n';
 import {
   BATCH_STATUS_COLORS,
@@ -27,6 +28,7 @@ export default function ExecutionDetail() {
   const { bid = '' } = useParams();
   const navigate = useNavigate();
   useActiveTeam();
+  const { user: me } = useAuth();
 
   const { data: batch, isLoading } = useQuery({
     queryKey: ['batch', bid],
@@ -63,11 +65,24 @@ export default function ExecutionDetail() {
     onError: (e) => message.error(apiError(e)),
   });
 
+  const remove = useMutation({
+    mutationFn: () => deleteBatch(bid),
+    onSuccess: () => {
+      message.success(t('执行记录已删除'));
+      queryClient.invalidateQueries({ queryKey: ['batches'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      navigate('/executions');
+    },
+    onError: (e) => message.error(apiError(e)),
+  });
+
   if (isLoading || !batch) {
     return <ProCard loading />;
   }
 
   const running = ACTIVE.includes(batch.status);
+  const role = me?.teams.find((team) => team.team_id === batch.team_id)?.role;
+  const canDelete = role === 'owner' || role === 'admin';
   const percent = batch.total > 0 ? Math.round((batch.passed + batch.failed) * 100 / batch.total) : 0;
   // 全绿批次不调 AI：用奖杯卡片收尾，省一次模型调用也更有「跑完了」的感觉
   const allPassed = batch.total > 0 && batch.failed === 0 && batch.passed === batch.total;
@@ -118,6 +133,24 @@ export default function ExecutionDetail() {
             >
               {t('测试报告')}
             </Button>
+            {canDelete && (
+              <Popconfirm
+                title={t('删除这次执行？')}
+                description={t('执行记录、报告和产物都会删除，不可恢复。')}
+                okButtonProps={{ danger: true }}
+                onConfirm={() => remove.mutate()}
+                disabled={running}
+              >
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  loading={remove.isPending}
+                  disabled={running}
+                >
+                  {t('删除')}
+                </Button>
+              </Popconfirm>
+            )}
             {batch.task_id ? <Link to={`/tasks/${batch.task_id}`}>{t('查看任务')}</Link> : null}
           </Space>
         }

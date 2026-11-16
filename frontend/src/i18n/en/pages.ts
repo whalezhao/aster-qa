@@ -8,6 +8,11 @@ export const pages: Record<string, string> = {
   任务: 'Task',
   测试任务: 'Test tasks',
   执行记录: 'Executions',
+  执行记录已删除: 'Execution record deleted',
+  '删除这次执行？': 'Delete this execution?',
+  '执行记录、报告和产物都会删除，不可恢复。':
+    'The execution record, report and artifacts will be permanently deleted.',
+  '执行还没结束，请先取消': 'This execution is still running; cancel it first',
   执行: 'Run',
   状态: 'Status',
   类型: 'Type',

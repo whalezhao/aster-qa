@@ -36,6 +36,10 @@ async def refresh_task_status(db: AsyncSession, task_id: uuid.UUID | None) -> No
         (await db.execute(select(Run.status).where(Run.task_id == task_id))).scalars()
     )
     if not statuses:
+        # 执行记录全被删掉后任务回到「未执行」，和 aggregate([]) 保持一致
+        await db.execute(
+            update(TestTask).where(TestTask.id == task_id).values(status="draft")
+        )
         return
     await db.execute(
         update(TestTask).where(TestTask.id == task_id).values(status=aggregate(statuses))

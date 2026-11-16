@@ -106,6 +106,11 @@ export async function getBatch(id: string): Promise<BatchDetail> {
   return data;
 }
 
+/** 删除一次执行（批次及其 run、报告、产物）。执行中的批次后端会拒绝。 */
+export async function deleteBatch(id: string): Promise<void> {
+  await http.delete(`/api/batches/${id}`);
+}
+
 /** 只重跑这个批次里失败用例；返回新批次。 */
 export async function rerunFailedBatch(
   id: string,

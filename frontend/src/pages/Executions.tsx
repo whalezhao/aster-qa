@@ -1,11 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Empty, Input, Segmented, Select, Space, Tag, Tooltip, Typography } from 'antd';
-import { TrophyOutlined } from '@ant-design/icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  App,
+  Button,
+  Empty,
+  Input,
+  Popconfirm,
+  Segmented,
+  Select,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
+} from 'antd';
+import { DeleteOutlined, TrophyOutlined } from '@ant-design/icons';
 import QaTable from '../components/QaTable';
 import { PageContainer } from '@ant-design/pro-components';
-import { getBatches, type Batch, type BatchFeature } from '../api/batches';
+import { deleteBatch, getBatches, type Batch, type BatchFeature } from '../api/batches';
+import { apiError } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { getProjects } from '../api/projects';
 import { getTasks } from '../api/tasks';
 import { useActiveTeam } from '../team/TeamContext';
@@ -53,6 +67,11 @@ function FeatureChip({ feature }: { feature: BatchFeature }) {
 export default function Executions() {
   const navigate = useNavigate();
   const { teamId } = useActiveTeam();
+  const { user: me } = useAuth();
+  const queryClient = useQueryClient();
+  const { message } = App.useApp();
+  const role = me?.teams.find((team) => team.team_id === teamId)?.role;
+  const canDelete = role === 'owner' || role === 'admin';
   const [searchParams, setSearchParams] = useSearchParams();
 
   // 筛选与分页都进 URL：刷新/分享/前进后退都能还原，服务端分页也能直接重放
@@ -112,6 +131,16 @@ export default function Executions() {
 
   const batches = data?.items ?? [];
   const taskName = (id: string | null) => tasks.find((task) => task.id === id)?.name;
+
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteBatch(id),
+    onSuccess: () => {
+      message.success(t('执行记录已删除'));
+      void queryClient.invalidateQueries({ queryKey: ['batches'] });
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+    onError: (e) => message.error(apiError(e)),
+  });
 
   return (
     <PageContainer
@@ -335,6 +364,34 @@ export default function Executions() {
             width: 90,
             sorter: byNumber<Batch>((r) => r.duration_ms),
             render: (_, r) => fmtDuration(r.duration_ms),
+          },
+          {
+            title: t('操作'),
+            width: 90,
+            render: (_, r) =>
+              canDelete ? (
+                <Tooltip title={ACTIVE.includes(r.status) ? t('执行还没结束，请先取消') : undefined}>
+                  <Popconfirm
+                    title={t('删除这次执行？')}
+                    description={t('执行记录、报告和产物都会删除，不可恢复。')}
+                    okButtonProps={{ danger: true }}
+                    onConfirm={() => remove.mutate(r.id)}
+                    disabled={ACTIVE.includes(r.status)}
+                  >
+                    <Button
+                      type="text"
+                      danger
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      loading={remove.isPending && remove.variables === r.id}
+                      disabled={ACTIVE.includes(r.status)}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {t('删除')}
+                    </Button>
+                  </Popconfirm>
+                </Tooltip>
+              ) : null,
           },
         ]}
         locale={{

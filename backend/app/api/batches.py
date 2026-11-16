@@ -11,9 +11,9 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 
 from ..deps import (
     CurrentUser,
@@ -26,6 +26,7 @@ from ..models import (
     AiCheck,
     BatchReportSignoff,
     CaseResult,
+    CaseStability,
     Feature,
     Project,
     Run,
@@ -38,6 +39,7 @@ from ..models import (
     User,
 )
 from ..quality_gate import evaluate_gate
+from ..runner import persist
 from ..schemas import (
     BatchDetailOut,
     BatchListOut,
@@ -45,12 +47,87 @@ from ..schemas import (
     BatchSignoffOut,
     SignoffIn,
 )
+from ..taskstatus import refresh_task_status
 from .runs import _resolve_data_path
-from .task_common import active_task_ids, failed_case_ids, spawn_runs
+from .task_common import active_task_ids, failed_case_ids, purge_artifacts, spawn_runs
 
 router = APIRouter(prefix="/api/batches", tags=["batches"])
 
 ACTIVE_RUN_STATUSES = ("queued", "preparing", "running", "parsing")
+
+
+@router.delete("/{batch_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_batch(batch_id: uuid.UUID, user: CurrentUser, db: DbSession) -> None:
+    """删除一次执行：批次、它下面的所有 run、报告和本地产物。
+
+    执行中的批次不能删 —— worker 手里还攥着子进程和正在写的产物目录；先取消再删。
+    """
+    batch = await db.get(RunBatch, batch_id)
+    if batch is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "执行记录不存在")
+    await require_team_role(batch.team_id, user, db, "admin")
+
+    run_ids = list(
+        (await db.execute(select(Run.id).where(Run.batch_id == batch_id))).scalars()
+    )
+    dirs: list[str] = []
+    midscene_ids: list[str] = []
+    task_ids = {batch.task_id} if batch.task_id else set()
+    case_ids: list[uuid.UUID] = []
+    if run_ids:
+        active = (
+            await db.execute(
+                select(Run.id)
+                .where(Run.id.in_(run_ids), Run.status.in_(ACTIVE_RUN_STATUSES))
+                .limit(1)
+            )
+        ).first()
+        if active is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "这次执行还没结束，请先取消再删除"
+            )
+        rows = (
+            await db.execute(
+                select(Run.work_dir, Run.midscene_run_id, Run.task_id).where(
+                    Run.id.in_(run_ids)
+                )
+            )
+        ).all()
+        dirs = [work_dir for work_dir, _, _ in rows if work_dir]
+        midscene_ids = [mid for _, mid, _ in rows if mid]
+        task_ids.update(task_id for _, _, task_id in rows if task_id)
+        case_ids = list(
+            (
+                await db.execute(
+                    select(CaseResult.test_case_id)
+                    .where(
+                        CaseResult.run_id.in_(run_ids),
+                        CaseResult.test_case_id.is_not(None),
+                    )
+                    .distinct()
+                )
+            ).scalars()
+        )
+        await db.execute(delete(Run).where(Run.id.in_(run_ids)))
+
+    # 批次的 AI 评估没有级联关系，显式清掉；签名/报告随批次 FK 级联
+    await db.execute(
+        delete(AiCheck).where(
+            AiCheck.entity_type == "batch", AiCheck.entity_id == batch_id
+        )
+    )
+    await db.delete(batch)
+    for task_id in task_ids:
+        await refresh_task_status(db, task_id)
+    if case_ids:
+        # 最后一次执行被删掉的用例不能留下旧稳定性统计：先清再按剩余结果重算
+        await db.execute(
+            delete(CaseStability).where(CaseStability.test_case_id.in_(case_ids))
+        )
+        await persist.refresh_stability(db, case_ids)
+    await db.commit()
+    # 产物清理放在提交之后：文件系统删失败不影响记录已经删掉
+    purge_artifacts(dirs, midscene_ids)
 
 
 def derive_status(statuses: list[str], real_failed: int, excluded_runs: int) -> str:
@@ -270,8 +347,8 @@ async def _ai_verdicts(db, batch_ids: list[uuid.UUID]) -> dict[uuid.UUID, tuple[
         )
     ).all()
     out: dict[uuid.UUID, tuple[str, str | None]] = {}
-    for entity_id, status, verdict in rows:
-        out.setdefault(entity_id, (status, verdict))
+    for entity_id, ai_status, verdict in rows:
+        out.setdefault(entity_id, (ai_status, verdict))
     return out
 
 
