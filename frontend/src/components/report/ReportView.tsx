@@ -278,7 +278,7 @@ export default function ReportView({
   );
 }
 
-/** 报告的主视图：默认打开关键帧回放，直接以 2x 播放第一个有截图的用例。 */
+/** 报告的主视图：默认打开关键帧回放，直接以 4x 播放第一个有截图的用例。 */
 function KeyframeTab({
   data,
   assetBase,
@@ -304,7 +304,12 @@ function KeyframeTab({
     [data],
   );
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const selected = cases.find((entry) => entry.key === selectedKey) ?? cases[0] ?? null;
+  // 默认先看失败的用例——通过的关键帧通常只在需要复盘时才翻
+  const selected =
+    cases.find((entry) => entry.key === selectedKey) ??
+    cases.find((entry) => entry.item.status === 'failed') ??
+    cases[0] ??
+    null;
 
   if (!selected) {
     return (
@@ -388,7 +393,7 @@ function KeyframeTab({
           frames={selected.frames}
           assetBase={assetBase}
           autoPlay
-          initialSpeed={2}
+          initialSpeed={4}
         />
       </div>
     </div>

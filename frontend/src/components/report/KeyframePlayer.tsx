@@ -8,13 +8,13 @@ import { t } from '../../i18n';
  * 关键帧回放：原版报告里那个「视频」其实也是截图序列，没有 video 元素。
  * 这里用同样的方式——大图 + 播放/暂停 + 滑块 + 缩略帧，按截图时间节奏推进。
  *
- * autoPlay / initialSpeed 给报告页的「关键帧播放」tab 用：进入页面即 2x 播放。
+ * autoPlay / initialSpeed 给报告页的「关键帧播放」tab 用：进入页面即 4x 播放。
  */
 export default function KeyframePlayer({
   frames,
   assetBase,
   autoPlay = false,
-  initialSpeed = 1,
+  initialSpeed = 4,
 }: {
   frames: ReportKeyframe[];
   assetBase: string;
