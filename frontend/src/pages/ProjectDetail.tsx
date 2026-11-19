@@ -78,6 +78,8 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  // 默认折叠，状态标签仍留在标题上；展开后再回填表单（折叠时 Form 可能没挂载）
+  const [collapsed, setCollapsed] = useState(true);
 
   const reasoningOptions = [
     { value: 'inherit', label: t('跟随全局') },
@@ -95,9 +97,9 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
   // 重挂 Form 元素不会清空它的 store，而 resetFields() 又会重置回「首次挂载时捕获的」
   // 旧 initialValues —— 实测表现就是「恢复全局」之后输入框里还留着旧模型名。
   useEffect(() => {
-    // Card 的 loading 态会让 Form 根本没挂载，这时候 setFieldsValue 会报
+    // Card 的 loading 态或折叠态会让 Form 根本没挂载，这时候 setFieldsValue 会报
     // "useForm is not connected to any Form element"
-    if (isLoading) return;
+    if (isLoading || collapsed) return;
     form.setFieldsValue({
       model_name: config?.model_name ?? undefined,
       model_family: config?.model_family ?? undefined,
@@ -112,7 +114,7 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
             ? 'off'
             : 'inherit',
     });
-  }, [config, isLoading, form]);
+  }, [config, isLoading, form, collapsed]);
 
   const save = useMutation({
     mutationFn: (v: Record<string, unknown>) => {
@@ -186,6 +188,9 @@ function ModelConfigCard({ projectId }: { projectId: string }) {
     <ProCard
       style={{ marginTop: 16 }}
       loading={isLoading}
+      collapsible
+      collapsed={collapsed}
+      onCollapse={setCollapsed}
       title={
         <Space>
           <span>{t('大模型配置')}</span>
