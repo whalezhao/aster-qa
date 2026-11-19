@@ -10,6 +10,7 @@ import { apiError } from '../api/client';
 import { fmtDateTime } from '../lib/format';
 import type { CaseVersion } from '../api/types';
 import UnifiedDiff from './UnifiedDiff';
+import YamlPreview from './YamlPreview';
 import { t } from '../i18n';
 
 const SOURCE_LABEL: Record<CaseVersion['change_source'], string> = {
@@ -124,9 +125,7 @@ export default function CaseVersionsTab({ caseId }: { caseId: string }) {
         onCancel={() => setViewing(null)}
         footer={<Button onClick={() => setViewing(null)}>{t('关闭')}</Button>}
       >
-        <pre style={{ margin: 0, maxHeight: 520, overflow: 'auto', fontSize: 12, whiteSpace: 'pre-wrap' }}>
-          {viewing?.yaml_content}
-        </pre>
+        <YamlPreview code={viewing?.yaml_content ?? ''} />
       </Modal>
 
       <Modal

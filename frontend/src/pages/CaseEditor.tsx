@@ -18,6 +18,7 @@ import type { CaseHistoryItem, FeatureStage, Priority, ValidateResult } from '..
 import QaTable from '../components/QaTable';
 import CaseVersionsTab from '../components/CaseVersionsTab';
 import EnvVariableHint from '../components/EnvVariableHint';
+import YamlEditor from '../components/YamlEditor';
 import { t } from '../i18n';
 
 interface CaseFormValues {
@@ -173,7 +174,7 @@ export default function CaseEditor() {
                       label={t('YAML 内容')}
                       rules={[{ required: true, message: t('请输入 YAML 内容') }]}
                     >
-                      <Input.TextArea rows={18} style={{ fontFamily: 'monospace' }} spellCheck={false} />
+                      <YamlEditor rows={18} />
                     </Form.Item>
                     <Button
                       type="primary"

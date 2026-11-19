@@ -11,6 +11,7 @@ import { apiError } from '../api/client';
 import { PAGE, byNumber, byRank, byText } from '../lib/table';
 import type { FeatureStage, Priority, TestCase } from '../api/types';
 import QaTable from '../components/QaTable';
+import YamlEditor from '../components/YamlEditor';
 import { t } from '../i18n';
 
 const DEFAULT_YAML = `cases:
@@ -263,7 +264,7 @@ export default function FeatureDetail() {
             <Input.TextArea rows={2} />
           </Form.Item>
           <Form.Item name="yaml_content" label={t('YAML 内容')} rules={[{ required: true, message: t('请输入 YAML 内容') }]}>
-            <Input.TextArea rows={12} style={{ fontFamily: 'monospace' }} />
+            <YamlEditor rows={12} />
           </Form.Item>
         </Form>
       </Modal>

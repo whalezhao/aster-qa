@@ -6,6 +6,7 @@ import { aiFixCase, updateCase } from '../api/cases';
 import { apiError } from '../api/client';
 import type { AiFixResult } from '../api/types';
 import UnifiedDiff from './UnifiedDiff';
+import YamlPreview from './YamlPreview';
 import { t } from '../i18n';
 
 interface Props {
@@ -126,17 +127,7 @@ export default function AiFixModal({ open, caseId, caseName, onClose }: Props) {
                 key: 'yaml',
                 label: t('查看建议后的完整 YAML'),
                 children: (
-                  <pre
-                    style={{
-                      margin: 0,
-                      maxHeight: 300,
-                      overflow: 'auto',
-                      fontSize: 12,
-                      whiteSpace: 'pre-wrap',
-                    }}
-                  >
-                    {result.proposed_yaml}
-                  </pre>
+                  <YamlPreview code={result.proposed_yaml} maxHeight={300} />
                 ),
               },
             ]}
