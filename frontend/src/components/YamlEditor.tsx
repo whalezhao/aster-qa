@@ -35,6 +35,9 @@ export default function YamlEditor({
         aria-hidden
         style={{
           position: 'absolute',
+          // antd 的 TextArea 自身是 position: relative，且在 DOM 里排在后面；
+          // 不给行号栏 z-index 会被不透明的输入框背景整个盖住
+          zIndex: 1,
           top: 1,
           bottom: 1,
           left: 1,
