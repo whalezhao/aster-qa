@@ -278,6 +278,7 @@ class FeatureOut(BaseModel):
     model_config = ORM
     id: uuid.UUID
     project_id: uuid.UUID
+    parent_id: uuid.UUID | None
     name: str
     description: str | None
     requirement_ids: str | None
@@ -291,6 +292,7 @@ class FeatureCreate(In):
     description: str | None = None
     requirement_ids: str | None = Field(default=None, max_length=255)
     iteration_id: uuid.UUID | None = None
+    parent_id: uuid.UUID | None = None
 
 
 class FeatureUpdate(In):
@@ -298,6 +300,7 @@ class FeatureUpdate(In):
     description: str | None = None
     requirement_ids: str | None = Field(default=None, max_length=255)
     iteration_id: uuid.UUID | None = None
+    parent_id: uuid.UUID | None = None
 
 
 class ReleaseIn(In):

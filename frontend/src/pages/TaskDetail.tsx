@@ -467,17 +467,20 @@ function CasesTab({ tid }: { tid: string }) {
           title: t('功能'),
           dataIndex: 'feature_name',
           sorter: byText<TaskCase>((r) => r.feature_name),
-          render: (v: string, r) =>
-            r.feature_requirement_ids ? (
+          render: (v: string, r) => {
+            const label =
+              r.feature_path.length > 1 ? r.feature_path.join(' / ') : v;
+            return r.feature_requirement_ids ? (
               <Space size={4}>
-                <span>{v}</span>
+                <span>{label}</span>
                 <Tooltip title={t('需求编号 {ids}', { ids: r.feature_requirement_ids })}>
                   <Tag>{r.feature_requirement_ids}</Tag>
                 </Tooltip>
               </Space>
             ) : (
-              v
-            ),
+              label
+            );
+          },
         },
         {
           title: t('优先级'),
@@ -703,7 +706,11 @@ function FeaturesTab({ tid }: { tid: string }) {
           title: t('功能'),
           dataIndex: 'name',
           sorter: byText<TaskFeature>((r) => r.name),
-          render: (v: string, r) => <Link to={`/features/${r.id}`}>{v}</Link>,
+          render: (v: string, r) => (
+            <Link to={`/features/${r.id}`}>
+              {r.path.length > 1 ? r.path.join(' / ') : v}
+            </Link>
+          ),
         },
         {
           title: t('所属系统'),

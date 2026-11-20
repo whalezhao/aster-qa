@@ -12,6 +12,7 @@ from sqlalchemy import delete, func, select
 from ..config import get_settings
 from ..deps import require_team_role
 from ..environments import DEFAULT_ENVIRONMENT, resolve_run_environments
+from ..feature_tree import expand_ids
 from ..modelconfig import assert_projects_configured
 from ..models import (
     AiCheck,
@@ -76,22 +77,29 @@ async def _cases_by_project(db, task: TestTask) -> dict[uuid.UUID, list[uuid.UUI
 
 async def attach_features(
     db, task: TestTask, feature_ids: list[uuid.UUID]
-) -> int:
-    """把功能、以及它们下面启用中的用例，**快照**进任务。返回用例数。
+) -> tuple[int, int]:
+    """把功能、以及它们下面启用中的用例，**快照**进任务。返回 (用例数, 功能数)。
+
+    勾选父功能时先展开成「自身 + 全部后代」：TaskFeature 存覆盖闭包，
+    TaskCase 存闭包里所有启用用例，source_feature_id 仍是用例真实所属功能。
 
     快照而非动态引用：保证历史回归可复现 —— 功能后续新增的用例不会偷偷混进
     一个已经定稿的回归计划里。
     """
-    if not feature_ids:
-        return 0
+    expanded = await expand_ids(db, feature_ids)
+    if not expanded:
+        return 0, 0
     cases = (
         await db.execute(
-            select(TestCase.id, TestCase.feature_id).where(
-                TestCase.feature_id.in_(feature_ids), TestCase.is_active.is_(True)
+            select(TestCase.id, TestCase.feature_id)
+            .join(Feature, Feature.id == TestCase.feature_id)
+            .where(
+                TestCase.feature_id.in_(expanded), TestCase.is_active.is_(True)
             )
+            .order_by(Feature.name, TestCase.name)
         )
     ).all()
-    for feature_id in feature_ids:
+    for feature_id in sorted(expanded, key=str):
         db.add(TaskFeature(task_id=task.id, feature_id=feature_id))
     for position, (case_id, feature_id) in enumerate(cases):
         db.add(
@@ -102,7 +110,7 @@ async def attach_features(
                 position=position,
             )
         )
-    return len(cases)
+    return len(cases), len(expanded)
 
 
 def split_shards(case_ids: list[uuid.UUID], shard_size: int) -> list[list[uuid.UUID]]:

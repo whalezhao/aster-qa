@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Tag, Typography } from 'antd';
+import { App, Breadcrumb, Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Tag, Typography } from 'antd';
 import { ProCard, ProDescriptions } from '@ant-design/pro-components';
 import { PlusOutlined, RobotOutlined } from '@ant-design/icons';
 import { createCase, deleteCase, getCases, updateCase, type CaseInput } from '../api/cases';
-import { getFeature } from '../api/features';
+import { getFeature, getFeatures } from '../api/features';
 import ModelConfigNotice from '../components/ModelConfigNotice';
 import { apiError } from '../api/client';
+import { featurePath } from '../lib/featureTree';
 import { PAGE, byNumber, byRank, byText } from '../lib/table';
 import type { FeatureStage, Priority, TestCase } from '../api/types';
 import QaTable from '../components/QaTable';
@@ -42,6 +43,15 @@ export default function FeatureDetail() {
 
   const { data: feature } = useQuery({ queryKey: ['feature', fid], queryFn: () => getFeature(fid) });
   const { data: cases = [], isLoading } = useQuery({ queryKey: ['cases', fid], queryFn: () => getCases(fid) });
+  const { data: projectFeatures = [] } = useQuery({
+    queryKey: ['features', feature?.project_id, 'all'],
+    queryFn: () => getFeatures(feature!.project_id),
+    enabled: Boolean(feature?.project_id),
+  });
+  const path = feature ? featurePath(projectFeatures, feature.id) : [];
+  const childFeatures = feature
+    ? projectFeatures.filter((item) => item.parent_id === feature.id)
+    : [];
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['cases', fid] });
 
@@ -79,6 +89,18 @@ export default function FeatureDetail() {
   return (
     <div style={{ padding: 20 }}>
       <ModelConfigNotice projectId={feature?.project_id} action={t('执行该功能下的用例')} />
+      {feature && path.length > 1 && (
+        <Breadcrumb
+          style={{ marginBottom: 12 }}
+          items={[
+            { title: <Link to={`/projects/${feature.project_id}`}>{t('系统')}</Link> },
+            ...path.slice(0, -1).map((node) => ({
+              title: <Link to={`/features/${node.id}`}>{node.name}</Link>,
+            })),
+            { title: path[path.length - 1].name },
+          ]}
+        />
+      )}
       <ProCard
         title={feature ? feature.name : t('功能')}
         extra={<Link to={`/projects/${feature?.project_id ?? ''}`}>{t('返回系统')}</Link>}
@@ -92,6 +114,23 @@ export default function FeatureDetail() {
           </ProDescriptions>
         )}
       </ProCard>
+
+      {childFeatures.length > 0 && (
+        <ProCard style={{ marginTop: 16 }} title={t('子功能')}>
+          <Space wrap size={[8, 8]}>
+            {childFeatures.map((child) => (
+              <Space key={child.id} size={4}>
+                <Link to={`/features/${child.id}`}>{child.name}</Link>
+                {child.stage === 'released' ? (
+                  <Tag color="success">{t('正式')}</Tag>
+                ) : (
+                  <Tag color="processing">{t('当前迭代')}</Tag>
+                )}
+              </Space>
+            ))}
+          </Space>
+        </ProCard>
+      )}
 
       <ProCard
         style={{ marginTop: 16 }}

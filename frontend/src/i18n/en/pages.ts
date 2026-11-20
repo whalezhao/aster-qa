@@ -171,6 +171,27 @@ export const pages: Record<string, string> = {
   已退回迭代: 'Moved back to iteration',
   功能列表: 'Features',
   新建功能: 'New feature',
+  新建子功能: 'New sub-feature',
+  上级功能: 'Parent feature',
+  子功能: 'Sub-features',
+  留空表示顶层功能: 'Leave empty for a top-level feature',
+  '留空表示顶层功能；执行时勾选父功能会包含其下所有子功能':
+    'Leave empty for a top-level feature. Selecting a parent at run time includes all its sub-features.',
+  '请先删除或移走子功能': 'Delete or move its sub-features first',
+  '直属 {own} 条，含子功能共 {total} 条':
+    '{own} direct case(s), {total} including sub-features',
+  '勾选父功能会包含其下所有子功能的用例':
+    'Selecting a parent feature includes cases from all its sub-features',
+  '同一上级下已有同名功能': 'A sibling with the same name already exists',
+  '上级功能不存在或不属于该系统':
+    'The parent feature does not exist or belongs to another system',
+  上级功能不能是自己: 'A feature cannot be its own parent',
+  不能把功能移动到自己的子功能下:
+    'A feature cannot be moved under its own sub-feature',
+  '该功能下还有子功能，请先删除或移走子功能':
+    'This feature still has sub-features; delete or move them first',
+  '所选功能（含子功能）下没有启用中的用例':
+    'The selected features (including sub-features) have no active cases',
   '批量转正式（{n}）': 'Release {n} in bulk',
   '批量转正式（{n} 个）': 'Release {n} in bulk',
   用例数: 'Cases',

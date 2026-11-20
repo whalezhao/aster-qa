@@ -6,6 +6,7 @@ export interface FeatureInput {
   description?: string;
   requirement_ids?: string | null;
   iteration_id?: string | null;
+  parent_id?: string | null;
   stage?: FeatureStage;
 }
 

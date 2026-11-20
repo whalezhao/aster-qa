@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 
 from ..deps import (
     CurrentUser,
@@ -10,6 +11,7 @@ from ..deps import (
     require_feature_access,
     require_project_access,
 )
+from ..feature_tree import would_cycle
 from ..models import Feature, TestCase
 from ..schemas import BulkIds, FeatureCreate, FeatureOut, FeatureUpdate, ReleaseIn
 
@@ -27,7 +29,7 @@ async def list_features(
     stmt = select(Feature).where(Feature.project_id == project_id)
     if stage:
         stmt = stmt.where(Feature.stage == stage)
-    stmt = stmt.order_by(Feature.stage, Feature.name)
+    stmt = stmt.order_by(Feature.name)
     return list((await db.execute(stmt)).scalars())
 
 
@@ -40,18 +42,31 @@ async def create_feature(
     project_id: uuid.UUID, body: FeatureCreate, user: CurrentUser, db: DbSession
 ) -> Feature:
     await require_project_access(db, project_id, user, "member")
-    exists = (
-        await db.execute(
-            select(Feature.id).where(
-                Feature.project_id == project_id, Feature.name == body.name
+    if body.parent_id is not None:
+        parent = await db.get(Feature, body.parent_id)
+        if parent is None or parent.project_id != project_id:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "上级功能不存在或不属于该系统"
             )
-        )
-    ).first()
-    if exists is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "该系统下已有同名功能")
+    stmt = select(Feature.id).where(
+        Feature.project_id == project_id, Feature.name == body.name
+    )
+    stmt = stmt.where(
+        Feature.parent_id.is_(None)
+        if body.parent_id is None
+        else Feature.parent_id == body.parent_id
+    )
+    if (await db.execute(stmt)).first() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "同一上级下已有同名功能")
     feature = Feature(project_id=project_id, created_by=user.id, **body.model_dump())
     db.add(feature)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "同一上级下已有同名功能"
+        ) from exc
     await db.refresh(feature)
     return feature
 
@@ -66,9 +81,54 @@ async def update_feature(
     feature_id: uuid.UUID, body: FeatureUpdate, user: CurrentUser, db: DbSession
 ) -> Feature:
     feature = await require_feature_access(db, feature_id, user, "member")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    if "name" in data and data["name"] is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "功能名称不能为空")
+    new_name = data.get("name", feature.name)
+    new_parent = data.get("parent_id", feature.parent_id)
+
+    if "parent_id" in data and new_parent is not None:
+        if new_parent == feature.id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "上级功能不能是自己")
+        parent = await db.get(Feature, new_parent)
+        if parent is None or parent.project_id != feature.project_id:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "上级功能不存在或不属于该系统"
+            )
+        rows = (
+            await db.execute(
+                select(Feature.id, Feature.parent_id).where(
+                    Feature.project_id == feature.project_id
+                )
+            )
+        ).all()
+        if would_cycle(dict(rows), feature.id, new_parent):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "不能把功能移动到自己的子功能下"
+            )
+
+    stmt = select(Feature.id).where(
+        Feature.project_id == feature.project_id,
+        Feature.name == new_name,
+        Feature.id != feature.id,
+    )
+    stmt = stmt.where(
+        Feature.parent_id.is_(None)
+        if new_parent is None
+        else Feature.parent_id == new_parent
+    )
+    if (await db.execute(stmt)).first() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "同一上级下已有同名功能")
+
+    for field, value in data.items():
         setattr(feature, field, value)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "同一上级下已有同名功能"
+        ) from exc
     await db.refresh(feature)
     return feature
 
@@ -76,8 +136,24 @@ async def update_feature(
 @router.delete("/api/features/{feature_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_feature(feature_id: uuid.UUID, user: CurrentUser, db: DbSession) -> None:
     feature = await require_feature_access(db, feature_id, user, "admin")
+    child = (
+        await db.execute(
+            select(Feature.id).where(Feature.parent_id == feature_id).limit(1)
+        )
+    ).first()
+    if child is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "该功能下还有子功能，请先删除或移走子功能"
+        )
     await db.delete(feature)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        # 并发下刚挂上子功能：数据库 FK 兜底，仍然按业务错误返回
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "该功能下还有子功能，请先删除或移走子功能"
+        ) from exc
 
 
 # ------------------------------------------------------------------ 转正式 / 回退

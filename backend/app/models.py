@@ -322,17 +322,39 @@ class Iteration(Timestamped, Base):
 class Feature(Timestamped, Base):
     __tablename__ = "features"
     __table_args__ = (
-        UniqueConstraint("project_id", "name", name="uq_features_project_name"),
+        # 同级唯一：顶层与子级分开用部分唯一索引，跨父级允许同名。
+        # 不用 (project_id, parent_id, name) + NULLS NOT DISTINCT，避免依赖 PG 15+。
+        Index(
+            "uq_features_root_name",
+            "project_id",
+            "name",
+            unique=True,
+            postgresql_where=text("parent_id IS NULL"),
+        ),
+        Index(
+            "uq_features_sibling_name",
+            "project_id",
+            "parent_id",
+            "name",
+            unique=True,
+            postgresql_where=text("parent_id IS NOT NULL"),
+        ),
         CheckConstraint(
             _in("stage", "in_iteration", "released"), name="ck_features_stage"
         ),
         Index("ix_features_project", "project_id"),
         Index("ix_features_iteration", "iteration_id"),
+        Index("ix_features_parent", "parent_id"),
     )
 
     id: Mapped[uuid.UUID] = _pk()
     project_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    # 自引用：None 表示顶层功能。FK 用默认 NO ACTION —— 项目级联删除时在语句末尾检查，
+    # 单独删父节点仍会被数据库拦住；接口层会先给出 409。
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("features.id")
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
@@ -351,6 +373,18 @@ class Feature(Timestamped, Base):
 
     cases: Mapped[list["TestCase"]] = relationship(
         back_populates="feature", cascade="all, delete-orphan"
+    )
+    # passive_deletes：删父功能时不要让 SQLAlchemy 把子节点的 parent_id 置 NULL；
+    # 接口层会先拦截有子功能的删除，数据库 FK 是最后一道保险。
+    children: Mapped[list["Feature"]] = relationship(
+        back_populates="parent",
+        foreign_keys=[parent_id],
+        passive_deletes=True,
+    )
+    parent: Mapped["Feature | None"] = relationship(
+        back_populates="children",
+        remote_side=[id],
+        foreign_keys=[parent_id],
     )
 
 

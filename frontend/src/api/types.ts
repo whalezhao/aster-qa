@@ -89,6 +89,7 @@ export interface Tag {
 export interface Feature {
   id: string;
   project_id: string;
+  parent_id: string | null;
   name: string;
   description: string | null;
   /** 禅道/Jira 的需求编号，可填多个（逗号分隔） */
@@ -203,6 +204,7 @@ export interface TaskCase {
   effective_stage: FeatureStage;
   feature_id: string;
   feature_name: string;
+  feature_path: string[];
   feature_requirement_ids: string | null;
   project_id: string;
   source_feature_id: string;

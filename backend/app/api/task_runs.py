@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from ..deps import CurrentUser, DbSession, require_team_role
+from ..feature_tree import expand_ids
 from ..models import Feature, Project, Tag, TaskTag, TestCase, TestTask
 from ..schemas import RegressionCreate, TaskRunIn
 from .task_common import attach_features, check_iteration, require_task, spawn_runs
@@ -83,16 +84,19 @@ async def create_regression(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "所选功能必须都属于同一个测试团队")
 
     # 用例集合在这里**快照**下来：保证历史回归可复现，功能后续新增的用例
-    # 不会偷偷混进一个已经定稿的回归计划里
+    # 不会偷偷混进一个已经定稿的回归计划里。勾父功能时先展开成整棵子树。
+    expanded = await expand_ids(db, body.feature_ids)
     cases = (
         await db.execute(
-            select(TestCase.id, TestCase.feature_id).where(
-                TestCase.feature_id.in_(body.feature_ids), TestCase.is_active.is_(True)
+            select(TestCase.id).where(
+                TestCase.feature_id.in_(expanded), TestCase.is_active.is_(True)
             )
         )
     ).all()
     if not cases:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "所选功能下没有启用中的用例")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "所选功能（含子功能）下没有启用中的用例"
+        )
 
     # 标签若指定了迭代版本，任务的迭代默认取它；显式传入的优先
     iteration_id = body.iteration_id
@@ -123,7 +127,7 @@ async def create_regression(
     db.add(task)
     await db.flush()
 
-    await attach_features(db, task, body.feature_ids)
+    case_count, feature_count = await attach_features(db, task, body.feature_ids)
 
     for tag_id in body.tag_ids:
         tag = await db.get(Tag, tag_id)
@@ -142,7 +146,7 @@ async def create_regression(
     return {
         "task_id": str(task.id),
         "batch_id": batch_id,
-        "case_count": len(cases),
-        "feature_count": len(body.feature_ids),
+        "case_count": case_count,
+        "feature_count": feature_count,
         "run_ids": run_ids,
     }

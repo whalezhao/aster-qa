@@ -127,6 +127,7 @@ export async function runTask(
 export interface TaskFeature {
   id: string;
   name: string;
+  path: string[];
   stage: 'in_iteration' | 'released';
   project_id: string;
   project_name: string;

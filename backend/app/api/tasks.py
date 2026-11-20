@@ -5,6 +5,7 @@ from sqlalchemy import and_, delete, func, or_, select
 
 from ..deps import CurrentUser, DbSession, get_team_membership, require_team_role, visible_team_ids
 from ..environments import resolve_run_environments
+from ..feature_tree import path_map
 from ..models import (
     Feature,
     Project,
@@ -309,7 +310,7 @@ async def create_task(
         except ValueError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-    case_count = await attach_features(db, task, body.feature_ids)
+    case_count, feature_count = await attach_features(db, task, body.feature_ids)
     for tag_id in body.tag_ids:
         tag = await db.get(Tag, tag_id)
         if tag is None or tag.team_id != team_id:
@@ -328,7 +329,7 @@ async def create_task(
     return {
         **TaskOut.model_validate(task).model_dump(mode="json"),
         "case_count": case_count,
-        "feature_count": len(features),
+        "feature_count": feature_count,
         "batch_id": batch_id,
         "run_ids": run_ids,
     }
@@ -423,6 +424,8 @@ async def list_task_cases(task_id: uuid.UUID, user: CurrentUser, db: DbSession) 
         .where(TaskCase.task_id == task_id)
         .order_by(TaskCase.position, TestCase.name)
     )
+    rows = (await db.execute(stmt)).all()
+    paths = await path_map(db, {feature.id for _, feature, _ in rows})
     return [
         {
             "id": str(case.id),
@@ -433,11 +436,12 @@ async def list_task_cases(task_id: uuid.UUID, user: CurrentUser, db: DbSession) 
             "effective_stage": case.stage_override or feature.stage,
             "feature_id": str(feature.id),
             "feature_name": feature.name,
+            "feature_path": paths.get(feature.id, [feature.name]),
             "feature_requirement_ids": feature.requirement_ids,
             "project_id": str(feature.project_id),
             "source_feature_id": str(source) if source else None,
         }
-        for case, feature, source in (await db.execute(stmt)).all()
+        for case, feature, source in rows
     ]
 
 
@@ -504,15 +508,18 @@ async def list_task_features(
         .where(TaskFeature.task_id == task_id)
         .order_by(Project.name, Feature.name)
     )
+    rows = (await db.execute(stmt)).all()
+    paths = await path_map(db, {feature.id for feature, _ in rows})
     return [
         {
             "id": str(feature.id),
             "name": feature.name,
+            "path": paths.get(feature.id, [feature.name]),
             "stage": feature.stage,
             "project_id": str(feature.project_id),
             "project_name": project_name,
         }
-        for feature, project_name in (await db.execute(stmt)).all()
+        for feature, project_name in rows
     ]
 
 

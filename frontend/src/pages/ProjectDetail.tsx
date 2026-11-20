@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, AutoComplete, Button, Form, Input, InputNumber, Modal, Popconfirm, Segmented, Select, Space, Switch, Tag, Typography } from 'antd';
+import { Alert, App, AutoComplete, Button, Form, Input, InputNumber, Modal, Popconfirm, Segmented, Select, Space, Switch, Tag, Tooltip, TreeSelect, Typography } from 'antd';
 import { ProCard, ProDescriptions } from '@ant-design/pro-components';
 import { PlusOutlined } from '@ant-design/icons';
 import {
@@ -19,7 +19,12 @@ import { clearModelConfig, getModelConfig, getProject, setModelConfig, testModel
 import { getIterationsByTeam } from '../api/iterations';
 import { apiError } from '../api/client';
 import { t } from '../i18n';
-import { PAGE, byNumber, byRank, byText } from '../lib/table';
+import {
+  buildFeatureTree,
+  descendantIds,
+  filterFeatureTree,
+  type FeatureNode,
+} from '../lib/featureTree';
 import { fmtTokens } from '../lib/format';
 import type { BulkReleaseResult, Feature, FeatureStage } from '../api/types';
 import QaTable from '../components/QaTable';
@@ -32,6 +37,29 @@ interface FeatureFormValues {
   description?: string;
   requirement_ids?: string;
   iteration_id?: string | null;
+  parent_id?: string | null;
+}
+
+interface FeatureSelectNode {
+  value: string;
+  title: string;
+  children?: FeatureSelectNode[];
+}
+
+/** 上级功能选择器：编辑时把自身及整棵子树从候选里去掉。 */
+function featureTreeOptions(
+  nodes: FeatureNode[],
+  blocked: Set<string>,
+): FeatureSelectNode[] {
+  return nodes
+    .filter((node) => !blocked.has(node.id))
+    .map((node) => ({
+      value: node.id,
+      title: node.name,
+      children: node.children
+        ? featureTreeOptions(node.children, blocked)
+        : undefined,
+    }));
 }
 
 /**
@@ -407,11 +435,14 @@ export default function ProjectDetail() {
   const [form] = Form.useForm<FeatureFormValues>();
   const [releaseIds, setReleaseIds] = useState<string[] | null>(null);
   const [cascade, setCascade] = useState(true);
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
+  const didInitExpand = useRef(false);
 
   const { data: project } = useQuery({ queryKey: ['project', pid], queryFn: () => getProject(pid) });
   const { data: features = [], isLoading } = useQuery({
-    queryKey: ['features', pid, stage],
-    queryFn: () => getFeatures(pid, stage === 'all' ? undefined : stage),
+    // 拉全量再客户端过滤：服务端按 stage 过滤会把父节点摘掉，子节点失去层级
+    queryKey: ['features', pid, 'all'],
+    queryFn: () => getFeatures(pid),
   });
   const { data: caseCounts = {} } = useQuery({
     queryKey: ['case-counts', pid],
@@ -423,6 +454,42 @@ export default function ProjectDetail() {
     enabled: !!project,
   });
 
+  const tree = useMemo(
+    () => buildFeatureTree(features, caseCounts),
+    [features, caseCounts],
+  );
+  const visibleTree = useMemo(
+    () =>
+      stage === 'all'
+        ? tree
+        : filterFeatureTree(tree, (node) => node.stage === stage),
+    [tree, stage],
+  );
+  // 分期筛选会把不匹配的子节点从 visibleTree 里摘掉，删除保护要看完整数据
+  const parentIds = useMemo(
+    () =>
+      new Set(
+        features
+          .map((feature) => feature.parent_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    [features],
+  );
+  const parentOptions = useMemo(() => {
+    const blocked = editing
+      ? new Set([editing.id, ...descendantIds(tree, editing.id)])
+      : new Set<string>();
+    return featureTreeOptions(tree, blocked);
+  }, [tree, editing]);
+
+  useEffect(() => {
+    if (didInitExpand.current || tree.length === 0) return;
+    setExpandedKeys(
+      tree.filter((node) => node.children?.length).map((node) => node.id),
+    );
+    didInitExpand.current = true;
+  }, [tree]);
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['features', pid] });
     queryClient.invalidateQueries({ queryKey: ['case-counts', pid] });
@@ -431,13 +498,23 @@ export default function ProjectDetail() {
   const saveMutation = useMutation({
     mutationFn: (v: FeatureFormValues) => {
       // 清空输入框要存成 NULL 而不是空串，否则列表里会出现「有值但是空」的怪状态
-      const payload = { ...v, requirement_ids: v.requirement_ids?.trim() || null };
+      const payload = {
+        ...v,
+        requirement_ids: v.requirement_ids?.trim() || null,
+        parent_id: v.parent_id ?? null,
+      };
       return editing
         ? updateFeature(editing.id, payload as FeatureInput)
         : createFeature(pid, payload);
     },
-    onSuccess: () => {
+    onSuccess: (_result, values) => {
       message.success(editing ? t('功能已更新') : t('功能已创建'));
+      const parentId = values.parent_id;
+      if (parentId) {
+        setExpandedKeys((keys) =>
+          keys.includes(parentId) ? keys : [...keys, parentId],
+        );
+      }
       setFormOpen(false);
       invalidate();
     },
@@ -546,11 +623,15 @@ export default function ProjectDetail() {
           </Button>
         </Space>
 
-        <QaTable<Feature>
+        <QaTable<FeatureNode>
           rowKey="id"
           loading={isLoading}
-          dataSource={features}
-          pagination={PAGE}
+          dataSource={visibleTree}
+          pagination={false}
+          expandable={{
+            expandedRowKeys: expandedKeys,
+            onExpandedRowsChange: (keys) => setExpandedKeys(keys as string[]),
+          }}
           rowSelection={{
             selectedRowKeys: selectedIds,
             onChange: (keys) => setSelectedIds(keys as string[]),
@@ -559,14 +640,12 @@ export default function ProjectDetail() {
             {
               title: t('名称'),
               dataIndex: 'name',
-              sorter: byText<Feature>((r) => r.name),
               render: (name: string, r) => <Link to={`/features/${r.id}`}>{name}</Link>,
             },
             {
               title: t('需求编号'),
               dataIndex: 'requirement_ids',
               width: 160,
-              sorter: byText<Feature>((r) => r.requirement_ids),
               render: (v: string | null) =>
                 v ? (
                   <Space size={4} wrap>
@@ -582,25 +661,31 @@ export default function ProjectDetail() {
               title: t('分期'),
               dataIndex: 'stage',
               width: 110,
-              sorter: byRank<Feature>((r) => r.stage, ['in_iteration', 'released']),
               render: (s: FeatureStage) =>
                 s === 'released' ? <Tag color="success">{t('正式')}</Tag> : <Tag color="processing">{t('当前迭代')}</Tag>,
             },
             {
               title: t('迭代'),
               dataIndex: 'iteration_id',
-              sorter: byText<Feature>((r) => iterationName(r.iteration_id)),
               render: (v: string | null) => iterationName(v) ?? '-',
             },
             {
               title: t('用例数'),
               width: 90,
-              sorter: byNumber<Feature>((r) => caseCounts[r.id] ?? 0),
-              render: (_, r) => caseCounts[r.id] ?? 0,
+              render: (_, r) => (
+                <Tooltip
+                  title={t('直属 {own} 条，含子功能共 {total} 条', {
+                    own: r.ownCaseCount,
+                    total: r.caseCount,
+                  })}
+                >
+                  <span>{r.caseCount}</span>
+                </Tooltip>
+              ),
             },
             {
               title: t('操作'),
-              width: 260,
+              width: 360,
               render: (_, r) => (
                 <Space>
                   <Button
@@ -612,6 +697,7 @@ export default function ProjectDetail() {
                         description: r.description ?? undefined,
                         requirement_ids: r.requirement_ids ?? undefined,
                         iteration_id: r.iteration_id,
+                        parent_id: r.parent_id ?? undefined,
                       });
                       setFormOpen(true);
                     }}
@@ -627,11 +713,33 @@ export default function ProjectDetail() {
                       {t('转为正式')}
                     </Button>
                   )}
-                  <Popconfirm title={t('确定删除该功能？')} onConfirm={() => deleteMutation.mutate(r.id)}>
-                    <Button size="small" danger>
-                      {t('删除')}
-                    </Button>
-                  </Popconfirm>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setEditing(null);
+                      form.resetFields();
+                      form.setFieldsValue({ parent_id: r.id });
+                      setFormOpen(true);
+                    }}
+                  >
+                    {t('新建子功能')}
+                  </Button>
+                  {parentIds.has(r.id) ? (
+                    <Tooltip title={t('请先删除或移走子功能')}>
+                      {/* 禁用按钮不触发鼠标事件，外面包一层 span 让 Tooltip 还能显示 */}
+                      <span>
+                        <Button size="small" danger disabled>
+                          {t('删除')}
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    <Popconfirm title={t('确定删除该功能？')} onConfirm={() => deleteMutation.mutate(r.id)}>
+                      <Button size="small" danger>
+                        {t('删除')}
+                      </Button>
+                    </Popconfirm>
+                  )}
                 </Space>
               ),
             },
@@ -653,6 +761,20 @@ export default function ProjectDetail() {
         <Form form={form} layout="vertical" onFinish={(v) => saveMutation.mutate(v)} preserve={false}>
           <Form.Item name="name" label={t('名称')} rules={[{ required: true, message: t('请输入功能名称') }]}>
             <Input />
+          </Form.Item>
+          <Form.Item
+            name="parent_id"
+            label={t('上级功能')}
+            tooltip={t('留空表示顶层功能；执行时勾选父功能会包含其下所有子功能')}
+          >
+            <TreeSelect
+              treeData={parentOptions}
+              allowClear
+              showSearch
+              treeDefaultExpandAll
+              treeNodeFilterProp="title"
+              placeholder={t('留空表示顶层功能')}
+            />
           </Form.Item>
           <Form.Item
             name="requirement_ids"
