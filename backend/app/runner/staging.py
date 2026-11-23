@@ -246,7 +246,7 @@ def stage(
     *,
     runner_root: Path,
     run_id: uuid.UUID,
-    cases: list[tuple[uuid.UUID, str]],
+    cases: list[tuple[uuid.UUID | str, str]],
     base_url: str | None,
     retry: int,
     tag_include: list[str] | None = None,

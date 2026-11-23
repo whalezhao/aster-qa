@@ -65,7 +65,7 @@ def _run_scope(
     include_infra: bool = False,
 ):
     # 只看跑完的：queued/running 的还没结果，failed/cancelled/timed_out 的没有指标
-    conditions = [Run.status.in_(("succeeded", "failed"))]
+    conditions = [Run.is_debug.is_(False), Run.status.in_(("succeeded", "failed"))]
     if not include_infra:
         # 排除「非用例原因」的失败（模型额度用尽、服务不可达、网络不通）。
         # 它们会让整批用例记成 failed —— 算进通过率就是在报一个假数字。
@@ -94,7 +94,10 @@ def _terminal_scope(
     date_to: date | None,
 ):
     """所有已结束的 run（含失败/取消/非用例原因）—— 用于结果分布，不做通过率口径过滤。"""
-    conditions = [Run.status.in_(("succeeded", "failed", "cancelled", "timed_out"))]
+    conditions = [
+        Run.is_debug.is_(False),
+        Run.status.in_(("succeeded", "failed", "cancelled", "timed_out")),
+    ]
     if team_id is not None:
         conditions.append(Run.team_id == team_id)
     if project_id is not None:
@@ -764,7 +767,10 @@ async def requirement_coverage(
                     Run.created_at,
                 )
                 .join(Run, Run.id == CaseResult.run_id)
-                .where(CaseResult.test_case_id.in_(case_ids))
+                .where(
+                    CaseResult.test_case_id.in_(case_ids),
+                    Run.is_debug.is_(False),
+                )
                 .distinct(CaseResult.test_case_id)
                 .order_by(
                     CaseResult.test_case_id,

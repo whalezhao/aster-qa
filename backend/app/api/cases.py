@@ -12,12 +12,14 @@ from ..ai_fix import propose_case_fix
 from ..case_versions import diff_text, rollback_case, snapshot_case
 from ..db import SessionLocal
 from ..deps import CurrentUser, DbSession, require_case_access, require_feature_access
+from ..environments import DEFAULT_ENVIRONMENT, ensure_default_environment
 from ..modelconfig import missing_fields
 from ..models import (
     CaseAiDraft,
     CaseResult,
     Iteration,
     Project,
+    ProjectEnvironment,
     ProjectModelConfig,
     Run,
     RunBatch,
@@ -36,6 +38,8 @@ from ..schemas import (
     TestCaseCreate,
     TestCaseOut,
     TestCaseUpdate,
+    TrialRunIn,
+    TrialRunOut,
     YamlValidateIn,
     YamlValidateOut,
 )
@@ -80,6 +84,7 @@ async def draft_case_with_ai(
             history=[m.model_dump() for m in body.messages],
             current_yaml=body.current_yaml,
             feature_name=feature.name,
+            mode=body.mode,
         )
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, _describe_http_error(exc)) from exc
@@ -100,6 +105,9 @@ async def draft_case_with_ai(
         yaml_ok=result.yaml_ok,
         yaml_errors=result.yaml_errors,
         usage=result.usage,
+        diff=result.diff,
+        lock_violated=result.lock_violated,
+        steps=result.steps or [],
     )
 
 
@@ -119,6 +127,7 @@ async def draft_case_with_ai_stream(
             history=[m.model_dump() for m in body.messages],
             current_yaml=body.current_yaml,
             feature_name=feature.name,
+            mode=body.mode,
         ):
             if item["event"] == "done":
                 tokens = int((item["data"].get("usage") or {}).get("total_tokens") or 0)
@@ -150,6 +159,71 @@ async def draft_case_with_ai_stream(
     )
 
 
+@router.post("/api/features/{feature_id}/ai/trial-run", response_model=TrialRunOut)
+async def trial_run(
+    feature_id: uuid.UUID, body: TrialRunIn, user: CurrentUser, db: DbSession
+) -> TrialRunOut:
+    """把当前 YAML 的前 N 步真正跑一遍，拿步骤级结果。
+
+    不落 TestCase、不进批次、不计入统计（Run.is_debug）—— 这是调试通道，
+    不是一次正式执行。
+    """
+    feature, _config = await _draft_ready(feature_id, user, db)
+    errors, _ = validate_yaml(body.yaml_content)
+    if errors:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "；".join(errors))
+    try:
+        text = ai_case.truncate_steps(
+            body.yaml_content, body.step_limit, body.case_index
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    if body.step_options:
+        text = ai_case.apply_step_options(
+            text, [o.model_dump(exclude_unset=True) for o in body.step_options]
+        )
+    # 返回的是这次真正会跑的范围（前面的 case + 目标 case 的前 N 步）
+    _, case_count = validate_yaml(text)
+
+    project = await db.get(Project, feature.project_id)
+    if project is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "功能所属项目不存在")
+    env_name = (body.environment_name or "").strip() or DEFAULT_ENVIRONMENT
+    env = (
+        await db.execute(
+            select(ProjectEnvironment).where(
+                ProjectEnvironment.project_id == feature.project_id,
+                ProjectEnvironment.name == env_name,
+            )
+        )
+    ).scalar_one_or_none()
+    if env is None and env_name == DEFAULT_ENVIRONMENT:
+        env = await ensure_default_environment(db, feature.project_id)
+    if env is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"环境「{env_name}」在该项目下不存在"
+        )
+
+    run = Run(
+        team_id=project.team_id,
+        project_id=feature.project_id,
+        status="queued",
+        is_debug=True,
+        debug_yaml=text,
+        debug_step_limit=body.step_limit,
+        debug_cache=body.cache,
+        environment_id=env.id,
+        environment_name=env.name,
+        environment_base_url=env.base_url,
+        created_by=user.id,
+    )
+    db.add(run)
+    await db.commit()
+    return TrialRunOut(
+        run_id=run.id, steps=len(ai_case.steps_of(text)), case_count=case_count
+    )
+
+
 def _describe_http_error(exc: httpx.HTTPStatusError) -> str:
     """把模型服务的 HTTP 错误翻译成用户能照做的话。
 
@@ -171,7 +245,12 @@ def _describe_http_error(exc: httpx.HTTPStatusError) -> str:
 async def validate_body(body: YamlValidateIn, user: CurrentUser) -> YamlValidateOut:
     """编辑器里实时校验用 —— 不落库、不调 AI，纯本地解析。"""
     errors, case_count = validate_yaml(body.yaml_content)
-    return YamlValidateOut(ok=not errors, errors=errors, case_count=case_count)
+    return YamlValidateOut(
+        ok=not errors,
+        errors=errors,
+        case_count=case_count,
+        steps=ai_case.steps_of(body.yaml_content),
+    )
 
 
 @router.get("/api/features/{feature_id}/cases", response_model=list[TestCaseOut])
@@ -483,6 +562,7 @@ async def case_history(
         .outerjoin(RunBatch, RunBatch.id == Run.batch_id)
         .where(
             CaseResult.test_case_id == case_id,
+            Run.is_debug.is_(False),
             Run.status.in_(("succeeded", "failed")),
         )
         .order_by(Run.started_at.desc().nullslast())

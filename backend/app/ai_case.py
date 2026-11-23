@@ -19,6 +19,7 @@ import httpx
 import yaml
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .case_versions import diff_text
 from .models import ProjectModelConfig
 from .yamlcheck import validate as validate_yaml
 
@@ -187,6 +188,15 @@ cases:
 
 YAML_BLOCK = re.compile(r"```ya?ml\s*\n(.*?)```", re.DOTALL)
 
+# 试跑过前缀之后，只允许往后追加 —— 已确认的步骤是「锁」，模型不能重写
+APPEND_RULE = """
+
+## 本轮模式：只追加
+
+用户已经验证过前面的步骤。**已有用例的所有步骤一个字都不许改**（顺序、措辞、
+options 全部保持原样）。你只能在现有步骤之后追加新步骤；需要新场景时新增一条 case。
+输出仍然是一份完整 YAML。"""
+
 
 @dataclass
 class DraftResult:
@@ -195,6 +205,9 @@ class DraftResult:
     yaml_ok: bool
     yaml_errors: list[str]
     usage: dict
+    diff: str | None = None
+    lock_violated: bool = False
+    steps: list[dict] | None = None
 
 
 def extract_yaml(reply: str) -> str | None:
@@ -215,9 +228,36 @@ def extract_yaml(reply: str) -> str | None:
         content = blocks[-1].strip()
         return f"{content}\n" if content else ""
 
-    stripped = reply.strip()
-    if stripped.startswith(("beforeEach:", "cases:", "beforeAll:")) and "cases:" in stripped:
-        return stripped + "\n"
+    return _bare_yaml(reply)
+
+
+_YAML_STARTS = ("beforeEach:", "beforeAll:", "cases:")
+
+
+def _bare_yaml(reply: str) -> str | None:
+    """裸 YAML 兜底：模型常把用例贴在解释文字中间，不加围栏。
+
+    从每个疑似文档开头往下取，末尾逐行回退，直到能解析成带 cases 的字典 ——
+    这样「前面一段说明 + YAML + 后面一句补充」也能取到。
+    """
+    lines = reply.splitlines()
+    for i, line in enumerate(lines):
+        head = line.lstrip()
+        if head not in _YAML_STARTS:
+            continue
+        indent = len(line) - len(head)
+        pad = " " * indent
+        chunk = [l[indent:] if l.startswith(pad) else l for l in lines[i:]]
+        for end in range(len(chunk), max(len(chunk) - 20, 0), -1):
+            candidate = "\n".join(chunk[:end]).rstrip()
+            if not candidate:
+                continue
+            try:
+                doc = yaml.safe_load(candidate + "\n")
+            except yaml.YAMLError:
+                continue
+            if isinstance(doc, dict) and doc.get("cases"):
+                return candidate + "\n"
     return None
 
 
@@ -231,6 +271,198 @@ def strip_yaml_blocks(reply: str, *, cleared: bool = False) -> str:
     if text:
         return text
     return "已清空右侧的 YAML。" if cleared else "已更新右侧的 YAML。"
+
+
+def steps_of(yaml_text: str) -> list[dict]:
+    """把 YAML 摊平成步骤清单，供调试面板逐步试跑。"""
+    try:
+        doc = yaml.safe_load(yaml_text)
+    except yaml.YAMLError:
+        return []
+    if not isinstance(doc, dict):
+        return []
+    items: list[dict] = []
+    for case_index, case in enumerate(doc.get("cases") or []):
+        if not isinstance(case, dict):
+            continue
+        name = str(case.get("name") or "")
+        for index, step in enumerate(case.get("steps") or []):
+            if not isinstance(step, dict) or not step:
+                continue
+            node = next(iter(step))
+            value = step.get(node)
+            text = value.get("prompt") if isinstance(value, dict) else value
+            items.append(
+                {
+                    "case": name,
+                    "case_index": case_index,
+                    "index": index,
+                    "kind": node,
+                    "text": str(text or "")[:200],
+                }
+            )
+    return items
+
+
+# 执行器的节点各自只接受自己的 options：缓存/深度定位是 aiAct 的，
+# 超时是 aiWaitFor 的；塞错节点会直接报输入不合法，所以按节点分表
+_CACHE_NODES = {"aiAct"}
+_TIMEOUT_NODES = {"aiWaitFor"}
+_CONTEXT_NODES = {"aiAct", "aiAssert", "aiWaitFor"}
+_MESSAGE_NODES = {"aiAssert"}
+
+
+def apply_step_options(yaml_text: str, overrides: list[dict]) -> str:
+    """按 (case 下标, 步骤下标) 给单步加执行选项。
+
+    `cache=False` → 删掉 `options.cacheable`（界面上的「不要这个键」）；
+    `deep_locate=True` → `options.deepLocate: true`（定位时多看一遍画面）。
+    下标以原文档为准：截断只会砍掉尾部，保留下来的步骤下标不变。
+    """
+    wanted = {
+        (int(o["case_index"]), int(o["step"])): o
+        for o in overrides
+        if isinstance(o, dict) and "case_index" in o and "step" in o
+    }
+    if not wanted:
+        return yaml_text
+    try:
+        doc = yaml.safe_load(yaml_text)
+    except yaml.YAMLError:
+        return yaml_text
+    if not isinstance(doc, dict) or not isinstance(doc.get("cases"), list):
+        return yaml_text
+    for case_index, case in enumerate(doc["cases"]):
+        if not isinstance(case, dict):
+            continue
+        steps = []
+        for step_index, step in enumerate(case.get("steps") or []):
+            override = wanted.get((case_index, step_index))
+            if (
+                not isinstance(override, dict)
+                or not isinstance(step, dict)
+                or len(step) != 1
+            ):
+                steps.append(step)
+                continue
+            node = next(iter(step))
+            value = step[node]
+            chosen = override
+            if node in (_CACHE_NODES | _TIMEOUT_NODES | _CONTEXT_NODES | _MESSAGE_NODES):
+                # 开 = 写 true；关 = 把这个键删掉（界面上就是「不要这个 key」）
+                merged = dict(value.get("options") or {}) if isinstance(value, dict) else {}
+                if node in _CACHE_NODES:
+                    cache = chosen.get("cache")
+                    deep = chosen.get("deep_locate")
+                    if cache is True:
+                        merged["cacheable"] = True
+                    elif cache is False:
+                        merged.pop("cacheable", None)
+                    if deep is True:
+                        merged["deepLocate"] = True
+                    elif deep is False:
+                        merged.pop("deepLocate", None)
+                elif node in _TIMEOUT_NODES and "timeout_ms" in chosen:
+                    timeout = chosen["timeout_ms"]
+                    if timeout is None:
+                        merged.pop("timeoutMs", None)
+                    else:
+                        merged["timeoutMs"] = int(timeout)
+                if node in _CACHE_NODES and "effort" in chosen:
+                    effort = chosen["effort"]
+                    if effort in (None, "balance"):
+                        merged.pop("effort", None)
+                    else:
+                        merged["effort"] = effort
+                if node in _CONTEXT_NODES and "context" in chosen:
+                    context = (chosen["context"] or "").strip()
+                    if context:
+                        merged["context"] = context
+                    else:
+                        merged.pop("context", None)
+                base_value = value if isinstance(value, dict) else {"prompt": value}
+                base_value = {k: v for k, v in base_value.items() if k != "options"}
+                if merged:
+                    base_value["options"] = merged
+                if node in _MESSAGE_NODES and "message" in chosen:
+                    msg = (chosen["message"] or "").strip()
+                    if msg:
+                        base_value["message"] = msg
+                    else:
+                        base_value.pop("message", None)
+                value = base_value
+                step = {node: value}
+            steps.append(step)
+        case["steps"] = steps
+    return yaml.safe_dump(doc, allow_unicode=True, sort_keys=False)
+
+
+def truncate_steps(yaml_text: str, limit: int, case_index: int | None = None) -> str:
+    """截到「第 case_index 条的前 limit 步」为止。
+
+    执行器是**顺序**跑同一份文档里的 case 的（core 的 run-workflow-document 里
+    是 for...of + await），所以「跑到这里」的含义是：前面的 case 整条跑完，
+    目标 case 跑前 limit 步，后面的 case 不跑。
+    case_index 为空时退回老行为：每条 case 都只留前 limit 步。
+    """
+    try:
+        doc = yaml.safe_load(yaml_text)
+    except yaml.YAMLError:
+        return yaml_text
+    if not isinstance(doc, dict) or not isinstance(doc.get("cases"), list):
+        return yaml_text
+    cases = [case for case in doc["cases"] if isinstance(case, dict)]
+
+    if case_index is None:
+        changed = False
+        for case in cases:
+            steps = case.get("steps")
+            if isinstance(steps, list) and len(steps) > limit:
+                case["steps"] = steps[:limit]
+                changed = True
+        if not changed:
+            return yaml_text
+    else:
+        if not 0 <= case_index < len(cases):
+            raise ValueError("步骤所属的用例不存在，请刷新后重试")
+        target = cases[case_index]
+        steps = target.get("steps")
+        if isinstance(steps, list) and len(steps) > limit:
+            target["steps"] = steps[:limit]
+        doc["cases"] = cases[: case_index + 1]
+
+    return yaml.safe_dump(doc, allow_unicode=True, sort_keys=False)
+
+
+def verify_prefix(old_yaml: str, new_yaml: str) -> bool:
+    """追加模式下，新 YAML 必须原样保留旧用例的步骤前缀。
+
+    提示词是软约束，模型仍可能"顺手"改写前几步；这里是硬校验。
+    """
+    try:
+        old = yaml.safe_load(old_yaml or "") or {}
+        new = yaml.safe_load(new_yaml or "") or {}
+    except yaml.YAMLError:
+        return False
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return False
+    new_cases = {
+        case.get("name"): case
+        for case in (new.get("cases") or [])
+        if isinstance(case, dict)
+    }
+    old_cases = [case for case in (old.get("cases") or []) if isinstance(case, dict)]
+    if not old_cases:
+        return True
+    for case in old_cases:
+        current = new_cases.get(case.get("name"))
+        if current is None:
+            return False
+        old_steps = case.get("steps") or []
+        new_steps = current.get("steps") or []
+        if new_steps[: len(old_steps)] != old_steps:
+            return False
+    return True
 
 
 _ACTION_NODES = {
@@ -343,8 +575,11 @@ def build_messages(
     *,
     current_yaml: str | None,
     feature_name: str | None,
+    mode: str = "rewrite",
 ) -> list[dict]:
     system = SYSTEM_PROMPT
+    if mode == "append":
+        system += APPEND_RULE
     if feature_name:
         system += f"\n\n## 当前上下文\n\n这个用例属于功能「{feature_name}」。"
     if current_yaml:
@@ -361,7 +596,7 @@ async def call_model(
     messages: list[dict],
     *,
     timeout: float = 180.0,
-    max_tokens: int = 4096,
+    max_tokens: int = 8192,
 ) -> tuple[str, dict]:
     """调系统配置的模型。走 OpenAI 兼容的 chat/completions。"""
     base = (config.base_url or "").rstrip("/")
@@ -588,18 +823,96 @@ def _friendly_stream_error(exc: Exception) -> str:
     return "生成失败，请稍后重试"
 
 
+_YAML_ONLY = (
+    "你这次的回复里没有 YAML。请只输出当前完整的 YAML 文档：用 ```yaml 代码块包住，"
+    "包含全部 case 和步骤，不要任何解释文字。"
+)
+
+
+def _finalize(
+    reply: str, yaml_text: str | None, current_yaml: str | None, mode: str
+) -> tuple[str, str | None, bool, str | None, list[dict]]:
+    """追加模式下的硬校验 + 这一轮的差异与步骤清单。
+
+    模型可能无视「不许改已确认步骤」而重写前缀；这里直接丢弃这次结果，
+    而不是把跑不过的内容交给用户。
+    """
+    lock_violated = False
+    if (
+        yaml_text
+        and mode == "append"
+        and current_yaml
+        and not verify_prefix(current_yaml, yaml_text)
+    ):
+        lock_violated = True
+        yaml_text = None
+        reply = (
+            (reply or "").strip()
+            + "\n\n这次结果改动了已经验证过的步骤，已丢弃（右侧保持原样）。请再试一次。"
+        )
+    diff = (
+        diff_text(current_yaml, yaml_text, "当前", "新版本")
+        if current_yaml and yaml_text
+        else None
+    )
+    return reply, yaml_text, lock_violated, diff, steps_of(yaml_text) if yaml_text else []
+
+
+async def ensure_yaml(
+    config: ProjectModelConfig,
+    messages: list[dict],
+    reply: str,
+    yaml_text: str | None,
+    usage: dict,
+    *,
+    retry: bool,
+) -> tuple[str | None, dict]:
+    """模型这一轮只回了文字（常见于多 case 的后续对话），补问一次只要 YAML。
+
+    只在第一次没取到 YAML 时多花一次调用；补出来的内容仍要过校验，
+    不合格就维持原样，右侧保留旧内容而不是塞进一份坏文档。
+    """
+    # 只在「已有一份 YAML、用户在继续改」时补问：
+    # 第一次生成时模型回一句反问是正常的，硬要 YAML 会编出一份假的
+    if yaml_text is not None or not retry:
+        return yaml_text, usage
+    try:
+        retry_reply, retry_usage = await call_model(
+            config,
+            [
+                *messages,
+                {"role": "assistant", "content": reply},
+                {"role": "user", "content": _YAML_ONLY},
+            ],
+            timeout=180.0,
+        )
+    except (httpx.HTTPError, ValueError, RuntimeError) as exc:
+        log.warning("补要 YAML 失败：%s", exc)
+        return None, usage
+    candidate = extract_yaml(retry_reply)
+    if not candidate:
+        return None, usage
+    errors, _ = validate_yaml(candidate)
+    if errors:
+        return None, usage
+    return candidate, _merge_usage(usage, retry_usage)
+
+
 async def draft_stream(
     config: ProjectModelConfig,
     *,
     history: list[dict],
     current_yaml: str | None,
     feature_name: str | None,
+    mode: str = "rewrite",
 ) -> AsyncIterator[dict]:
     """流式生成：先发 delta，最后发一次 done（结构同 CaseDraftOut）。
 
     出错时发 error 事件而不是断开连接 —— 前端能把原因显示在气泡里。
     """
-    messages = build_messages(history, current_yaml=current_yaml, feature_name=feature_name)
+    messages = build_messages(
+        history, current_yaml=current_yaml, feature_name=feature_name, mode=mode
+    )
     parts: list[str] = []
     usage: dict = {}
     try:
@@ -618,6 +931,9 @@ async def draft_stream(
 
     reply = "".join(parts)
     yaml_text = extract_yaml(reply)
+    yaml_text, usage = await ensure_yaml(
+        config, messages, reply, yaml_text, usage, retry=bool(current_yaml)
+    )
     errors: list[str] = []
     if yaml_text:
         errors, _ = validate_yaml(yaml_text)
@@ -631,6 +947,10 @@ async def draft_stream(
             # 补缓存这一步失败不影响已生成的内容
             pass
 
+    reply, yaml_text, lock_violated, diff, steps = _finalize(
+        reply, yaml_text, current_yaml, mode
+    )
+
     yield {
         "event": "done",
         "data": {
@@ -639,6 +959,9 @@ async def draft_stream(
             "yaml_ok": bool(yaml_text) and not errors,
             "yaml_errors": errors,
             "usage": usage,
+            "diff": diff,
+            "lock_violated": lock_violated,
+            "steps": steps,
         },
     }
 
@@ -650,13 +973,17 @@ async def draft(
     history: list[dict],
     current_yaml: str | None,
     feature_name: str | None,
+    mode: str = "rewrite",
 ) -> DraftResult:
     messages = build_messages(
-        history, current_yaml=current_yaml, feature_name=feature_name
+        history, current_yaml=current_yaml, feature_name=feature_name, mode=mode
     )
     reply, usage = await call_model(config, messages)
 
     yaml_text = extract_yaml(reply)
+    yaml_text, usage = await ensure_yaml(
+        config, messages, reply, yaml_text, usage, retry=bool(current_yaml)
+    )
     errors: list[str] = []
     # 空字符串表示模型要清空，不是「给了个非法文档」，不该报校验错
     if yaml_text:
@@ -668,12 +995,18 @@ async def draft(
             config, messages, reply, yaml_text, usage
         )
 
+    reply, yaml_text, lock_violated, diff, steps = _finalize(
+        reply, yaml_text, current_yaml, mode
+    )
     return DraftResult(
         reply=build_reply(reply, yaml_text),
         yaml_text=yaml_text,
         yaml_ok=bool(yaml_text) and not errors,
         yaml_errors=errors,
         usage=usage,
+        diff=diff,
+        lock_violated=lock_violated,
+        steps=steps,
     )
 
 

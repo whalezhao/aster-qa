@@ -2,6 +2,7 @@ import { API_BASE, http, TOKEN_KEY } from './client';
 import type {
   AiFixResult,
   CaseHistoryItem,
+  CaseStep,
   FeatureStage,
   Priority,
   TestCase,
@@ -18,6 +19,48 @@ export interface CaseInput {
   is_active?: boolean;
   change_source?: 'manual' | 'ai_fix';
   change_note?: string | null;
+}
+
+export interface TrialStepOption {
+  case_index: number;
+  step: number;
+  cache?: boolean;
+  deep_locate?: boolean;
+  timeout_ms?: number | null;
+  effort?: 'fast' | 'balance' | 'deepThink';
+  context?: string;
+  message?: string;
+}
+
+export interface TrialRunResult {
+  run_id: string;
+  steps: number;
+  case_count: number;
+}
+
+/** 试跑到「第 case 条的 N 步」：不落用例、不进批次，只拿逐步结果。 */
+export async function trialRun(
+  featureId: string,
+  yamlContent: string,
+  stepLimit: number,
+  caseIndex: number | null,
+  stepOptions: TrialStepOption[] = [],
+  environmentName?: string | null,
+  cache = true,
+): Promise<TrialRunResult> {
+  const { data } = await http.post<TrialRunResult>(
+    `/api/features/${featureId}/ai/trial-run`,
+    {
+      yaml_content: yamlContent,
+      step_limit: stepLimit,
+      case_index: caseIndex,
+      environment_name: environmentName ?? null,
+      cache,
+      step_options: stepOptions,
+    },
+    { timeout: 60_000 },
+  );
+  return data;
 }
 
 export async function validateYaml(yaml_content: string): Promise<ValidateResult> {
@@ -113,6 +156,9 @@ export interface CaseDraftResult {
   yaml_ok: boolean;
   yaml_errors: string[];
   usage: Record<string, number>;
+  diff: string | null;
+  lock_violated: boolean;
+  steps: CaseStep[];
 }
 
 /**
@@ -123,10 +169,11 @@ export async function draftCaseWithAi(
   featureId: string,
   messages: ChatMessage[],
   currentYaml?: string | null,
+  mode: 'rewrite' | 'append' = 'rewrite',
 ): Promise<CaseDraftResult> {
   const { data } = await http.post<CaseDraftResult>(
     `/api/features/${featureId}/ai/case-draft`,
-    { messages, current_yaml: currentYaml ?? null },
+    { messages, current_yaml: currentYaml ?? null, mode },
     // 模型生成一份用例要几秒到几十秒，默认超时不够
     { timeout: 180_000 },
   );
@@ -149,6 +196,7 @@ export async function draftCaseWithAiStream(
   messages: ChatMessage[],
   currentYaml: string | null,
   handlers: DraftStreamHandlers,
+  mode: 'rewrite' | 'append' = 'rewrite',
 ): Promise<void> {
   const token = localStorage.getItem(TOKEN_KEY);
   const response = await fetch(`${API_BASE}/api/features/${featureId}/ai/case-draft/stream`, {
@@ -157,7 +205,7 @@ export async function draftCaseWithAiStream(
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ messages, current_yaml: currentYaml }),
+    body: JSON.stringify({ messages, current_yaml: currentYaml, mode }),
   });
 
   if (!response.ok || !response.body) {

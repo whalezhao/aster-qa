@@ -93,6 +93,21 @@ export const cases: Record<string, string> = {
   创建用例: 'Create test case',
   '创建后可以真跑一遍验证效果。AI 靠视觉定位元素，描述越具体越稳 —— 写「页面中央蓝色的登录按钮」，别写「登录按钮」。':
     'You can run it once to verify the result. AI locates elements visually, so the more specific the description, the steadier the run — write "the blue sign-in button in the center of the page" rather than "the sign-in button".',
+  '步骤 / YAML 预览': 'Steps / YAML preview',
+  YAML: 'YAML',
+  '用例 {n}：{name}': 'Case {n}: {name}',
+  试跑到这里: 'Run up to here',
+  缓存: 'Cache',
+  深度定位: 'Deep locate',
+  '超时 ms（默认 15000）': 'Timeout ms (default 15000)',
+  '失败文案（可选）': 'Failure message (optional)',
+  '单步上下文 / 额外约束（可选）': 'Step context / extra constraints (optional)',
+  本轮模式: 'Turn mode',
+  改写: 'Rewrite',
+  '续写（锁定前缀）': 'Append (lock prefix)',
+  本轮变更: 'Changes in this turn',
+  '模型改动了已经验证过的步骤，本轮结果已丢弃，右侧保持原样':
+    'The model changed steps that were already verified; this turn was discarded and the right side is unchanged',
 
   // ---- 批次报告 ----
   '已签章（仅当前执行记录）': 'Signed off (current run only)',

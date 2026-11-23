@@ -118,10 +118,20 @@ export interface TestCase {
   version_no?: number | null;
 }
 
+export interface CaseStep {
+  case: string;
+  case_index: number;
+  index: number;
+  kind: string;
+  text: string;
+}
+
 export interface ValidateResult {
   ok: boolean;
   errors: string[];
   case_count: number;
+  /** 步骤清单，供 AI 面板按步骤/YAML 对照 */
+  steps: CaseStep[];
 }
 
 export interface CaseHistoryItem {
@@ -273,9 +283,17 @@ export interface RunProgress {
   percent: number;
 }
 
+export interface RunStepResult {
+  case_index: number;
+  step: number;
+  status: string;
+  reason?: string;
+}
+
 export interface RunDetail extends Run {
   work_dir: string;
   report_available: boolean;
+  step_results: RunStepResult[];
   ai_calls: number;
   ai_total_tokens: number;
   ai_cost_ms: number;

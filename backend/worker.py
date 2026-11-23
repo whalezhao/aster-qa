@@ -106,6 +106,7 @@ def _build_env(
     project_overrides: dict[str, str] | None = None,
     secret_env: dict[str, str] | None = None,
     project_id: uuid.UUID | None = None,
+    cache: bool = True,
 ) -> dict[str, str]:
     """组装子进程环境。
 
@@ -133,8 +134,12 @@ def _build_env(
     # 每个 run 一个独立的 MIDSCENE_RUN_DIR —— log 因此天然只含本次执行，
     # token 统计不需要记 offset、也不用按时间窗猜归属
     env["MIDSCENE_RUN_DIR"] = staging.runner_relative_run_dir(staged)
-    # 缓存目录不能跟着 MIDSCENE_RUN_DIR 走，否则每次执行都是冷缓存
-    env["QA_CACHE_DIR"] = str(staging.shared_cache_dir(runner_root, project_id))
+    # 缓存目录不能跟着 MIDSCENE_RUN_DIR 走，否则每次执行都是冷缓存。
+    # 调试试跑可以按次关掉：读不到就既不读旧结果，也不会写坏共享缓存。
+    if cache:
+        env["QA_CACHE_DIR"] = str(staging.shared_cache_dir(runner_root, project_id))
+    else:
+        env.pop("QA_CACHE_DIR", None)
     env.setdefault("HEADLESS", "true")
 
     # 复刻参考实现的做法：每次执行换一个上游会话头，避免所有 run 挤在同一个会话里
@@ -196,12 +201,16 @@ async def claim_next(db) -> Run | None:
     return run
 
 
-async def collect_cases(db, run: Run) -> list[tuple[uuid.UUID, str, str]]:
+async def collect_cases(db, run: Run) -> list[tuple[uuid.UUID | str, str, str]]:
     """这个 run 实际要执行哪些用例。
 
     task_cases 是任务创建时的快照（权威），再按 run 所属项目过滤 —— 跨项目回归会拆成
     多个 run，每个 run 只跑自己项目的用例，因为 YAML 里的 gotoUrl/BASE_URL 是项目级的。
     """
+    if run.is_debug:
+        # 调试试跑：YAML 直接挂在 run 上，没有任务可查。
+        # 文件名故意不用 UUID —— 反查不到用例 id，结果落 NULL；随机 UUID 会撞外键。
+        return [("debug", "", run.debug_yaml)] if run.debug_yaml else []
     if run.task_id is None:
         return []
     stmt = (
@@ -443,11 +452,16 @@ async def process(run_id: uuid.UUID) -> None:
         if not cases:
             await _fail(db, run, "任务下没有可执行的用例")
             return
-        # 报告里的用例名读脚本内的 name，改名不会自动同步过去，落盘前在这里对齐
-        cases = [
-            (case_id, staging.with_case_name(yaml_text, case_name))
-            for case_id, case_name, yaml_text in cases
-        ]
+        # 报告里的用例名读脚本内的 name，改名不会自动同步过去，落盘前在这里对齐。
+        # 试跑没有 TestCase 可对齐，保持 YAML 里的名字。
+        cases = (
+            [(case_id, yaml_text) for case_id, _name, yaml_text in cases]
+            if run.is_debug
+            else [
+                (case_id, staging.with_case_name(yaml_text, case_name))
+                for case_id, case_name, yaml_text in cases
+            ]
+        )
 
         project = await db.get(Project, run.project_id) if run.project_id else None
         task = await db.get(TestTask, run.task_id) if run.task_id else None
@@ -546,6 +560,7 @@ async def process(run_id: uuid.UUID) -> None:
             },
             variables={**plain_vars, **{key: "" for key in secret_vars}},
         )
+        debug_cache = run.debug_cache if run.is_debug else True
         run.status = "running"
         await db.commit()
 
@@ -579,7 +594,13 @@ async def process(run_id: uuid.UUID) -> None:
         runner_root=runner_root,
         staged=staged,
         env=_build_env(
-            runner_env, staged, runner_root, overrides, secret_vars, project_id=run.project_id
+            runner_env,
+            staged,
+            runner_root,
+            overrides,
+            secret_vars,
+            project_id=run.project_id,
+            cache=debug_cache,
         ),
         timeout_ms=timeout_ms,
         poll_cancel=poll_cancel,

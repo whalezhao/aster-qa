@@ -1,7 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Alert, App, Button, Col, Form, Input, Row, Space, Tooltip, Typography, theme } from 'antd';
+import {
+  Alert,
+  App,
+  Button,
+  Col,
+  Collapse,
+  Form,
+  Input,
+  Row,
+  Segmented,
+  Space,
+  Tooltip,
+  Typography,
+  theme,
+} from 'antd';
 import { ProCard } from '@ant-design/pro-components';
 import { SaveOutlined } from '@ant-design/icons';
 import { Bubble, Prompts, Sender } from '@ant-design/x';
@@ -14,21 +28,28 @@ import {
   getFeatureAiDraft,
   saveCaseAiDraft,
   saveFeatureAiDraft,
+  trialRun,
   updateCase,
   validateYaml,
   type CaseAiDraft,
   type CaseDraftResult,
   type ChatMessage,
+  type TrialStepOption,
 } from '../api/cases';
 import { getFeature } from '../api/features';
+import { getRun } from '../api/runs';
 import { apiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import ModelConfigNotice from '../components/ModelConfigNotice';
 import EnvVariableHint from '../components/EnvVariableHint';
 import AiMascot from '../components/AiMascot';
 import UserAvatar from '../components/UserAvatar';
+import StepYamlPanel from '../components/StepYamlPanel';
+import UnifiedDiff from '../components/UnifiedDiff';
+import { previewStepOptions, type StepOption } from '../lib/caseYaml';
 import { clearDraft, loadDraft, saveDraft } from '../lib/draft';
 import { t } from '../i18n';
+import type { CaseStep, RunDetail } from '../api/types';
 
 /** 空状态给的起手示例 —— 比一个光标干等着好，顺便示范「把测试数据一起给它」。 */
 const EXAMPLES = [
@@ -74,6 +95,13 @@ export default function CaseDraft() {
   const [messages, setMessages] = useState<ChatMessage[]>(initial.messages);
   const [yaml, setYaml] = useState<string | null>(initial.yaml);
   const [input, setInput] = useState(initial.input);
+  const [modelSteps, setModelSteps] = useState<CaseStep[] | null>(null);
+  const [stepOpts, setStepOpts] = useState<Record<string, StepOption>>({});
+  const [appendMode, setAppendMode] = useState(false);
+  const [diff, setDiff] = useState<string | null>(null);
+  const [trial, setTrial] = useState<RunDetail | null>(null);
+  const [trialBusy, setTrialBusy] = useState(false);
+  const trialTimer = useRef<number | null>(null);
 
   // 任何一处变化都先落本机，数据库请求失败时至少不丢
   useEffect(() => {
@@ -128,6 +156,11 @@ export default function CaseDraft() {
     queryFn: () => validateYaml(yaml as string),
     enabled: Boolean(yaml),
   });
+  const steps = modelSteps ?? validation?.steps ?? [];
+  const previewYaml = useMemo(
+    () => (yaml ? previewStepOptions(yaml, steps, stepOpts) : ''),
+    [yaml, steps, stepOpts],
+  );
 
   useEffect(() => {
     if (yaml) form.setFieldsValue({ name: guessCaseName(yaml) });
@@ -161,12 +194,21 @@ export default function CaseDraft() {
   }, [draftHydrated, busy, cid, fidParam, messages, yaml, input]);
 
   function applyDraftYaml(res: CaseDraftResult) {
+    if (res.lock_violated) {
+      message.error(t('模型改动了已经验证过的步骤，本轮结果已丢弃，右侧保持原样'));
+    }
     // yaml 的三态：null=这轮没给 YAML，右侧别动；""=模型明确要清空；其他=替换
     if (res.yaml === '') {
       setYaml(null);
+      setModelSteps([]);
+      setStepOpts({});
+      setDiff(null);
       message.info(t('已按模型的要求清空右侧 YAML'));
     } else if (res.yaml) {
       setYaml(res.yaml);
+      setModelSteps(res.steps ?? []);
+      setStepOpts({});
+      setDiff(res.diff ?? null);
       if (!res.yaml_ok && res.yaml_errors.length) {
         message.warning(t('模型给的 YAML 没通过校验，请让它修正'));
       }
@@ -180,8 +222,8 @@ export default function CaseDraft() {
       if (editing) await saveCaseAiDraft(cid as string, state);
       else await saveFeatureAiDraft(fid, state);
       return editing
-        ? updateCase(cid as string, { name: v.name, yaml_content: yaml as string })
-        : createCase(fid, { name: v.name, yaml_content: yaml as string });
+        ? updateCase(cid as string, { name: v.name, yaml_content: previewYaml })
+        : createCase(fid, { name: v.name, yaml_content: previewYaml });
     },
     onSuccess: (saved) => {
       // 本机缓存可以清；数据库里的对话保留，下次打开「AI 修改用例」还能看到
@@ -210,28 +252,102 @@ export default function CaseDraft() {
       });
 
     try {
-      await draftCaseWithAiStream(fid, history, yaml, {
-        onDelta: (chunk) => {
-          streamed += chunk;
-          replaceLast(streamed);
+      const mode = appendMode ? 'append' : 'rewrite';
+      if (mode === 'rewrite') {
+        setTrial(null);
+      }
+      await draftCaseWithAiStream(
+        fid,
+        history,
+        previewYaml || null,
+        {
+          onDelta: (chunk) => {
+            streamed += chunk;
+            replaceLast(streamed);
+          },
+          onDone: (res) => {
+            replaceLast(res.reply);
+            applyDraftYaml(res);
+          },
+          // 模型额度用尽、配置缺失这类错误要说清楚，混在气泡里比弹窗好找
+          onError: (msg) => replaceLast(`⚠️ ${msg}`),
         },
-        onDone: (res) => {
-          replaceLast(res.reply);
-          applyDraftYaml(res);
-        },
-        // 模型额度用尽、配置缺失这类错误要说清楚，混在气泡里比弹窗好找
-        onError: (msg) => replaceLast(`⚠️ ${msg}`),
-      });
+        mode,
+      );
     } catch (e) {
       replaceLast(`⚠️ ${apiError(e)}`);
     } finally {
       setBusy(false);
     }
   }
-  const canSave = Boolean(yaml) && (validation?.ok ?? false) && !save.isPending;
-  const ready = !editing || Boolean(existing);
 
-  const yamlLines = useMemo(() => (yaml ?? '').split('\n'), [yaml]);
+  const stopTrial = () => {
+    if (trialTimer.current) window.clearInterval(trialTimer.current);
+    trialTimer.current = null;
+    setTrialBusy(false);
+  };
+  useEffect(() => () => stopTrial(), []);
+
+  async function startTrial(caseIndex: number, stepLimit: number) {
+    if (!previewYaml || trialBusy) return;
+    const stepOptions: TrialStepOption[] = Object.entries(stepOpts).map(
+      ([key, opt]) => {
+        const [ci, si] = key.split(':').map(Number);
+        return {
+          case_index: ci,
+          step: si,
+          cache: opt.cache,
+          deep_locate: opt.deep,
+          timeout_ms: opt.timeoutMs,
+          effort: opt.effort,
+          context: opt.context,
+          message: opt.message,
+        };
+      },
+    );
+    setTrialBusy(true);
+    setTrial(null);
+    try {
+      const result = await trialRun(
+        fid,
+        previewYaml,
+        stepLimit,
+        caseIndex,
+        stepOptions,
+      );
+      const poll = async (): Promise<boolean> => {
+        try {
+          const run = await getRun(result.run_id);
+          setTrial(run);
+          if (
+            ['succeeded', 'failed', 'timed_out', 'cancelled'].includes(
+              run.status,
+            )
+          ) {
+            stopTrial();
+            return true;
+          }
+          return false;
+        } catch (e) {
+          message.error(apiError(e));
+          stopTrial();
+          return true;
+        }
+      };
+      if (!(await poll())) {
+        trialTimer.current = window.setInterval(() => {
+          void poll();
+        }, 1500);
+      }
+    } catch (e) {
+      message.error(apiError(e));
+      setTrialBusy(false);
+    }
+  }
+
+  const canSave = Boolean(previewYaml) && (validation?.ok ?? false) && !save.isPending;
+  const ready = !editing || Boolean(existing);
+  const yamlLineCount = previewYaml ? previewYaml.split('\n').length : 0;
 
   return (
     <div style={{ padding: 20 }}>
@@ -257,7 +373,7 @@ export default function CaseDraft() {
       >
         <Row gutter={12}>
           {/* 左：对话 —— Ant Design X 的 Bubble / Prompts / Sender */}
-          <Col xs={24} lg={13}>
+          <Col xs={24} lg={10}>
             <div
               style={{
                 height: 520,
@@ -345,6 +461,22 @@ export default function CaseDraft() {
                 />
               )}
 
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {t('本轮模式')}
+                </Typography.Text>
+                <Segmented
+                  size="small"
+                  value={appendMode ? 'append' : 'rewrite'}
+                  onChange={(value) => setAppendMode(value === 'append')}
+                  disabled={!previewYaml || busy}
+                  options={[
+                    { label: t('改写'), value: 'rewrite' },
+                    { label: t('续写（锁定前缀）'), value: 'append' },
+                  ]}
+                />
+              </div>
+
               <Sender
                 value={input}
                 onChange={setInput}
@@ -369,17 +501,14 @@ export default function CaseDraft() {
             </div>
           </Col>
 
-          {/* 右：YAML —— 用主题色而不是写死的深色，浅色模式下不再是一块突兀的黑 */}
-          <Col xs={24} lg={11}>
+          {/* 右：步骤 / YAML 对照 —— 用主题色而不是写死的深色 */}
+          <Col xs={24} lg={14}>
             <div
               style={{
-                height: 520,
+                minHeight: 520,
                 display: 'flex',
                 flexDirection: 'column',
-                background: token.colorFillQuaternary,
-                border: `1px solid ${token.colorBorderSecondary}`,
-                borderRadius: 10,
-                overflow: 'hidden',
+                gap: 8,
               }}
             >
               <div
@@ -388,74 +517,89 @@ export default function CaseDraft() {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '8px 12px',
-                  borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                  border: `1px solid ${token.colorBorderSecondary}`,
+                  borderRadius: 10,
                   fontSize: 12,
                   color: token.colorTextSecondary,
+                  background: token.colorFillQuaternary,
                 }}
               >
-                <span>{t('YAML 预览')}</span>
+                <span>{t('步骤 / YAML 预览')}</span>
                 <span>
-                  {yaml ? t('{n} 行', { n: yamlLines.length }) : t('还没有内容')}
-                  {validation?.ok ? t(' · 解析出 {n} 个用例', { n: validation.case_count }) : ''}
+                  {previewYaml ? t('{n} 行', { n: yamlLineCount }) : t('还没有内容')}
+                  {validation?.ok
+                    ? t(' · 解析出 {n} 个用例', { n: validation.case_count })
+                    : ''}
                 </span>
               </div>
 
-              <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px' }}>
-                {yaml ? (
-                  <pre
-                    style={{
-                      margin: 0,
-                      color: token.colorText,
-                      fontSize: 13,
-                      lineHeight: 1.7,
-                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                    }}
-                  >
-                    {yamlLines.map((line, i) => (
-                      <div key={i}>
-                        <span
-                          style={{
-                            color: token.colorTextQuaternary,
-                            userSelect: 'none',
-                            display: 'inline-block',
-                            width: 30,
-                            textAlign: 'right',
-                            marginRight: 12,
-                          }}
-                        >
-                          {i + 1}
-                        </span>
-                        {line}
-                      </div>
-                    ))}
-                  </pre>
-                ) : (
-                  <div
-                    style={{
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 10,
-                    }}
-                  >
-                    <AiMascot size={48} state={busy ? 'thinking' : 'idle'} />
-                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {t('生成的 YAML 会出现在这里')}
-                    </Typography.Text>
-                  </div>
-                )}
-              </div>
+              {previewYaml ? (
+                <StepYamlPanel
+                  yaml={previewYaml}
+                  steps={steps}
+                  options={stepOpts}
+                  onOptionChange={(key, option) =>
+                    setStepOpts((prev) => ({ ...prev, [key]: option }))
+                  }
+                  trial={trial}
+                  trialBusy={trialBusy}
+                  onTrial={(caseIndex, stepLimit) =>
+                    startTrial(caseIndex, stepLimit)
+                  }
+                />
+              ) : (
+                <div
+                  style={{
+                    minHeight: 460,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                    border: `1px dashed ${token.colorBorderSecondary}`,
+                    borderRadius: 10,
+                  }}
+                >
+                  <AiMascot size={48} state={busy ? 'thinking' : 'idle'} />
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {t('生成的 YAML 会出现在这里')}
+                  </Typography.Text>
+                </div>
+              )}
             </div>
+
+            {diff && (
+              <Collapse
+                size="small"
+                style={{ marginTop: 8 }}
+                items={[
+                  {
+                    key: 'diff',
+                    label: t('本轮变更'),
+                    children: <UnifiedDiff diff={diff} />,
+                  },
+                ]}
+              />
+            )}
 
             <EnvVariableHint projectId={feature?.project_id} style={{ marginTop: 8 }} />
 
-            {yaml && (
+            {previewYaml && (
               <>
                 <div style={{ marginTop: 8, textAlign: 'right' }}>
                   <Tooltip title={t('只清空右侧 YAML，聊天记录保留')}>
-                    <Button type="link" size="small" danger onClick={() => setYaml(null)}>
+                    <Button
+                      type="link"
+                      size="small"
+                      danger
+                      onClick={() => {
+                        setYaml(null);
+                        setModelSteps([]);
+                        setStepOpts({});
+                        setDiff(null);
+                        setTrial(null);
+                      }}
+                    >
                       {t('清空 YAML')}
                     </Button>
                   </Tooltip>

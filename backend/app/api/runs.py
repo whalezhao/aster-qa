@@ -120,7 +120,7 @@ async def list_runs(
         if not scope:
             return RunListOut(items=[], total=0)
 
-    conditions = [Run.team_id.in_(scope)]
+    conditions = [Run.is_debug.is_(False), Run.team_id.in_(scope)]
     if project_id is not None:
         conditions.append(Run.project_id == project_id)
     if task_id is not None:
@@ -167,6 +167,12 @@ async def get_run(run_id: uuid.UUID, user: CurrentUser, db: DbSession) -> RunDet
     resolved_report = _resolve_data_path(run.report_html_path)
     payload.report_available = bool(resolved_report and resolved_report.exists())
     payload.progress = progress
+    if run.is_debug and run.status in {"succeeded", "failed", "timed_out", "cancelled"}:
+        # 试跑的意义就是「第几步错了」：逐步结果只在产物文件里，收尾后读一次
+        result_dir = _resolve_data_path(run.result_dir)
+        payload.step_results = (
+            parsers.read_step_results(result_dir) if result_dir else []
+        )
     return payload
 
 

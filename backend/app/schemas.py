@@ -384,6 +384,8 @@ class CaseDraftIn(In):
     messages: list[ChatMessage] = Field(min_length=1)
     # 当前正在迭代的 YAML，模型据此在原有基础上改
     current_yaml: str | None = None
+    # append：只允许在已验证的步骤后追加；平台会校验前缀，被改写就丢弃这次结果
+    mode: Literal["rewrite", "append"] = "rewrite"
 
 
 class CaseDraftOut(BaseModel):
@@ -393,6 +395,9 @@ class CaseDraftOut(BaseModel):
     yaml_ok: bool = False
     yaml_errors: list[str] = []
     usage: dict = {}
+    diff: str | None = None
+    lock_violated: bool = False
+    steps: list[dict] = []
 
 
 class AiDraftIn(In):
@@ -409,10 +414,44 @@ class AiDraftOut(BaseModel):
     input: str = ""
 
 
+class TrialStepOption(In):
+    case_index: int = Field(ge=0)
+    step: int = Field(ge=0)
+    # 只对 aiAct 生效
+    cache: bool | None = None
+    deep_locate: bool | None = None
+    # 只对 aiWaitFor 生效：None = 不动
+    timeout_ms: int | None = Field(default=None, ge=0, le=600_000)
+    # 只对 aiAct 生效：balance 等于不写这个键
+    effort: str | None = Field(default=None, pattern="^(fast|balance|deepThink)$")
+    # 单步上下文（aiAct / aiAssert / aiWaitFor）：空串 = 删掉
+    context: str | None = None
+    # 只对 aiAssert 生效：失败文案，写在步骤级而不是 options 里
+    message: str | None = None
+
+
+class TrialRunIn(In):
+    yaml_content: str
+    # 目标 case 在文档里的位置 + 只跑到它的第 N 步
+    step_limit: int = Field(ge=1, le=60)
+    case_index: int | None = Field(default=None, ge=0)
+    environment_name: str | None = None
+    # 跨 run 的 AI 缓存默认开；单步可在 step_options 里覆盖
+    cache: bool = True
+    step_options: list[TrialStepOption] = []
+
+
+class TrialRunOut(BaseModel):
+    run_id: uuid.UUID
+    steps: int
+    case_count: int
+
+
 class YamlValidateOut(BaseModel):
     ok: bool
     errors: list[str] = []
     case_count: int = 0
+    steps: list[dict] = []
 
 
 # ------------------------------------------------------------------- 任务 / 回归
@@ -578,6 +617,8 @@ class RunDetailOut(RunOut):
 
     work_dir: str | None = None
     report_available: bool = False
+    # 调试试跑的逐步结果（含通过）：[{case_index, step, status, reason?}]
+    step_results: list[dict] = []
     ai_calls: int = 0
     ai_total_tokens: int = 0
     ai_cost_ms: int = 0
