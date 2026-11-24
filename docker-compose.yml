@@ -72,6 +72,7 @@ services:
       args:
         DEBIAN_MIRROR: ${DEBIAN_MIRROR:-}
         PLAYWRIGHT_DOWNLOAD_HOST: ${PLAYWRIGHT_DOWNLOAD_HOST:-}
+        UV_INDEX_URL: ${UV_INDEX_URL:-}
     restart: unless-stopped
     # Docker Desktop（Mac/Windows）里容器默认出不了宿主机网络，
     # 模型/被测应用在宿主机或局域网时，把 .env 的 WORKER_NETWORK 设成 host，

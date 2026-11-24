@@ -4,7 +4,9 @@
 
 FROM python:3.13-slim-bookworm
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+# ghcr.io 在部分内网/国内直连不通，装 PyPI 上的 uv（走构建时镜像源）
+ARG UV_INDEX_URL=
+RUN if [ -n "$UV_INDEX_URL" ]; then pip install --no-cache-dir uv -i "$UV_INDEX_URL"; else pip install --no-cache-dir uv; fi
 
 WORKDIR /app
 
@@ -13,7 +15,6 @@ ENV UV_COMPILE_BYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 # pypi.org 在部分内网不通，构建时传国内镜像：--build-arg UV_INDEX_URL=...
-ARG UV_INDEX_URL=
 
 # 依赖层单独缓存：只改代码时不用重装依赖
 COPY pyproject.toml uv.lock ./

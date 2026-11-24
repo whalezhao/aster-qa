@@ -11,6 +11,7 @@ FROM python:3.13-slim-bookworm
 #   --build-arg PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
 ARG DEBIAN_MIRROR=
 ARG PLAYWRIGHT_DOWNLOAD_HOST=
+ARG UV_INDEX_URL=
 ENV PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST}
 
 # Node 20（midscene 执行器需要）
@@ -27,7 +28,8 @@ RUN if [ -n "$DEBIAN_MIRROR" ]; then \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+# ghcr.io 在部分内网/国内直连不通，装 PyPI 上的 uv（走构建时镜像源）
+RUN if [ -n "$UV_INDEX_URL" ]; then pip install --no-cache-dir uv -i "$UV_INDEX_URL"; else pip install --no-cache-dir uv; fi
 
 WORKDIR /app
 
@@ -50,7 +52,7 @@ COPY . .
 COPY runner/.env.example runner/.env
 
 WORKDIR /app
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv if [ -n "$UV_INDEX_URL" ]; then export UV_INDEX_URL; fi; uv sync --frozen --no-dev
 ENV PATH="/app/.venv/bin:$PATH"
 
 # 让容器的 init 进程回收 midscene 派生的浏览器子进程
