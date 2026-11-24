@@ -208,6 +208,8 @@ class DraftResult:
     diff: str | None = None
     lock_violated: bool = False
     steps: list[dict] | None = None
+    description: str | None = None
+    test_cases: list[dict] | None = None
 
 
 def extract_yaml(reply: str) -> str | None:
@@ -302,6 +304,100 @@ def steps_of(yaml_text: str) -> list[dict]:
                 }
             )
     return items
+
+
+def _test_row(step: dict, *, phase: str | None = None) -> dict | None:
+    """把一步 YAML 翻译成交付表格的一行。"""
+    if not isinstance(step, dict) or not step:
+        return None
+    node = next(iter(step))
+    value = step[node]
+    text = value.get("prompt") if isinstance(value, dict) else value
+    options = value.get("options") if isinstance(value, dict) else None
+    message = value.get("message") if isinstance(value, dict) else None
+    text = str(text or "").strip()
+
+    if node == "gotoUrl":
+        action, expected = f"打开页面 {text}".strip(), "页面加载完成"
+    elif node == "sleep":
+        action, expected = f"等待 {text} ms".strip(), None
+    elif node == "evaluateJavaScript":
+        action, expected = "执行脚本", None
+    elif node == "aiAssert":
+        action, expected = "校验当前页面", text or None
+    elif node == "aiWaitFor":
+        action, expected = "等待页面状态", text or None
+    else:
+        action, expected = text or node, None
+
+    notes: list[str] = []
+    if isinstance(options, dict):
+        if context := str(options.get("context") or "").strip():
+            notes.append(context)
+        if timeout := options.get("timeoutMs"):
+            notes.append(f"超时 {timeout} ms")
+    if message:
+        notes.append(f"失败提示：{message}")
+    if node == "evaluateJavaScript" and text:
+        notes.insert(0, text[:200])
+
+    return {
+        "kind": node,
+        "phase": phase
+        or ("assert" if node == "aiAssert" else "wait" if node == "aiWaitFor" else "action"),
+        "action": action,
+        "expected": expected,
+        "note": "；".join(notes) or None,
+    }
+
+
+def test_cases_of(yaml_text: str) -> list[dict]:
+    """把 YAML 展开成交付用的测试用例表。
+
+    一个 YAML 的每个 case 是一条测试用例；beforeEach/beforeAll 作为每条用例的前置，
+    afterEach/afterAll 作为清理。每条用例的 rows 按执行顺序排列。
+    """
+    try:
+        doc = yaml.safe_load(yaml_text or "")
+    except yaml.YAMLError:
+        return []
+    if not isinstance(doc, dict):
+        return []
+
+    def steps_of_key(key: str) -> list[dict]:
+        value = doc.get(key)
+        return [step for step in value if isinstance(step, dict)] if isinstance(value, list) else []
+
+    before = [
+        row
+        for step in [*steps_of_key("beforeAll"), *steps_of_key("beforeEach")]
+        if (row := _test_row(step, phase="precondition"))
+    ]
+    after = [
+        row
+        for step in [*steps_of_key("afterEach"), *steps_of_key("afterAll")]
+        if (row := _test_row(step, phase="cleanup"))
+    ]
+
+    cases: list[dict] = []
+    for index, case in enumerate(doc.get("cases") or []):
+        if not isinstance(case, dict):
+            continue
+        rows = [dict(row) for row in before]
+        case_steps = case.get("steps")
+        if isinstance(case_steps, list):
+            for step in case_steps:
+                if step_row := _test_row(step):
+                    rows.append(step_row)
+        rows.extend(dict(row) for row in after)
+        cases.append(
+            {
+                "name": str(case.get("name") or "未命名用例").strip(),
+                "index": index,
+                "rows": rows,
+            }
+        )
+    return cases
 
 
 # 执行器的节点各自只接受自己的 options：缓存/深度定位是 aiAct 的，
@@ -554,6 +650,41 @@ def summarize_yaml(yaml_text: str) -> str:
             name, _actions, asserts, count, cached, _waits = summarize_case(case or {})
             extra = f"，{cached} 步缓存" if cached else ""
             lines.append(f"- {name}：{count} 步 · {len(asserts)} 条断言{extra}")
+    return "\n".join(lines)
+
+
+def describe_yaml(yaml_text: str) -> str:
+    """给 TestCase.description 的交付摘要（纯文本）。
+
+    一个 YAML 可能包含多条 case；交付时要在用例列表里一眼看出覆盖了什么。
+    只汇总名称、步数和断言数，不复述步骤文字 —— 步骤里可能有测试口令等敏感数据。
+    """
+    try:
+        doc = yaml.safe_load(yaml_text or "")
+    except yaml.YAMLError:
+        return ""
+    if not isinstance(doc, dict):
+        return ""
+    cases = [case for case in (doc.get("cases") or []) if isinstance(case, dict)]
+    if not cases:
+        return ""
+
+    def case_info(case: dict) -> tuple[str, int, int, int]:
+        steps = [step for step in (case.get("steps") or []) if isinstance(step, dict)]
+        actions = sum(1 for step in steps for node in _ACTION_NODES if node in step)
+        asserts = sum(1 for step in steps for node in _ASSERT_NODES if node in step)
+        name = str(case.get("name") or "未命名用例").strip()
+        return name, len(steps), actions, asserts
+
+    if len(cases) == 1:
+        name, count, actions, asserts = case_info(cases[0])
+        return f"用例「{name}」，共 {count} 步：{actions} 个操作，{asserts} 条断言。"
+
+    total_steps = sum(case_info(case)[1] for case in cases)
+    lines = [f"本 YAML 包含 {len(cases)} 条用例，共 {total_steps} 步："]
+    for index, case in enumerate(cases, 1):
+        name, count, _actions, asserts = case_info(case)
+        lines.append(f"{index}. {name}（{count} 步，{asserts} 条断言）")
     return "\n".join(lines)
 
 
@@ -962,6 +1093,8 @@ async def draft_stream(
             "diff": diff,
             "lock_violated": lock_violated,
             "steps": steps,
+            "description": describe_yaml(yaml_text) if yaml_text is not None else None,
+            "test_cases": test_cases_of(yaml_text) if yaml_text else [],
         },
     }
 
@@ -1007,6 +1140,8 @@ async def draft(
         diff=diff,
         lock_violated=lock_violated,
         steps=steps,
+        description=describe_yaml(yaml_text) if yaml_text is not None else None,
+        test_cases=test_cases_of(yaml_text) if yaml_text else [],
     )
 
 

@@ -173,6 +173,9 @@ async def get_run(run_id: uuid.UUID, user: CurrentUser, db: DbSession) -> RunDet
         payload.step_results = (
             parsers.read_step_results(result_dir) if result_dir else []
         )
+        if result_dir and not payload.step_results and not payload.error_message:
+            # 卡在 beforeEach（典型是页面打不开）时没有 steps 结果，把原因带出来
+            payload.error_message = parsers.read_run_error(result_dir)
     return payload
 
 

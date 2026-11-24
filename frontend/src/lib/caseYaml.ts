@@ -2,6 +2,29 @@ import type { CaseStep } from '../api/types';
 
 export type Step = CaseStep;
 
+/** 步骤节点名 → 中文短标签；目录和步骤卡片共用。 */
+export const STEP_KIND_LABELS: Record<string, string> = {
+  aiAct: '操作',
+  aiTap: '点击',
+  aiInput: '输入',
+  aiAssert: '断言',
+  aiWaitFor: '等待',
+  aiQuery: '提取',
+  aiLocate: '定位',
+  aiScroll: '滚动',
+  aiKeyboardPress: '按键',
+  aiLongPress: '长按',
+  aiPinch: '缩放',
+  aiDragAndDrop: '拖拽',
+  evaluateJavaScript: '脚本',
+  sleep: '等待',
+  gotoUrl: '打开',
+};
+
+export function stepKindLabel(kind: string): string {
+  return STEP_KIND_LABELS[kind] ?? kind;
+}
+
 export type StepOption = {
   cache?: boolean;
   deep?: boolean;

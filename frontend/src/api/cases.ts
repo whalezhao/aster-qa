@@ -6,6 +6,7 @@ import type {
   FeatureStage,
   Priority,
   TestCase,
+  TestCaseDoc,
   ValidateResult,
 } from './types';
 
@@ -159,6 +160,24 @@ export interface CaseDraftResult {
   diff: string | null;
   lock_violated: boolean;
   steps: CaseStep[];
+  /** 给 TestCase.description 的交付摘要（多条 case 会列出来） */
+  description: string | null;
+  /** 交付用的测试用例表 */
+  test_cases: TestCaseDoc[];
+}
+
+/** 把当前 YAML 展开成测试用例表，下载 Excel。 */
+export async function exportFeatureCases(
+  featureId: string,
+  yamlContent: string,
+  caseSetName: string | null,
+): Promise<Blob> {
+  const { data } = await http.post(
+    `/api/features/${featureId}/test-cases/export`,
+    { yaml_content: yamlContent, case_set_name: caseSetName },
+    { responseType: 'blob', timeout: 60_000 },
+  );
+  return data;
 }
 
 /**

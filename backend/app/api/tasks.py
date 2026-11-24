@@ -1,6 +1,10 @@
 import uuid
+from datetime import datetime
+from io import BytesIO
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, delete, func, or_, select
 
 from ..deps import CurrentUser, DbSession, get_team_membership, require_team_role, visible_team_ids
@@ -30,6 +34,7 @@ from ..schemas import (
     TaskUpdate,
 )
 from ..taskstatus import aggregate
+from ..testcase_export import build_test_case_workbook, rows_from_yaml
 from .batches import derive_status
 from .task_common import (
     active_task_ids,
@@ -443,6 +448,41 @@ async def list_task_cases(task_id: uuid.UUID, user: CurrentUser, db: DbSession) 
         }
         for case, feature, source in rows
     ]
+
+
+@router.get("/api/tasks/{task_id}/test-cases/export")
+async def export_task_test_cases(task_id: uuid.UUID, user: CurrentUser, db: DbSession):
+    """任务下的所有用例，按 case 展开成交付表格，导出 Excel。"""
+    task = await require_task(db, task_id, user)
+    stmt = (
+        select(TestCase, Feature, Project)
+        .join(TaskCase, TaskCase.case_id == TestCase.id)
+        .join(Feature, Feature.id == TestCase.feature_id)
+        .join(Project, Project.id == Feature.project_id)
+        .where(TaskCase.task_id == task_id)
+        .order_by(TaskCase.position, TestCase.name)
+    )
+    rows = (await db.execute(stmt)).all()
+    paths = await path_map(db, {feature.id for _, feature, _ in rows})
+    export_rows: list[dict] = []
+    for case, feature, project in rows:
+        feature_label = " / ".join(paths.get(feature.id, [feature.name]))
+        export_rows.extend(
+            rows_from_yaml(
+                case.yaml_content,
+                system=project.name,
+                feature=feature_label,
+                case_set=case.name,
+            )
+        )
+    data = build_test_case_workbook(export_rows)
+    safe = "".join(ch for ch in task.name if ch not in '\\/:*?"<>|').strip()[:80] or "测试任务"
+    filename = f"测试用例_{safe}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(
+        BytesIO(data),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
 
 
 @router.put("/api/tasks/{task_id}/cases")

@@ -126,12 +126,32 @@ export interface CaseStep {
   text: string;
 }
 
+export type TestCasePhase = 'precondition' | 'action' | 'wait' | 'assert' | 'cleanup';
+
+/** 交付表格的一行：把 YAML 节点翻译成「测试步骤 + 预期结果」。 */
+export interface TestCaseRow {
+  kind: string;
+  phase: TestCasePhase;
+  action: string;
+  expected: string | null;
+  note: string | null;
+}
+
+/** 一个 YAML case = 一条可交付的测试用例。 */
+export interface TestCaseDoc {
+  name: string;
+  index: number;
+  rows: TestCaseRow[];
+}
+
 export interface ValidateResult {
   ok: boolean;
   errors: string[];
   case_count: number;
   /** 步骤清单，供 AI 面板按步骤/YAML 对照 */
   steps: CaseStep[];
+  /** 交付用的测试用例表 */
+  test_cases: TestCaseDoc[];
 }
 
 export interface CaseHistoryItem {

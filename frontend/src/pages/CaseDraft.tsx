@@ -17,12 +17,13 @@ import {
   theme,
 } from 'antd';
 import { ProCard } from '@ant-design/pro-components';
-import { SaveOutlined } from '@ant-design/icons';
+import { DownloadOutlined, SaveOutlined } from '@ant-design/icons';
 import { Bubble, Prompts, Sender } from '@ant-design/x';
 import XMarkdown from '@ant-design/x-markdown';
 import {
   createCase,
   draftCaseWithAiStream,
+  exportFeatureCases,
   getCase,
   getCaseAiDraft,
   getFeatureAiDraft,
@@ -44,12 +45,15 @@ import ModelConfigNotice from '../components/ModelConfigNotice';
 import EnvVariableHint from '../components/EnvVariableHint';
 import AiMascot from '../components/AiMascot';
 import UserAvatar from '../components/UserAvatar';
+import CaseOutline from '../components/CaseOutline';
+import CaseTestTable from '../components/CaseTestTable';
 import StepYamlPanel from '../components/StepYamlPanel';
 import UnifiedDiff from '../components/UnifiedDiff';
 import { previewStepOptions, type StepOption } from '../lib/caseYaml';
+import { downloadBlob, testCaseFileName } from '../lib/download';
 import { clearDraft, loadDraft, saveDraft } from '../lib/draft';
 import { t } from '../i18n';
-import type { CaseStep, RunDetail } from '../api/types';
+import type { CaseStep, RunDetail, TestCaseDoc } from '../api/types';
 
 /** 空状态给的起手示例 —— 比一个光标干等着好，顺便示范「把测试数据一起给它」。 */
 const EXAMPLES = [
@@ -88,7 +92,7 @@ export default function CaseDraft() {
   const { user: me } = useAuth();
   // 对话区/气泡的颜色走主题 token，深色模式下才不会出现一块刺眼的白
   const { token } = theme.useToken();
-  const [form] = Form.useForm<{ name: string }>();
+  const [form] = Form.useForm<{ name: string; description?: string }>();
 
   // 从本地草稿恢复 —— 跳走、刷新、热更新后聊过的内容不该丢
   const initial = useMemo(() => loadDraft(draftKey), [draftKey]);
@@ -96,11 +100,16 @@ export default function CaseDraft() {
   const [yaml, setYaml] = useState<string | null>(initial.yaml);
   const [input, setInput] = useState(initial.input);
   const [modelSteps, setModelSteps] = useState<CaseStep[] | null>(null);
+  const [modelTestCases, setModelTestCases] = useState<TestCaseDoc[] | null>(null);
   const [stepOpts, setStepOpts] = useState<Record<string, StepOption>>({});
   const [appendMode, setAppendMode] = useState(false);
+  const [viewMode, setViewMode] = useState<'yaml' | 'table'>('yaml');
   const [diff, setDiff] = useState<string | null>(null);
   const [trial, setTrial] = useState<RunDetail | null>(null);
   const [trialBusy, setTrialBusy] = useState(false);
+  const [trialError, setTrialError] = useState<string | null>(null);
+  const [highlightKey, setHighlightKey] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const trialTimer = useRef<number | null>(null);
 
   // 任何一处变化都先落本机，数据库请求失败时至少不丢
@@ -157,6 +166,7 @@ export default function CaseDraft() {
     enabled: Boolean(yaml),
   });
   const steps = modelSteps ?? validation?.steps ?? [];
+  const testCases = modelTestCases ?? validation?.test_cases ?? [];
   const previewYaml = useMemo(
     () => (yaml ? previewStepOptions(yaml, steps, stepOpts) : ''),
     [yaml, steps, stepOpts],
@@ -170,7 +180,10 @@ export default function CaseDraft() {
   useEffect(() => {
     if (!editing || !existing) return;
     if (yaml === null) setYaml(existing.yaml_content);
-    form.setFieldsValue({ name: guessCaseName(existing.yaml_content) });
+    form.setFieldsValue({
+      name: guessCaseName(existing.yaml_content),
+      description: existing.description ?? '',
+    });
     // 只在用例首次到达时跑一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing, existing]);
@@ -201,14 +214,18 @@ export default function CaseDraft() {
     if (res.yaml === '') {
       setYaml(null);
       setModelSteps([]);
+      setModelTestCases([]);
       setStepOpts({});
       setDiff(null);
+      form.setFieldsValue({ description: '' });
       message.info(t('已按模型的要求清空右侧 YAML'));
     } else if (res.yaml) {
       setYaml(res.yaml);
       setModelSteps(res.steps ?? []);
+      setModelTestCases(res.test_cases ?? []);
       setStepOpts({});
       setDiff(res.diff ?? null);
+      form.setFieldsValue({ description: res.description ?? '' });
       if (!res.yaml_ok && res.yaml_errors.length) {
         message.warning(t('模型给的 YAML 没通过校验，请让它修正'));
       }
@@ -216,14 +233,23 @@ export default function CaseDraft() {
   }
 
   const save = useMutation({
-    mutationFn: async (v: { name: string }) => {
+    mutationFn: async (v: { name: string; description?: string }) => {
       // 先把最新对话刷到数据库：新建时后端会把这份草稿挂到新用例上
       const state: CaseAiDraft = { messages, yaml, input };
       if (editing) await saveCaseAiDraft(cid as string, state);
       else await saveFeatureAiDraft(fid, state);
+      const description = v.description?.trim() ?? '';
       return editing
-        ? updateCase(cid as string, { name: v.name, yaml_content: previewYaml })
-        : createCase(fid, { name: v.name, yaml_content: previewYaml });
+        ? updateCase(cid as string, {
+            name: v.name,
+            description,
+            yaml_content: previewYaml,
+          })
+        : createCase(fid, {
+            name: v.name,
+            description,
+            yaml_content: previewYaml,
+          });
     },
     onSuccess: (saved) => {
       // 本机缓存可以清；数据库里的对话保留，下次打开「AI 修改用例」还能看到
@@ -288,6 +314,14 @@ export default function CaseDraft() {
   };
   useEffect(() => () => stopTrial(), []);
 
+  /** 目录点击：滚动到对应 case / step，并短暂高亮。 */
+  function jumpTo(key: string) {
+    setHighlightKey(key);
+    requestAnimationFrame(() => {
+      document.getElementById(key)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+
   async function startTrial(caseIndex: number, stepLimit: number) {
     if (!previewYaml || trialBusy) return;
     const stepOptions: TrialStepOption[] = Object.entries(stepOpts).map(
@@ -307,6 +341,7 @@ export default function CaseDraft() {
     );
     setTrialBusy(true);
     setTrial(null);
+    setTrialError(null);
     try {
       const result = await trialRun(
         fid,
@@ -329,7 +364,9 @@ export default function CaseDraft() {
           }
           return false;
         } catch (e) {
-          message.error(apiError(e));
+          const msg = apiError(e);
+          setTrialError(msg);
+          message.error(msg);
           stopTrial();
           return true;
         }
@@ -340,8 +377,25 @@ export default function CaseDraft() {
         }, 1500);
       }
     } catch (e) {
-      message.error(apiError(e));
+      const msg = apiError(e);
+      setTrialError(msg);
+      message.error(msg);
       setTrialBusy(false);
+    }
+  }
+
+  async function exportTable() {
+    if (!previewYaml || !fid || exporting) return;
+    setExporting(true);
+    try {
+      const name = guessCaseName(previewYaml) || feature?.name || '测试用例';
+      const blob = await exportFeatureCases(fid, previewYaml, name);
+      downloadBlob(blob, testCaseFileName('测试用例', name));
+      message.success(t('已导出'));
+    } catch (e) {
+      message.error(apiError(e));
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -373,10 +427,10 @@ export default function CaseDraft() {
       >
         <Row gutter={12}>
           {/* 左：对话 —— Ant Design X 的 Bubble / Prompts / Sender */}
-          <Col xs={24} lg={10}>
+          <Col xs={24} lg={8}>
             <div
               style={{
-                height: 520,
+                height: 620,
                 display: 'flex',
                 flexDirection: 'column',
                 background: token.colorFillQuaternary,
@@ -502,10 +556,10 @@ export default function CaseDraft() {
           </Col>
 
           {/* 右：步骤 / YAML 对照 —— 用主题色而不是写死的深色 */}
-          <Col xs={24} lg={14}>
+          <Col xs={24} lg={16}>
             <div
               style={{
-                minHeight: 520,
+                minHeight: 620,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 8,
@@ -516,6 +570,8 @@ export default function CaseDraft() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 8,
                   padding: '8px 12px',
                   border: `1px solid ${token.colorBorderSecondary}`,
                   borderRadius: 10,
@@ -524,29 +580,64 @@ export default function CaseDraft() {
                   background: token.colorFillQuaternary,
                 }}
               >
-                <span>{t('步骤 / YAML 预览')}</span>
-                <span>
-                  {previewYaml ? t('{n} 行', { n: yamlLineCount }) : t('还没有内容')}
-                  {validation?.ok
-                    ? t(' · 解析出 {n} 个用例', { n: validation.case_count })
-                    : ''}
-                </span>
+                <Space size={8}>
+                  <span>{t('步骤 / YAML 预览')}</span>
+                  <Segmented
+                    size="small"
+                    value={viewMode}
+                    onChange={(value) => setViewMode(value as 'yaml' | 'table')}
+                    disabled={!previewYaml}
+                    options={[
+                      { label: t('步骤 / YAML'), value: 'yaml' },
+                      { label: t('测试用例表'), value: 'table' },
+                    ]}
+                  />
+                </Space>
+                <Space size={8}>
+                  <span>
+                    {previewYaml ? t('{n} 行', { n: yamlLineCount }) : t('还没有内容')}
+                    {validation?.ok
+                      ? t(' · 解析出 {n} 个用例', { n: validation.case_count })
+                      : ''}
+                  </span>
+                  <Button
+                    size="small"
+                    icon={<DownloadOutlined />}
+                    loading={exporting}
+                    disabled={!previewYaml || !fid || validation?.ok === false}
+                    onClick={exportTable}
+                  >
+                    {t('导出 Excel')}
+                  </Button>
+                </Space>
               </div>
 
               {previewYaml ? (
-                <StepYamlPanel
-                  yaml={previewYaml}
-                  steps={steps}
-                  options={stepOpts}
-                  onOptionChange={(key, option) =>
-                    setStepOpts((prev) => ({ ...prev, [key]: option }))
-                  }
-                  trial={trial}
-                  trialBusy={trialBusy}
-                  onTrial={(caseIndex, stepLimit) =>
-                    startTrial(caseIndex, stepLimit)
-                  }
-                />
+                viewMode === 'table' ? (
+                  <CaseTestTable cases={testCases} />
+                ) : (
+                <Row gutter={[12, 12]}>
+                  <Col xs={24} lg={6}>
+                    <CaseOutline steps={steps} onJump={jumpTo} />
+                  </Col>
+                  <Col xs={24} lg={18}>
+                    <StepYamlPanel
+                      yaml={previewYaml}
+                      steps={steps}
+                      options={stepOpts}
+                      onOptionChange={(key, option) =>
+                        setStepOpts((prev) => ({ ...prev, [key]: option }))
+                      }
+                      trial={trial}
+                      trialBusy={trialBusy}
+                      onTrial={(caseIndex, stepLimit) =>
+                        startTrial(caseIndex, stepLimit)
+                      }
+                      highlightKey={highlightKey ?? undefined}
+                    />
+                  </Col>
+                </Row>
+                )
               ) : (
                 <div
                   style={{
@@ -567,6 +658,57 @@ export default function CaseDraft() {
                 </div>
               )}
             </div>
+
+            {trialBusy && (
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginTop: 8 }}
+                message={t('试跑执行中，请稍候…')}
+              />
+            )}
+            {trialError && (
+              <Alert
+                type="error"
+                showIcon
+                closable
+                style={{ marginTop: 8 }}
+                message={t('试跑请求失败')}
+                description={trialError}
+                onClose={() => setTrialError(null)}
+              />
+            )}
+            {!trialBusy && trial?.error_message && (
+              <Alert
+                type="error"
+                showIcon
+                style={{ marginTop: 8 }}
+                message={t('试跑失败')}
+                description={trial.error_message}
+              />
+            )}
+            {!trialBusy && trial && !trial.error_message && (trial.failed ?? 0) > 0 && (
+              <Alert
+                type="error"
+                showIcon
+                style={{ marginTop: 8 }}
+                message={t('试跑有失败步骤')}
+                description={t('见下方步骤标记；也可以打开执行详情查看报告。')}
+              />
+            )}
+            {!trialBusy &&
+              trial &&
+              !trial.error_message &&
+              (trial.failed ?? 0) === 0 &&
+              ['failed', 'timed_out', 'cancelled'].includes(trial.status) && (
+                <Alert
+                  type="error"
+                  showIcon
+                  style={{ marginTop: 8 }}
+                  message={t('试跑未完成')}
+                  description={t('执行没有正常结束，请打开执行详情查看原因。')}
+                />
+              )}
 
             {diff && (
               <Collapse
@@ -635,6 +777,16 @@ export default function CaseDraft() {
                     rules={[{ required: true, message: t('请输入用例名称') }]}
                   >
                     <Input placeholder={t('用例名称')} />
+                  </Form.Item>
+                  <Form.Item
+                    name="description"
+                    label={t('描述')}
+                    style={{ marginBottom: 8 }}
+                  >
+                    <Input.TextArea
+                      autoSize={{ minRows: 3, maxRows: 8 }}
+                      placeholder={t('可留空')}
+                    />
                   </Form.Item>
                   <Tooltip title={canSave ? '' : t('需要 YAML 通过校验后才能保存')}>
                     <Button

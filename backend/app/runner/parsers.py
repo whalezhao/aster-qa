@@ -288,6 +288,44 @@ def read_step_results(result_dir: Path, limit: int = 200) -> list[dict]:
     return items
 
 
+def read_run_error(result_dir: Path) -> str | None:
+    """试跑已结束但没有 steps 结果时的失败原因。
+
+    典型情况是 beforeEach 的 gotoUrl 就打不开页面：detail["steps"] 为空，
+    但 detail["beforeEach"] 里已经有失败节点。返回第一行，前端直接展示。
+    """
+    path = find_summary(result_dir)
+    if path is None:
+        return None
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    for project in doc.get("projects") or []:
+        for case in project.get("cases") or []:
+            attempts = case.get("attempts") or []
+            attempt = attempts[-1] if attempts else {}
+            result_file = attempt.get("resultFile")
+            if not result_file:
+                continue
+            try:
+                detail = json.loads(
+                    (path.parent / result_file).read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError):
+                continue
+            for phase in ("beforeEach", "steps", "afterEach"):
+                for step in detail.get(phase) or []:
+                    if str(step.get("status")) != "failed":
+                        continue
+                    message = (step.get("error") or {}).get("message")
+                    if message:
+                        first = str(message).strip().splitlines()[0]
+                        return first[:_EVIDENCE_TEXT_LIMIT]
+    return None
+
+
 def parse_plan_case_count(result_dir: Path) -> int:
     """从 plan.json 数出本次计划执行多少个 case。
 

@@ -64,7 +64,13 @@ export default function CaseEditor() {
       try {
         setValidation(await validateYaml(yaml ?? ''));
       } catch (e) {
-        setValidation({ ok: false, errors: [apiError(e)], case_count: 0, steps: [] });
+        setValidation({
+          ok: false,
+          errors: [apiError(e)],
+          case_count: 0,
+          steps: [],
+          test_cases: [],
+        });
       } finally {
         setValidating(false);
       }

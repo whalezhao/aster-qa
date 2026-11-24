@@ -370,6 +370,12 @@ class YamlValidateIn(In):
     yaml_content: str
 
 
+class CaseTableExportIn(In):
+    yaml_content: str
+    # 导出文件名/用例集列；为空时用功能名
+    case_set_name: str | None = None
+
+
 # ------------------------------------------------------------------ AI 生成用例
 
 
@@ -398,6 +404,8 @@ class CaseDraftOut(BaseModel):
     diff: str | None = None
     lock_violated: bool = False
     steps: list[dict] = []
+    description: str | None = None
+    test_cases: list[dict] = []
 
 
 class AiDraftIn(In):
@@ -452,6 +460,7 @@ class YamlValidateOut(BaseModel):
     errors: list[str] = []
     case_count: int = 0
     steps: list[dict] = []
+    test_cases: list[dict] = []
 
 
 # ------------------------------------------------------------------- 任务 / 回归

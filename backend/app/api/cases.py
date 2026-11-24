@@ -1,5 +1,8 @@
 import json
 import uuid
+from datetime import datetime
+from io import BytesIO
+from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, HTTPException, status
@@ -34,6 +37,7 @@ from ..schemas import (
     CaseDiffOut,
     CaseDraftIn,
     CaseDraftOut,
+    CaseTableExportIn,
     CaseVersionOut,
     TestCaseCreate,
     TestCaseOut,
@@ -43,6 +47,7 @@ from ..schemas import (
     YamlValidateIn,
     YamlValidateOut,
 )
+from ..testcase_export import build_test_case_workbook, rows_from_yaml
 from ..yamlcheck import validate as validate_yaml
 
 router = APIRouter(tags=["cases"])
@@ -108,6 +113,8 @@ async def draft_case_with_ai(
         diff=result.diff,
         lock_violated=result.lock_violated,
         steps=result.steps or [],
+        description=result.description,
+        test_cases=result.test_cases or [],
     )
 
 
@@ -250,6 +257,34 @@ async def validate_body(body: YamlValidateIn, user: CurrentUser) -> YamlValidate
         errors=errors,
         case_count=case_count,
         steps=ai_case.steps_of(body.yaml_content),
+        test_cases=ai_case.test_cases_of(body.yaml_content),
+    )
+
+
+@router.post("/api/features/{feature_id}/test-cases/export")
+async def export_test_cases(
+    feature_id: uuid.UUID, body: CaseTableExportIn, user: CurrentUser, db: DbSession
+):
+    """把当前 YAML 展开成客户可读的测试用例表，导出 Excel。"""
+    feature = await require_feature_access(db, feature_id, user)
+    errors, _ = validate_yaml(body.yaml_content)
+    if errors:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "；".join(errors))
+    project = await db.get(Project, feature.project_id)
+    case_set = (body.case_set_name or "").strip() or feature.name
+    rows = rows_from_yaml(
+        body.yaml_content,
+        system=project.name if project else "",
+        feature=feature.name,
+        case_set=case_set,
+    )
+    data = build_test_case_workbook(rows)
+    safe = "".join(ch for ch in case_set if ch not in '\\/:*?"<>|').strip()[:80] or "测试用例"
+    filename = f"测试用例_{safe}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(
+        BytesIO(data),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )
 
 

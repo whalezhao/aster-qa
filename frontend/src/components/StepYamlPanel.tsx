@@ -18,7 +18,7 @@ import {
 } from '@ant-design/icons';
 import type { RunDetail } from '../api/types';
 import { t } from '../i18n';
-import { yamlRows, type Step, type StepOption } from '../lib/caseYaml';
+import { stepKindLabel, yamlRows, type Step, type StepOption } from '../lib/caseYaml';
 
 const STEP_COLORS = [
   '#7dd3fc',
@@ -31,24 +31,6 @@ const STEP_COLORS = [
   '#bef264',
 ];
 
-const KIND_LABELS: Record<string, string> = {
-  aiAct: '操作',
-  aiTap: '点击',
-  aiInput: '输入',
-  aiAssert: '断言',
-  aiWaitFor: '等待',
-  aiQuery: '提取',
-  aiLocate: '定位',
-  aiScroll: '滚动',
-  aiKeyboardPress: '按键',
-  aiLongPress: '长按',
-  aiPinch: '缩放',
-  aiDragAndDrop: '拖拽',
-  evaluateJavaScript: '脚本',
-  sleep: '等待',
-  gotoUrl: '打开',
-};
-
 interface Props {
   yaml: string;
   steps: Step[];
@@ -57,6 +39,8 @@ interface Props {
   trial?: RunDetail | null;
   trialBusy?: boolean;
   onTrial?: (caseIndex: number, stepLimit: number) => void;
+  /** 目录跳转后高亮的 key（case-{i} / step-{i}-{j}） */
+  highlightKey?: string;
 }
 
 /** 步骤 / YAML 逐行对照面板。表头和内容共用同一个 CSS grid，列宽不会错位。 */
@@ -68,6 +52,7 @@ export default function StepYamlPanel({
   trial,
   trialBusy = false,
   onTrial,
+  highlightKey,
 }: Props) {
   const { token } = theme.useToken();
   const rows = yamlRows(yaml, steps);
@@ -119,21 +104,34 @@ export default function StepYamlPanel({
             const key = step ? `${step.case_index}:${step.index}` : '';
             const result = step ? results.get(key) : undefined;
             const opt = step ? (options[key] ?? {}) : {};
+            const stepKey = step ? `step-${step.case_index}-${step.index}` : '';
+            const caseKey =
+              row.caseName && row.caseIndex !== undefined ? `case-${row.caseIndex}` : '';
+            const active = Boolean(
+              highlightKey &&
+                ((stepKey && highlightKey === stepKey) ||
+                  (caseKey && highlightKey === caseKey)),
+            );
             return (
               <Fragment key={`${index}-${key}`}>
                 <div
+                  id={caseKey || undefined}
                   style={{
                     padding: 6,
                     borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                    background: active ? token.colorWarningBg : undefined,
+                    borderRadius: active ? 8 : undefined,
+                    transition: 'background 0.3s',
                   }}
                 >
                   {step ? (
                     <div
+                      id={stepKey || undefined}
                       style={{
                         border: `1px solid ${tone ?? token.colorBorderSecondary}`,
                         borderLeft: `3px solid ${tone ?? token.colorBorderSecondary}`,
                         borderRadius: 8,
-                        background: token.colorFillQuaternary,
+                        background: active ? token.colorWarningBg : token.colorFillQuaternary,
                         padding: '6px 8px',
                       }}
                     >
@@ -146,7 +144,7 @@ export default function StepYamlPanel({
                         </Tag>
                       )}
                       <Typography.Text strong style={{ fontSize: 12 }}>
-                        {KIND_LABELS[step.kind] ?? step.kind}
+                        {stepKindLabel(step.kind)}
                       </Typography.Text>
                       <Typography.Text style={{ fontSize: 12, marginLeft: 6 }}>
                         {step.text}

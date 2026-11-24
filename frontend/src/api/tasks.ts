@@ -1,6 +1,15 @@
 import { http } from './client';
 import type { Task, TaskCase, TaskSignoff, TaskTag, TaskType } from './types';
 
+/** 任务下所有用例按 case 展开成测试用例表，下载 Excel。 */
+export async function exportTaskCases(taskId: string): Promise<Blob> {
+  const { data } = await http.get(`/api/tasks/${taskId}/test-cases/export`, {
+    responseType: 'blob',
+    timeout: 120_000,
+  });
+  return data;
+}
+
 export interface TaskInput {
   name?: string;
   type?: TaskType;

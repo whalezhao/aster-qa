@@ -3,8 +3,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App, Alert, Button, Form, Input, Modal, Popconfirm, Select, Space, Tabs, Tag, Tooltip } from 'antd';
 import { ProCard, ProDescriptions } from '@ant-design/pro-components';
-import { AuditOutlined, PlayCircleOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import {
+  AuditOutlined,
+  DownloadOutlined,
+  PlayCircleOutlined,
+  SafetyCertificateOutlined,
+} from '@ant-design/icons';
+import {
+  exportTaskCases,
   getTask,
   getTaskCases,
   getTaskFeatures,
@@ -34,6 +40,7 @@ import {
   taskStatusLabel,
   taskTypeLabel,
 } from '../lib/format';
+import { downloadBlob, testCaseFileName } from '../lib/download';
 import { PAGE, byDate, byNumber, byRank, byText } from '../lib/table';
 import type { AiCheckResult, TaskCase, TaskSignoff, TaskTag } from '../api/types';
 import QaTable from '../components/QaTable';
@@ -251,7 +258,7 @@ export default function TaskDetail() {
 
       <Tabs
         items={[
-          { key: 'cases', label: t('用例'), children: <CasesTab tid={tid} /> },
+          { key: 'cases', label: t('用例'), children: <CasesTab tid={tid} taskName={task?.name} /> },
           { key: 'tags', label: t('标签'), children: <TagsTab tid={tid} teamId={task?.team_id} /> },
           { key: 'features', label: t('功能'), children: <FeaturesTab tid={tid} /> },
           { key: 'batches', label: t('执行记录'), children: <BatchesTab tid={tid} /> },
@@ -432,10 +439,32 @@ function SignoffBanner({
   );
 }
 
-function CasesTab({ tid }: { tid: string }) {
+function CasesTab({ tid, taskName }: { tid: string; taskName?: string }) {
   const { data: cases = [], isLoading } = useQuery({ queryKey: ['task-cases', tid], queryFn: () => getTaskCases(tid) });
+  const { message } = App.useApp();
+  const [exporting, setExporting] = useState(false);
+
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      const blob = await exportTaskCases(tid);
+      downloadBlob(blob, testCaseFileName('测试用例', taskName || '测试任务'));
+      message.success(t('已导出'));
+    } catch (e) {
+      message.error(apiError(e));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
-    <QaTable<TaskCase>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+        <Button icon={<DownloadOutlined />} loading={exporting} onClick={exportExcel}>
+          {t('导出 Excel')}
+        </Button>
+      </div>
+      <QaTable<TaskCase>
       rowKey="id"
       loading={isLoading}
       dataSource={cases}
@@ -504,7 +533,8 @@ function CasesTab({ tid }: { tid: string }) {
           render: (v: boolean) => (v ? t('是') : t('否')),
         },
       ]}
-    />
+      />
+    </div>
   );
 }
 
