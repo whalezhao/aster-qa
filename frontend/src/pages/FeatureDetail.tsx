@@ -215,6 +215,20 @@ export default function FeatureDetail() {
               render: (v: string | null) => v || '-',
             },
             {
+              title: t('创建人'),
+              dataIndex: 'created_by_name',
+              width: 110,
+              sorter: byText<TestCase>((r) => r.created_by_name),
+              render: (v: string | null) => v || '-',
+            },
+            {
+              title: t('修改人'),
+              dataIndex: 'updated_by_name',
+              width: 110,
+              sorter: byText<TestCase>((r) => r.updated_by_name),
+              render: (v: string | null) => v || '-',
+            },
+            {
               title: t('启用状态'),
               dataIndex: 'is_active',
               width: 100,

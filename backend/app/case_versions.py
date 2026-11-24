@@ -91,6 +91,8 @@ async def rollback_case(
     case.defect_ids = version.defect_ids
     case.stage_override = version.stage_override
     case.is_active = version.is_active
+    if user_id is not None:
+        case.updated_by = user_id
     return await snapshot_case(
         db,
         case,

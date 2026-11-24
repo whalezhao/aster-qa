@@ -1,5 +1,24 @@
 import type { Feature } from '../api/types';
 
+/** TreeSelect 里用例节点的值前缀；功能仍是裸 id，提交时靠它拆开。 */
+export const CASE_VALUE_PREFIX = 'case:';
+
+export function splitSelection(ids: string[] = []): {
+  feature_ids: string[];
+  case_ids: string[];
+} {
+  const feature_ids: string[] = [];
+  const case_ids: string[] = [];
+  for (const id of ids) {
+    if (id.startsWith(CASE_VALUE_PREFIX)) {
+      case_ids.push(id.slice(CASE_VALUE_PREFIX.length));
+    } else {
+      feature_ids.push(id);
+    }
+  }
+  return { feature_ids, case_ids };
+}
+
 export interface FeatureNode extends Feature {
   children?: FeatureNode[];
   /** 直属启用用例数 */

@@ -76,30 +76,55 @@ async def _cases_by_project(db, task: TestTask) -> dict[uuid.UUID, list[uuid.UUI
 
 
 async def attach_features(
-    db, task: TestTask, feature_ids: list[uuid.UUID]
+    db,
+    task: TestTask,
+    feature_ids: list[uuid.UUID],
+    case_ids: list[uuid.UUID] | None = None,
 ) -> tuple[int, int]:
     """把功能、以及它们下面启用中的用例，**快照**进任务。返回 (用例数, 功能数)。
 
     勾选父功能时先展开成「自身 + 全部后代」：TaskFeature 存覆盖闭包，
     TaskCase 存闭包里所有启用用例，source_feature_id 仍是用例真实所属功能。
+    case_ids 用于只勾单条用例；其所属功能也会进 TaskFeature，保证任务详情能看到。
+    两者同时传时按用例 id 去重。
 
     快照而非动态引用：保证历史回归可复现 —— 功能后续新增的用例不会偷偷混进
     一个已经定稿的回归计划里。
     """
     expanded = await expand_ids(db, feature_ids)
-    if not expanded:
+    if not expanded and not case_ids:
         return 0, 0
-    cases = (
-        await db.execute(
-            select(TestCase.id, TestCase.feature_id)
-            .join(Feature, Feature.id == TestCase.feature_id)
-            .where(
-                TestCase.feature_id.in_(expanded), TestCase.is_active.is_(True)
+    rows: list[tuple[uuid.UUID, uuid.UUID]] = []
+    if expanded:
+        rows = (
+            await db.execute(
+                select(TestCase.id, TestCase.feature_id)
+                .join(Feature, Feature.id == TestCase.feature_id)
+                .where(
+                    TestCase.feature_id.in_(expanded), TestCase.is_active.is_(True)
+                )
+                .order_by(Feature.name, TestCase.name)
             )
-            .order_by(Feature.name, TestCase.name)
+        ).all()
+    if case_ids:
+        rows.extend(
+            (
+                await db.execute(
+                    select(TestCase.id, TestCase.feature_id).where(
+                        TestCase.id.in_(case_ids), TestCase.is_active.is_(True)
+                    )
+                )
+            ).all()
         )
-    ).all()
-    for feature_id in sorted(expanded, key=str):
+    seen: set[uuid.UUID] = set()
+    cases: list[tuple[uuid.UUID, uuid.UUID]] = []
+    for case_id, feature_id in rows:
+        if case_id in seen:
+            continue
+        seen.add(case_id)
+        cases.append((case_id, feature_id))
+    feature_set = set(expanded) | {feature_id for _, feature_id in cases}
+    for feature_id in sorted(feature_set, key=str):
         db.add(TaskFeature(task_id=task.id, feature_id=feature_id))
     for position, (case_id, feature_id) in enumerate(cases):
         db.add(
@@ -110,7 +135,7 @@ async def attach_features(
                 position=position,
             )
         )
-    return len(cases), len(expanded)
+    return len(cases), len(feature_set)
 
 
 def split_shards(case_ids: list[uuid.UUID], shard_size: int) -> list[list[uuid.UUID]]:

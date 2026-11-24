@@ -35,6 +35,7 @@ import {
   taskTypeLabel,
 } from '../lib/format';
 import { PAGE, byDate, byNumber, byRank, byText } from '../lib/table';
+import { splitSelection } from '../lib/featureTree';
 import type { FeatureStage, Task, TaskStatus, TaskType } from '../api/types';
 
 interface TaskFormValues {
@@ -49,6 +50,8 @@ interface TaskFormValues {
   gate_min_pass_rate?: number | null;
   gate_fail_on_p0?: boolean;
   feature_ids?: string[];
+  /** 建任务时只挑单条用例；和 feature_ids 一起提交 */
+  case_ids?: string[];
   run_now?: boolean;
 }
 
@@ -112,6 +115,8 @@ export default function Tasks() {
   const [editing, setEditing] = useState<Task | null>(null);
   const [preflightTaskId, setPreflightTaskId] = useState<string | null>(null);
   const [form] = Form.useForm<TaskFormValues>();
+  // 系统先选后选都要能约束功能树：选了系统就只看该系统，切系统时清掉别系统的功能
+  const selectedProjectId = Form.useWatch('project_id', form);
   // 勾选的任务 —— 「快速多任务执行」就是一次跑掉这几条
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -188,7 +193,14 @@ export default function Tasks() {
           gate_fail_on_p0: payload.gate_fail_on_p0,
         });
       }
-      return createTask(teamId as string, { ...payload, name: payload.name });
+      // 树里功能和用例共用一个值数组，提交前按 case: 前缀拆开
+      const { feature_ids, case_ids } = splitSelection(payload.feature_ids);
+      return createTask(teamId as string, {
+        ...payload,
+        feature_ids,
+        case_ids,
+        name: payload.name,
+      });
     },
     onSuccess: (res) => {
       setOpen(false);
@@ -367,7 +379,7 @@ export default function Tasks() {
       ghost
       header={{
         title: t('测试任务'),
-        subTitle: t('一个任务 = 一组功能的组合；勾选多个任务可以一次触发'),
+        subTitle: t('一个任务 = 一组功能或用例的组合；勾选多个任务可以一次触发'),
         extra: [
           <Tooltip
             key="assess"
@@ -688,14 +700,18 @@ export default function Tasks() {
 
           <Form.Item
             name="feature_ids"
-            label={t('包含的功能')}
+            label={t('包含的功能 / 用例')}
             tooltip={
               editing
                 ? t('功能与用例在创建任务时就已快照固定，不能再改；需要新组合请新建任务。')
-                : t('任务就是一堆功能的组合。选中后会把功能下启用中的用例快照进任务 —— 之后再给功能加用例，不会影响这个已定稿的任务。')
+                : t('任务就是一堆功能或用例的组合。勾选功能会把其下启用中的用例快照进任务；也可以只勾单个用例。之后再给功能加用例，不会影响这个已定稿的任务。')
             }
           >
-            <FeatureTreeSelect teamId={teamId} disabled={Boolean(editing)} />
+            <FeatureTreeSelect
+              teamId={teamId}
+              projectId={selectedProjectId}
+              disabled={Boolean(editing)}
+            />
           </Form.Item>
 
           {!editing && (

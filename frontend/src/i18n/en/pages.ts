@@ -4,6 +4,8 @@ export const pages: Record<string, string> = {
   编码: 'Code',
   描述: 'Description',
   操作: 'Actions',
+  创建人: 'Created by',
+  修改人: 'Updated by',
   系统: 'Systems',
   任务: 'Task',
   测试任务: 'Test tasks',
@@ -180,8 +182,12 @@ export const pages: Record<string, string> = {
   '请先删除或移走子功能': 'Delete or move its sub-features first',
   '直属 {own} 条，含子功能共 {total} 条':
     '{own} direct case(s), {total} including sub-features',
-  '勾选父功能会包含其下所有子功能的用例':
-    'Selecting a parent feature includes cases from all its sub-features',
+  '勾选功能会包含其下所有用例；也可以只勾单个用例':
+    'Selecting a feature includes all its cases; you can also select individual cases',
+  已切换系统: 'System changed',
+  '你之前选了其它系统的 {count} 个功能或用例，已从选择中移除。当前只保留「{name}」下的内容。':
+    'You had selected {count} feature(s)/case(s) from another system. They were removed; only items under "{name}" are kept.',
+  知道了: 'Got it',
   '同一上级下已有同名功能': 'A sibling with the same name already exists',
   '上级功能不存在或不属于该系统':
     'The parent feature does not exist or belongs to another system',
@@ -242,7 +248,7 @@ export const pages: Record<string, string> = {
   '删除选中的 {n} 个任务？': 'Delete the selected {n} task(s)?',
   '它们的执行记录、报告和 AI 结论会一并删除，不可恢复。正在执行的任务会被跳过。':
     'Their execution records, reports and AI conclusions are deleted permanently. Running tasks are skipped.',
-  '一个任务 = 一组功能的组合；勾选多个任务可以一次触发':
+  '一个任务 = 一组功能或用例的组合；勾选多个任务可以一次触发':
     'A task is a combination of features; select several tasks to trigger them at once',
   '开启后，全部通过的批次不再调用模型做评估 —— 每批评估都是一次真实成本':
     'When on, fully passing batches skip model assessment — every assessment costs real money',
@@ -285,11 +291,11 @@ export const pages: Record<string, string> = {
   任务名称: 'Task name',
   请输入任务名称: 'Enter a task name',
   '如：v2.6 上线前回归': 'e.g. Pre-release regression for v2.6',
-  包含的功能: 'Features',
+  '包含的功能 / 用例': 'Features / cases',
   '功能与用例在创建任务时就已快照固定，不能再改；需要新组合请新建任务。':
     'Features and cases are snapshotted when the task is created and cannot be changed; create a new task for a different combination.',
-  '任务就是一堆功能的组合。选中后会把功能下启用中的用例快照进任务 —— 之后再给功能加用例，不会影响这个已定稿的任务。':
-    "A task is a combination of features. The selected features' active cases are snapshotted into the task — adding cases to a feature later does not affect this finalized task.",
+  '任务就是一堆功能或用例的组合。勾选功能会把其下启用中的用例快照进任务；也可以只勾单个用例。之后再给功能加用例，不会影响这个已定稿的任务。':
+    "A task is a combination of features and cases. Selecting a feature snapshots all its active cases into the task; you can also select individual cases. Adding cases to a feature later does not affect this finalized task.",
   '保存后可以立即执行': 'Run immediately after saving',
   '打开下面的开关，保存的同时就会按系统拆分成多次执行并开始跑。':
     'Turn on the switch below to split into per-system executions and start running on save.',

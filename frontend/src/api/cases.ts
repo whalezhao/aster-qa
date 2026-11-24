@@ -2,6 +2,7 @@ import { API_BASE, http, TOKEN_KEY } from './client';
 import type {
   AiFixResult,
   CaseHistoryItem,
+  CaseOption,
   CaseStep,
   FeatureStage,
   Priority,
@@ -78,6 +79,12 @@ export async function createCase(
   input: Required<Pick<CaseInput, 'name' | 'yaml_content'>> & CaseInput,
 ): Promise<TestCase> {
   const { data } = await http.post<TestCase>(`/api/features/${featureId}/cases`, input);
+  return data;
+}
+
+/** 任务功能树用：一次拿该系统下全部启用用例，避免按功能逐个请求。 */
+export async function getProjectCases(projectId: string): Promise<CaseOption[]> {
+  const { data } = await http.get<CaseOption[]>(`/api/projects/${projectId}/cases`);
   return data;
 }
 

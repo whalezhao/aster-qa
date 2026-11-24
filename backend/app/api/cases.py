@@ -14,12 +14,19 @@ from .. import ai_case
 from ..ai_fix import propose_case_fix
 from ..case_versions import diff_text, rollback_case, snapshot_case
 from ..db import SessionLocal
-from ..deps import CurrentUser, DbSession, require_case_access, require_feature_access
+from ..deps import (
+    CurrentUser,
+    DbSession,
+    require_case_access,
+    require_feature_access,
+    require_project_access,
+)
 from ..environments import DEFAULT_ENVIRONMENT, ensure_default_environment
 from ..modelconfig import missing_fields
 from ..models import (
     CaseAiDraft,
     CaseResult,
+    Feature,
     Iteration,
     Project,
     ProjectEnvironment,
@@ -38,6 +45,7 @@ from ..schemas import (
     CaseDraftIn,
     CaseDraftOut,
     CaseTableExportIn,
+    CaseOptionOut,
     CaseVersionOut,
     TestCaseCreate,
     TestCaseOut,
@@ -48,6 +56,7 @@ from ..schemas import (
     YamlValidateOut,
 )
 from ..testcase_export import build_test_case_workbook, rows_from_yaml
+from ..user_names import attach_user_names
 from ..yamlcheck import validate as validate_yaml
 
 router = APIRouter(tags=["cases"])
@@ -288,6 +297,21 @@ async def export_test_cases(
     )
 
 
+@router.get("/api/projects/{project_id}/cases", response_model=list[CaseOptionOut])
+async def list_project_cases(
+    project_id: uuid.UUID, user: CurrentUser, db: DbSession
+) -> list[TestCase]:
+    """任务功能树用：一次取该系统下全部启用用例，避免按功能逐个请求。"""
+    await require_project_access(db, project_id, user)
+    stmt = (
+        select(TestCase)
+        .join(Feature, Feature.id == TestCase.feature_id)
+        .where(Feature.project_id == project_id, TestCase.is_active.is_(True))
+        .order_by(Feature.name, TestCase.priority.nullslast(), TestCase.name)
+    )
+    return list((await db.execute(stmt)).scalars())
+
+
 @router.get("/api/features/{feature_id}/cases", response_model=list[TestCaseOut])
 async def list_cases(
     feature_id: uuid.UUID, user: CurrentUser, db: DbSession
@@ -299,7 +323,9 @@ async def list_cases(
         .where(TestCase.feature_id == feature_id)
         .order_by(TestCase.priority.nullslast(), TestCase.name)
     )
-    return list((await db.execute(stmt)).scalars())
+    cases = list((await db.execute(stmt)).scalars())
+    await attach_user_names(db, cases)
+    return cases
 
 
 @router.post(
@@ -324,7 +350,9 @@ async def create_case(
     if exists is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "该功能下已有同名用例")
     data = body.model_dump(exclude={"change_source", "change_note"})
-    case = TestCase(feature_id=feature_id, created_by=user.id, **data)
+    case = TestCase(
+        feature_id=feature_id, created_by=user.id, updated_by=user.id, **data
+    )
     db.add(case)
     await db.flush()
     version = await snapshot_case(
@@ -347,6 +375,7 @@ async def create_case(
         draft.case_id = case.id
     await db.commit()
     case.feature = feature
+    await attach_user_names(db, [case])
     out = TestCaseOut.model_validate(case)
     out.version_no = version.version_no
     return out
@@ -355,6 +384,7 @@ async def create_case(
 @router.get("/api/cases/{case_id}", response_model=TestCaseOut)
 async def get_case(case_id: uuid.UUID, user: CurrentUser, db: DbSession) -> TestCaseOut:
     case = await require_case_access(db, case_id, user)
+    await attach_user_names(db, [case])
     out = TestCaseOut.model_validate(case)
     out.version_no = (
         await db.execute(
@@ -408,11 +438,13 @@ async def update_case(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "非法版本来源")
     for field, value in data.items():
         setattr(case, field, value)
+    case.updated_by = user.id
     version = await snapshot_case(
         db, case, source=source, note=body.change_note, user_id=user.id
     )
     await db.commit()
     case.feature = feature
+    await attach_user_names(db, [case])
     out = TestCaseOut.model_validate(case)
     out.version_no = version.version_no
     return out

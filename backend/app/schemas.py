@@ -285,6 +285,8 @@ class FeatureOut(BaseModel):
     stage: str
     iteration_id: uuid.UUID | None
     released_at: datetime | None
+    created_by_name: str | None = None
+    updated_by_name: str | None = None
 
 
 class FeatureCreate(In):
@@ -329,6 +331,8 @@ class TestCaseOut(BaseModel):
     project_id: uuid.UUID | None = None
     # 最新版本号；前端版本历史入口用
     version_no: int | None = None
+    created_by_name: str | None = None
+    updated_by_name: str | None = None
 
 
 class TestCaseBrief(BaseModel):
@@ -340,6 +344,16 @@ class TestCaseBrief(BaseModel):
     defect_ids: str | None
     is_active: bool
     effective_stage: str
+
+
+class CaseOptionOut(BaseModel):
+    """任务选择器里的用例叶子节点：只要够建树和显示优先级，不带 YAML。"""
+
+    model_config = ORM
+    id: uuid.UUID
+    feature_id: uuid.UUID
+    name: str
+    priority: str | None
 
 
 class TestCaseCreate(In):
@@ -500,9 +514,10 @@ class TaskOut(BaseModel):
 
 
 class TaskCreate(In):
-    """建任务。一个任务就是一堆功能的组合，所以功能可以在建的当下直接选。
+    """建任务。一个任务就是一堆功能/用例的组合，所以可以在建的当下直接选。
 
-    feature_ids 会连同其下启用中的用例一起快照进任务；不选也行，之后再补。
+    feature_ids 会连同其下启用中的用例一起快照进任务；case_ids 用于只挑单条用例。
+    两者可以同时传，重复的用例按 id 去重。
     """
 
     name: str = Field(min_length=1, max_length=128)
@@ -516,6 +531,7 @@ class TaskCreate(In):
     gate_min_pass_rate: float | None = Field(default=None, ge=0, le=1)
     gate_fail_on_p0: bool = False
     feature_ids: list[uuid.UUID] = []
+    case_ids: list[uuid.UUID] = []
     tag_ids: list[uuid.UUID] = []
     run_now: bool = False
 

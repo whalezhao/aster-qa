@@ -257,7 +257,7 @@ async def _task_project_ids(db, task: TestTask) -> set[uuid.UUID]:
 async def create_task(
     team_id: uuid.UUID, body: TaskCreate, user: CurrentUser, db: DbSession
 ) -> dict:
-    """建任务。可以直接带上要回归的功能，一次调用就把任务建好并（可选）触发执行。"""
+    """建任务。可以直接带上要回归的功能/用例，一次调用就把任务建好并（可选）触发执行。"""
     await require_team_role(team_id, user, db, "member")
     if body.type not in {"case_run", "feature_regression", "iteration_regression", "adhoc"}:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "非法任务类型")
@@ -278,7 +278,27 @@ async def create_task(
                 status.HTTP_400_BAD_REQUEST, f"{len(missing)} 个功能不存在或不属于该测试团队"
             )
 
-    project_ids = {f.project_id for f in features}
+    case_rows = []
+    if body.case_ids:
+        case_rows = (
+            await db.execute(
+                select(TestCase.id, TestCase.feature_id, Feature.project_id)
+                .join(Feature, Feature.id == TestCase.feature_id)
+                .join(Project, Project.id == Feature.project_id)
+                .where(
+                    TestCase.id.in_(body.case_ids),
+                    TestCase.is_active.is_(True),
+                    Project.team_id == team_id,
+                )
+            )
+        ).all()
+        if missing := set(body.case_ids) - {row[0] for row in case_rows}:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"{len(missing)} 个用例不存在、已停用或不属于该测试团队",
+            )
+
+    project_ids = {f.project_id for f in features} | {row[2] for row in case_rows}
     if body.project_id is not None:
         project_ids.add(body.project_id)
     projects = list(
@@ -315,7 +335,9 @@ async def create_task(
         except ValueError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-    case_count, feature_count = await attach_features(db, task, body.feature_ids)
+    case_count, feature_count = await attach_features(
+        db, task, body.feature_ids, body.case_ids
+    )
     for tag_id in body.tag_ids:
         tag = await db.get(Tag, tag_id)
         if tag is None or tag.team_id != team_id:

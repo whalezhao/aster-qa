@@ -97,6 +97,8 @@ export interface Feature {
   stage: FeatureStage;
   iteration_id: string | null;
   released_at: string | null;
+  created_by_name: string | null;
+  updated_by_name: string | null;
 }
 
 export interface TestCase {
@@ -116,6 +118,16 @@ export interface TestCase {
   project_id: string | null;
   /** 最新版本号（版本历史） */
   version_no?: number | null;
+  created_by_name: string | null;
+  updated_by_name: string | null;
+}
+
+/** 任务选择器里的用例叶子：只要够建树和显示优先级。 */
+export interface CaseOption {
+  id: string;
+  feature_id: string;
+  name: string;
+  priority: Priority | null;
 }
 
 export interface CaseStep {

@@ -23,6 +23,8 @@ export interface TaskInput {
   gate_fail_on_p0?: boolean;
   /** 建任务时直接选功能 —— 一个任务就是一堆功能的组合 */
   feature_ids?: string[];
+  /** 只挑单条用例；与 feature_ids 可同时传，后端按 id 去重 */
+  case_ids?: string[];
   tag_ids?: string[];
   run_now?: boolean;
 }

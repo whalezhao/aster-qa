@@ -14,6 +14,7 @@ from ..deps import (
 from ..feature_tree import would_cycle
 from ..models import Feature, TestCase
 from ..schemas import BulkIds, FeatureCreate, FeatureOut, FeatureUpdate, ReleaseIn
+from ..user_names import attach_user_names
 
 router = APIRouter(tags=["features"])
 
@@ -30,7 +31,9 @@ async def list_features(
     if stage:
         stmt = stmt.where(Feature.stage == stage)
     stmt = stmt.order_by(Feature.name)
-    return list((await db.execute(stmt)).scalars())
+    features = list((await db.execute(stmt)).scalars())
+    await attach_user_names(db, features)
+    return features
 
 
 @router.post(
@@ -58,7 +61,12 @@ async def create_feature(
     )
     if (await db.execute(stmt)).first() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "同一上级下已有同名功能")
-    feature = Feature(project_id=project_id, created_by=user.id, **body.model_dump())
+    feature = Feature(
+        project_id=project_id,
+        created_by=user.id,
+        updated_by=user.id,
+        **body.model_dump(),
+    )
     db.add(feature)
     try:
         await db.commit()
@@ -68,12 +76,15 @@ async def create_feature(
             status.HTTP_409_CONFLICT, "同一上级下已有同名功能"
         ) from exc
     await db.refresh(feature)
+    await attach_user_names(db, [feature])
     return feature
 
 
 @router.get("/api/features/{feature_id}", response_model=FeatureOut)
 async def get_feature(feature_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Feature:
-    return await require_feature_access(db, feature_id, user)
+    feature = await require_feature_access(db, feature_id, user)
+    await attach_user_names(db, [feature])
+    return feature
 
 
 @router.patch("/api/features/{feature_id}", response_model=FeatureOut)
@@ -122,6 +133,7 @@ async def update_feature(
 
     for field, value in data.items():
         setattr(feature, field, value)
+    feature.updated_by = user.id
     try:
         await db.commit()
     except IntegrityError as exc:
@@ -130,6 +142,7 @@ async def update_feature(
             status.HTTP_409_CONFLICT, "同一上级下已有同名功能"
         ) from exc
     await db.refresh(feature)
+    await attach_user_names(db, [feature])
     return feature
 
 
@@ -159,17 +172,24 @@ async def delete_feature(feature_id: uuid.UUID, user: CurrentUser, db: DbSession
 # ------------------------------------------------------------------ 转正式 / 回退
 
 
-async def _release_one(db, feature: Feature, cascade: bool) -> None:
+async def _release_one(
+    db, feature: Feature, cascade: bool, user_id: uuid.UUID | None = None
+) -> None:
     feature.stage = "released"
     feature.released_at = datetime.now(UTC)
+    if user_id is not None:
+        feature.updated_by = user_id
     # 用例分期是派生值（COALESCE(stage_override, feature.stage)），所以正常情况下
     # 这里一行用例都不用写，功能转正后其下用例自动变成已发布。
     # 只有 cascade=true 时才清掉那些被显式钉在 in_iteration 的 override。
     if cascade:
+        values: dict = {"stage_override": None}
+        if user_id is not None:
+            values["updated_by"] = user_id
         await db.execute(
             update(TestCase)
             .where(TestCase.feature_id == feature.id, TestCase.stage_override == "in_iteration")
-            .values(stage_override=None)
+            .values(**values)
         )
 
 
@@ -180,9 +200,11 @@ async def release_feature(
     feature = await require_feature_access(db, feature_id, user, "admin")
     if feature.stage == "released":
         raise HTTPException(status.HTTP_409_CONFLICT, "该功能已是正式功能")
-    await _release_one(db, feature, body.cascade)
+    await _release_one(db, feature, body.cascade, user.id)
+    feature.updated_by = user.id
     await db.commit()
     await db.refresh(feature)
+    await attach_user_names(db, [feature])
     return feature
 
 
@@ -196,8 +218,10 @@ async def reopen_feature(
     # 回退不碰 stage_override：用户显式钉选的用例保持原样
     feature.stage = "in_iteration"
     feature.released_at = None
+    feature.updated_by = user.id
     await db.commit()
     await db.refresh(feature)
+    await attach_user_names(db, [feature])
     return feature
 
 
@@ -212,7 +236,8 @@ async def bulk_release(
         if feature.stage == "released":
             skipped.append(str(feature_id))
             continue
-        await _release_one(db, feature, cascade)
+        await _release_one(db, feature, cascade, user.id)
+        feature.updated_by = user.id
         released.append(str(feature_id))
     await db.commit()
     return {"released": released, "skipped": skipped}

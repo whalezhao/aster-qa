@@ -684,6 +684,18 @@ export default function ProjectDetail() {
               ),
             },
             {
+              title: t('创建人'),
+              dataIndex: 'created_by_name',
+              width: 110,
+              render: (v: string | null) => v || '-',
+            },
+            {
+              title: t('修改人'),
+              dataIndex: 'updated_by_name',
+              width: 110,
+              render: (v: string | null) => v || '-',
+            },
+            {
               title: t('操作'),
               width: 360,
               render: (_, r) => (
