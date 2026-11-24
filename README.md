@@ -132,7 +132,7 @@ docker compose up -d
 
 ```bash
 cp .env.example .env
-# 编辑 .env：DOCKERHUB_NAMESPACE=whalezhao，ASTER_QA_VERSION=0.2.0
+# 编辑 .env：DOCKERHUB_NAMESPACE=whalezhao，ASTER_QA_VERSION=0.3.0
 docker compose pull
 docker compose up -d
 ```

@@ -23,6 +23,7 @@ const RunDetail = lazy(() => import('./pages/RunDetail'));
 const Stats = lazy(() => import('./pages/Stats'));
 const Workers = lazy(() => import('./pages/Workers'));
 const Users = lazy(() => import('./pages/Users'));
+const ReleaseNotes = lazy(() => import('./pages/ReleaseNotes'));
 
 function PageLoading() {
   return (
@@ -74,6 +75,7 @@ export default function App() {
         <Route path="/runs/:rid" element={<RunDetail />} />
         <Route path="/stats" element={<Stats />} />
         <Route path="/workers" element={<Workers />} />
+        <Route path="/release-notes" element={<ReleaseNotes />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
       </Routes>

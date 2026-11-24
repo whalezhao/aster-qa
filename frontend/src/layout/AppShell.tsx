@@ -24,6 +24,7 @@ import { TeamProvider } from '../team/TeamContext';
 import { useTheme } from '../theme/ThemeContext';
 import UserAvatar from '../components/UserAvatar';
 import AgentPresence from '../components/AgentPresence';
+import ReleaseNotesButton from '../components/ReleaseNotesButton';
 import LocaleSwitch from '../i18n/LocaleSwitch';
 import { getLocale, t } from '../i18n';
 
@@ -62,6 +63,7 @@ const MENU_PREFIXES = [
   '/runs',
   '/stats',
   '/workers',
+  '/release-notes',
 ];
 
 /**
@@ -169,6 +171,7 @@ export default function AppShell() {
             icon={isDark ? <SunOutlined /> : <MoonOutlined />}
             onClick={toggle}
           />,
+          <ReleaseNotesButton key="release-notes" />,
         ]}
         avatarProps={{
           render: () => (

@@ -4,6 +4,7 @@ import { cases } from './en/cases';
 import { team } from './en/team';
 import { misc } from './en/misc';
 import { server } from './en/server';
+import { releaseNotes } from './en/release';
 
 /**
  * 英文总表。按改造批次拆成几个文件，改动互不冲突；
@@ -16,4 +17,5 @@ export const en: Record<string, string> = {
   ...team,
   ...misc,
   ...server,
+  ...releaseNotes,
 };
