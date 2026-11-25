@@ -1892,3 +1892,80 @@ html[data-theme='dark'] .qa-case-frame .ant-image-img {
 .qa-formal-sign-lines span {
   min-width: 220px;
 }
+
+/* 用例 AI 面板：对话 / 目录 / 步骤 / YAML 的横向拖拽分栏 */
+.qa-split-row {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.qa-split-pane {
+  min-width: 0;
+}
+
+.qa-split-handle {
+  flex: 0 0 10px;
+  align-self: stretch;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: 4px;
+  outline: none;
+}
+
+.qa-split-handle::after,
+.qa-step-split-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 42px;
+  transform: translate(-50%, -50%);
+  border-radius: 3px;
+  background: currentColor;
+  opacity: 0.24;
+  transition: opacity 0.15s;
+}
+
+.qa-split-handle:hover::after,
+.qa-split-handle:focus-visible::after,
+.qa-step-split-handle:hover::after,
+.qa-step-split-handle:focus-visible::after {
+  opacity: 0.72;
+}
+
+.qa-split-handle:focus-visible,
+.qa-step-split-handle:focus-visible {
+  outline: 2px solid #4f8cff;
+  outline-offset: -2px;
+}
+
+.qa-step-split-handle {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+@media (max-width: 991px) {
+  .qa-split-row {
+    flex-direction: column;
+  }
+
+  .qa-split-pane {
+    flex: 0 0 auto !important;
+    width: 100%;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .qa-split-row > .qa-split-handle {
+    display: none;
+  }
+
+  .qa-step-split-handle-overlay {
+    display: none;
+  }
+}

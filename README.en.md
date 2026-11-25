@@ -48,6 +48,9 @@ also the idea behind the logo.
   The same key can point to different files in different environments. Cases reference it
   through the `upload` node; the `download` node waits for a browser download, can assert
   its filename/size, and keeps the downloaded file on the run.
+- **Environment login-session reuse**: choose a login case (and an optional check case)
+  from an environment. Runs reuse that environment’s Playwright `storageState`; when the
+  session expires, the login case is re-run and failed cases can be retried once.
 - **Notification channels**: generic HMAC webhooks plus WeCom, Feishu, DingTalk and Slack
   bots.
 - **Compliance-ready reports**: when one execution spans multiple projects, the run

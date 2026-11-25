@@ -19,6 +19,7 @@ import {
 import type { RunDetail } from '../api/types';
 import { t } from '../i18n';
 import { stepKindLabel, yamlRows, type Step, type StepOption } from '../lib/caseYaml';
+import { useResizablePercent } from '../lib/useResizablePercent';
 
 const STEP_COLORS = [
   '#7dd3fc',
@@ -55,6 +56,7 @@ export default function StepYamlPanel({
   highlightKey,
 }: Props) {
   const { token } = theme.useToken();
+  const stepSplit = useResizablePercent('qa-split-step-yaml', 53, 25, 75);
   const rows = yamlRows(yaml, steps);
   const results = new Map(
     (trial?.step_results ?? []).map((item) => [
@@ -64,7 +66,7 @@ export default function StepYamlPanel({
   );
   const grid: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1.15fr) 18px minmax(0, 1fr)',
+    gridTemplateColumns: `${stepSplit.percent}% 10px minmax(0, 1fr)`,
     alignItems: 'stretch',
   };
 
@@ -74,9 +76,16 @@ export default function StepYamlPanel({
   };
 
   return (
-    <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 10, overflow: 'hidden' }}>
+    <div
+      style={{
+        position: 'relative',
+        border: `1px solid ${token.colorBorderSecondary}`,
+        borderRadius: 10,
+        overflow: 'hidden',
+      }}
+    >
       <div style={{ maxHeight: 620, overflowY: 'auto' }}>
-        <div style={grid}>
+        <div ref={stepSplit.containerRef} style={grid}>
           {[
             t('步骤'),
             '',
@@ -258,6 +267,20 @@ export default function StepYamlPanel({
           })}
         </div>
       </div>
+      <div
+        className="qa-step-split-handle qa-step-split-handle-overlay"
+        {...stepSplit.handleProps}
+        aria-label={t('调整步骤列宽度')}
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: `${stepSplit.percent}%`,
+          width: 10,
+          color: token.colorTextTertiary,
+          zIndex: 3,
+        }}
+      />
     </div>
   );
 }

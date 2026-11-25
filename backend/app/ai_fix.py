@@ -17,6 +17,7 @@ from .modelconfig import missing_fields
 from .models import CaseResult, Feature, Project, ProjectFile, ProjectModelConfig, Run, TestCase
 from .quota import ensure_quota, record_usage
 from .runner.parsers import read_case_evidence
+from .yamlcheck import structure_regression
 from .yamlcheck import validate as validate_yaml
 
 SUCCESS_STATUSES = {"success", "passed"}
@@ -36,8 +37,16 @@ SYSTEM_PROMPT = """你是 UI 自动化测试用例修复助手。用户会给你
   失败与文件有关时，优先检查 key 是否存在、upload 的上传入口描述是否准确、
   download 的 trigger 是否真的会触发浏览器下载。
 - 如果失败原因明确是产品缺陷、无法通过改用例绕过，就不要硬改，直接在说明里讲清楚。
+- **必须输出完整 YAML，禁止省略、截断或用“...”代替内容。** 原始 YAML 里的所有 case、
+  每条 case 的所有步骤、beforeAll/beforeEach/afterEach/afterAll 都必须保留；除了失败步骤
+  本身需要替换外，不能删除、合并或丢掉后面的任何步骤。只能替换失败步骤的内容。
 - 最终把完整 YAML 放在 ```yaml 代码块里；代码块外写简短的原因说明。
 """
+
+FIX_MAX_TOKENS = 16384
+COMPLETE_RETRY = """你上一次返回的 YAML 不完整：{problem}。
+请重新输出**完整** YAML：保留原用例的所有 case、所有步骤和生命周期步骤，只允许替换失败步骤，
+禁止删除、省略或截断任何后续内容。必须用完整的 ```yaml 代码块包住整份 YAML。"""
 
 
 @dataclass
@@ -152,24 +161,58 @@ async def propose_case_fix(
         "请判断根因并给出修复后的完整 YAML。"
     )
 
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
     try:
         reply, usage = await call_model(
             config,
-            [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            timeout=120.0,
-            max_tokens=4096,
+            messages,
+            timeout=240.0,
+            max_tokens=FIX_MAX_TOKENS,
         )
     except (httpx.HTTPError, ValueError) as exc:
-        raise RuntimeError(describe_model_error(exc, timeout=120.0)) from exc
+        raise RuntimeError(describe_model_error(exc, timeout=240.0)) from exc
 
     await record_usage(db, project_id, "case_fix", usage)
-    proposed = extract_yaml(reply)
+    proposed = extract_yaml(reply, allow_bare=False)
+    problem = (
+        "没有返回完整的 ```yaml 代码块"
+        if not proposed
+        else structure_regression(case.yaml_content, proposed)
+    )
+    if problem:
+        # 长 YAML 很容易被输出上限截断，或者模型只给一个前缀。绝不能让这种结果
+        # 进入「应用并保存」——否则会静默删掉后面的步骤/用例。只重试一次。
+        retry_messages = [
+            *messages,
+            {"role": "user", "content": COMPLETE_RETRY.format(problem=problem)},
+        ]
+        try:
+            retry_reply, retry_usage = await call_model(
+                config,
+                retry_messages,
+                timeout=240.0,
+                max_tokens=FIX_MAX_TOKENS,
+            )
+        except (httpx.HTTPError, ValueError) as exc:
+            raise RuntimeError(describe_model_error(exc, timeout=240.0)) from exc
+        await record_usage(db, project_id, "case_fix", retry_usage)
+        proposed = extract_yaml(retry_reply, allow_bare=False)
+        problem = (
+            "仍然没有返回完整的 ```yaml 代码块"
+            if not proposed
+            else structure_regression(case.yaml_content, proposed)
+        )
+        if problem:
+            raise ValueError(
+                f"模型返回的 YAML 不完整（{problem}），已拒绝保存；请重试或换一个模型"
+            )
+        reply = retry_reply
+
     if not proposed:
         raise ValueError("模型没有返回 YAML，请重试或换一个模型")
-
     errors, _ = validate_yaml(proposed)
     return FixProposal(
         run_id=run.id,

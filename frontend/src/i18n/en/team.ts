@@ -453,6 +453,35 @@ export const team: Record<string, string> = {
   '只能包含字母、数字、下划线，且不能以数字开头':
     'Only letters, digits and underscores; cannot start with a digit',
 
+  // ---- 登录会话 ----
+  登录会话: 'Login session',
+  '登录会话 · {name}': 'Login session · {name}',
+  '仅对当前环境生效；主用例执行前优先复用该环境的浏览器会话。':
+    'Applies to this environment only; normal cases reuse this environment’s browser session first.',
+  启用登录会话保持: 'Enable session reuse',
+  '主用例执行前优先复用该环境的浏览器会话，避免每条 YAML 重新登录。':
+    'Reuse this environment’s browser session before normal cases run, avoiding a login for every YAML.',
+  登录用例: 'Login case',
+  检查用例: 'Check case',
+  选择功能: 'Select feature',
+  选择登录用例: 'Select login case',
+  '可选：登录后检查': 'Optional: post-login check',
+  '可选。执行前先用缓存访问一个登录后页面，失败则刷新登录。':
+    'Optional. Use the cached session to open a logged-in page first; refresh the login if it fails.',
+  缓存有效期: 'Cache TTL',
+  分钟: 'minutes',
+  会话过期自动重试: 'Retry failed cases after session expiry',
+  保存会话配置: 'Save session config',
+  '登录用例应是单 case YAML；它不会参与普通用例的通过率统计。':
+    'The login case should be a single-case YAML; it is excluded from normal pass-rate statistics.',
+  还没有环境会话缓存: 'No environment session cache yet',
+  最近刷新: 'Last refreshed',
+  正常: 'OK',
+  清除缓存: 'Clear cache',
+  请选择登录会话用例: 'Please select a login case',
+  登录会话配置已保存: 'Session config saved',
+  会话缓存已清除: 'Session cache cleared',
+
   // ---- 定时任务 ----
   定时计划已保存: 'Schedule saved',
   定时计划已删除: 'Schedule deleted',

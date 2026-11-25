@@ -112,3 +112,36 @@ def validate(text: str) -> tuple[list[str], int]:
             errors.append(f"{key} 必须是列表")
 
     return errors, len(cases)
+
+
+def structure_regression(old_text: str, new_text: str) -> str | None:
+    """AI 修复时防止「只改前几行、后面被截掉」。
+
+    修复可以替换内容、追加步骤，但不能减少用例数、某条用例的步骤数或生命周期步骤数。
+    返回 None 表示结构没有缩水；否则返回给用户看的原因。
+    """
+    try:
+        old = yaml.safe_load(old_text)
+        new = yaml.safe_load(new_text)
+    except yaml.YAMLError:
+        return "修复后的内容不是合法 YAML"
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return "修复后的内容不是用例 YAML 文档"
+
+    old_cases = [case for case in (old.get("cases") or []) if isinstance(case, dict)]
+    new_cases = [case for case in (new.get("cases") or []) if isinstance(case, dict)]
+    if len(new_cases) < len(old_cases):
+        return f"用例数从 {len(old_cases)} 减少到 {len(new_cases)}"
+
+    for index, (before, after) in enumerate(zip(old_cases, new_cases), 1):
+        old_steps = len(before.get("steps") or [])
+        new_steps = len(after.get("steps") or [])
+        if new_steps < old_steps:
+            return f"第 {index} 条用例的步骤从 {old_steps} 减少到 {new_steps}"
+
+    for phase in ("beforeAll", "beforeEach", "afterEach", "afterAll"):
+        old_steps = len(old.get(phase) or [])
+        new_steps = len(new.get(phase) or [])
+        if new_steps < old_steps:
+            return f"{phase} 的步骤从 {old_steps} 减少到 {new_steps}"
+    return None

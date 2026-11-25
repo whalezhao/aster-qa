@@ -21,6 +21,7 @@ from ..modelconfig import configured_project_ids_stmt, missing_fields, row_confi
 from ..models import Project, ProjectModelConfig, ProjectModelHealth
 from ..project_files import remove_project_assets
 from ..quota import project_month_usage, record_usage
+from ..runner import session as session_mod
 from ..schemas import (
     ModelConfigIn,
     ModelConfigOut,
@@ -120,6 +121,7 @@ async def delete_project(project_id: uuid.UUID, user: CurrentUser, db: DbSession
     await db.delete(project)
     await db.commit()
     remove_project_assets(get_settings().assets_path, team_id, project_id)
+    session_mod.remove_project_sessions(get_settings().runner_path, project_id)
 
 
 # --------------------------------------------------------------- 项目级模型配置

@@ -282,6 +282,84 @@ class ProjectEnvironmentVariable(Timestamped, Base):
     description: Mapped[str | None] = mapped_column(String(255))
 
 
+class ProjectSessionConfig(Timestamped, Base):
+    """环境级登录会话保持配置。每个环境独立选择登录/检查用例。"""
+
+    __tablename__ = "project_session_configs"
+    __table_args__ = (
+        CheckConstraint(
+            "ttl_seconds BETWEEN 60 AND 86400",
+            name="ck_project_session_configs_ttl",
+        ),
+        Index("ix_project_session_configs_project", "project_id"),
+    )
+
+    environment_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("project_environments.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    login_case_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("test_cases.id", ondelete="SET NULL")
+    )
+    check_case_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("test_cases.id", ondelete="SET NULL")
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    ttl_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=1800)
+    retry_on_expiry: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+
+class ProjectSessionState(Base):
+    """某个项目环境的浏览器会话缓存元数据；真正的 storageState 在共享卷。"""
+
+    __tablename__ = "project_session_states"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "environment_id", name="uq_project_session_states_env"
+        ),
+        Index("ix_project_session_states_project", "project_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    environment_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("project_environments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    login_case_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("test_cases.id", ondelete="SET NULL")
+    )
+    login_case_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("test_case_versions.id", ondelete="SET NULL")
+    )
+    storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    base_url_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    refreshed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+
+
 class ProjectFile(Timestamped, Base):
     """环境测试文件。文件内容在共享卷上，这里只存元数据。
 
@@ -801,6 +879,7 @@ class Run(Timestamped, Base):
         Index("ix_runs_batch", "batch_id"),
         Index("ix_runs_status", "status"),
         Index("ix_runs_started", "started_at"),
+        Index("ix_runs_retry_of", "retry_of_run_id"),
     )
 
     id: Mapped[uuid.UUID] = _pk()
@@ -844,6 +923,10 @@ class Run(Timestamped, Base):
     case_versions: Mapped[dict | None] = mapped_column(JSONB)
     # 单项目任务分片：这个 run 只跑其中一部分用例；为空表示老数据/不分片
     case_ids: Mapped[list[str] | None] = mapped_column(JSONB)
+    # 会话过期自动重试：指向原始 run；非空表示这个 run 本身已经是重试，不再二次重试
+    retry_of_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("runs.id", ondelete="SET NULL")
+    )
     shard_index: Mapped[int | None] = mapped_column(Integer)
     shard_count: Mapped[int | None] = mapped_column(Integer)
     midscene_run_id: Mapped[str | None] = mapped_column(String(64), unique=True)

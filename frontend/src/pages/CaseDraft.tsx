@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   App,
   Button,
-  Col,
   Collapse,
   Form,
   Input,
-  Row,
   Segmented,
   Space,
   Tooltip,
@@ -52,6 +50,7 @@ import UnifiedDiff from '../components/UnifiedDiff';
 import { previewStepOptions, type StepOption } from '../lib/caseYaml';
 import { downloadBlob, testCaseFileName } from '../lib/download';
 import { clearDraft, loadDraft, saveDraft } from '../lib/draft';
+import { useResizablePercent } from '../lib/useResizablePercent';
 import { t } from '../i18n';
 import type { CaseStep, RunDetail, TestCaseDoc } from '../api/types';
 
@@ -89,6 +88,7 @@ export default function CaseDraft() {
   const fid = cid ? (existing?.feature_id ?? '') : (fidParam ?? '');
   const navigate = useNavigate();
   const { message } = App.useApp();
+  const queryClient = useQueryClient();
   const { user: me } = useAuth();
   // 对话区/气泡的颜色走主题 token，深色模式下才不会出现一块刺眼的白
   const { token } = theme.useToken();
@@ -102,6 +102,8 @@ export default function CaseDraft() {
   const [modelSteps, setModelSteps] = useState<CaseStep[] | null>(null);
   const [modelTestCases, setModelTestCases] = useState<TestCaseDoc[] | null>(null);
   const [stepOpts, setStepOpts] = useState<Record<string, StepOption>>({});
+  const chatSplit = useResizablePercent('qa-split-case-chat', 33, 22, 60);
+  const outlineSplit = useResizablePercent('qa-split-case-outline', 33, 18, 50);
   const [appendMode, setAppendMode] = useState(false);
   const [viewMode, setViewMode] = useState<'yaml' | 'table'>('yaml');
   const [diff, setDiff] = useState<string | null>(null);
@@ -111,6 +113,11 @@ export default function CaseDraft() {
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const trialTimer = useRef<number | null>(null);
+  const draftSaveSeq = useRef(0);
+  const draftCleared = useRef(false);
+  useEffect(() => {
+    draftCleared.current = false;
+  }, [draftKey]);
 
   // 任何一处变化都先落本机，数据库请求失败时至少不丢
   useEffect(() => {
@@ -129,6 +136,10 @@ export default function CaseDraft() {
 
   useEffect(() => {
     if (draftHydrated || draftLoading || !draftTarget) return;
+    if (draftCleared.current) {
+      setDraftHydrated(true);
+      return;
+    }
     const local = loadDraft(draftKey);
     const serverHas =
       Boolean(serverDraft?.messages.length) ||
@@ -196,7 +207,9 @@ export default function CaseDraft() {
   // 对话/输入稳定 800ms 后写库；流式生成期间不写，避免把半截回复存进去
   useEffect(() => {
     if (!draftHydrated || busy) return;
+    const seq = ++draftSaveSeq.current;
     const timer = window.setTimeout(() => {
+      if (seq !== draftSaveSeq.current) return;
       const state: CaseAiDraft = { messages, yaml, input };
       void (cid
         ? saveCaseAiDraft(cid, state)
@@ -305,6 +318,22 @@ export default function CaseDraft() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function clearConversation() {
+    // 只清对话，不丢右侧 YAML；同时把数据库草稿改成空对话，
+    // 否则离开页面再回来会从服务端把旧历史重新灌回来。
+    draftCleared.current = true;
+    draftSaveSeq.current += 1;
+    const state: CaseAiDraft = { messages: [], yaml, input: '' };
+    setMessages([]);
+    setInput('');
+    saveDraft(draftKey, state);
+    if (draftTarget) queryClient.setQueryData(['ai-draft', draftTarget], state);
+    void (cid
+      ? saveCaseAiDraft(cid, state)
+      : saveFeatureAiDraft(fidParam as string, state)
+    ).catch((error) => message.error(apiError(error)));
   }
 
   const stopTrial = () => {
@@ -436,9 +465,15 @@ export default function CaseDraft() {
         }
         bodyStyle={{ padding: 12 }}
       >
-        <Row gutter={12}>
+        <div ref={chatSplit.containerRef} className="qa-split-row">
           {/* 左：对话 —— Ant Design X 的 Bubble / Prompts / Sender */}
-          <Col xs={24} lg={8}>
+          <div
+            className="qa-split-pane"
+            style={{
+              flex: `0 0 ${chatSplit.percent}%`,
+              paddingRight: 6,
+            }}
+          >
             <div
               style={{
                 height: 620,
@@ -556,18 +591,25 @@ export default function CaseDraft() {
                   <Button
                     type="link"
                     size="small"
-                    disabled={busy || messages.length === 0}
-                    onClick={() => setMessages([])}
+                    disabled={busy}
+                    onClick={clearConversation}
                   >
                     {t('清空对话')}
                   </Button>
                 </Tooltip>
               </div>
             </div>
-          </Col>
+          </div>
+
+          <div
+            className="qa-split-handle"
+            {...chatSplit.handleProps}
+            style={{ color: token.colorTextTertiary }}
+            aria-label={t('调整对话宽度')}
+          />
 
           {/* 右：步骤 / YAML 对照 —— 用主题色而不是写死的深色 */}
-          <Col xs={24} lg={16}>
+          <div className="qa-split-pane" style={{ flex: '1 1 0', paddingLeft: 6 }}>
             <div
               style={{
                 minHeight: 620,
@@ -627,11 +669,20 @@ export default function CaseDraft() {
                 viewMode === 'table' ? (
                   <CaseTestTable cases={testCases} />
                 ) : (
-                <Row gutter={[12, 12]}>
-                  <Col xs={24} lg={6}>
+                <div ref={outlineSplit.containerRef} className="qa-split-row">
+                  <div
+                    className="qa-split-pane"
+                    style={{ flex: `0 0 ${outlineSplit.percent}%`, paddingRight: 6 }}
+                  >
                     <CaseOutline steps={steps} onJump={jumpTo} />
-                  </Col>
-                  <Col xs={24} lg={18}>
+                  </div>
+                  <div
+                    className="qa-split-handle"
+                    {...outlineSplit.handleProps}
+                    style={{ color: token.colorTextTertiary }}
+                    aria-label={t('调整目录宽度')}
+                  />
+                  <div className="qa-split-pane" style={{ flex: '1 1 0', paddingLeft: 6 }}>
                     <StepYamlPanel
                       yaml={previewYaml}
                       steps={steps}
@@ -646,8 +697,8 @@ export default function CaseDraft() {
                       }
                       highlightKey={highlightKey ?? undefined}
                     />
-                  </Col>
-                </Row>
+                  </div>
+                </div>
                 )
               ) : (
                 <div
@@ -819,8 +870,8 @@ export default function CaseDraft() {
                 </Form>
               </>
             )}
-          </Col>
-        </Row>
+          </div>
+        </div>
       </ProCard>
     </div>
   );

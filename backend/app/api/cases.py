@@ -58,6 +58,7 @@ from ..schemas import (
 )
 from ..testcase_export import build_test_case_workbook, rows_from_yaml
 from ..user_names import attach_user_names
+from ..yamlcheck import structure_regression
 from ..yamlcheck import validate as validate_yaml
 
 router = APIRouter(tags=["cases"])
@@ -457,6 +458,13 @@ async def update_case(
     source = body.change_source or "manual"
     if source not in {"manual", "ai_fix"}:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "非法版本来源")
+    if source == "ai_fix" and "yaml_content" in data:
+        problem = structure_regression(case.yaml_content, data["yaml_content"])
+        if problem:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"AI 修复结果不完整（{problem}），已拒绝保存；请重新生成",
+            )
     for field, value in data.items():
         setattr(case, field, value)
     case.updated_by = user.id

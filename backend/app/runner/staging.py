@@ -38,6 +38,7 @@ _SAFE_RUN_ID = re.compile(r"[A-Za-z0-9._-]+")
 CONFIG_TEMPLATE = """\
 // 本文件由 Aster QA 平台按次生成，请勿手工修改。
 // run_id: __RUN_ID__
+import fs from 'node:fs';
 import type { NodeExecutionContext } from '@midscene/test';
 import { defineProjectSetup, defineTestProject } from '@midscene/test/config';
 import { createMidsceneNodes } from '@midscene/test/midscene';
@@ -76,10 +77,24 @@ const setup = defineProjectSetup<ProjectContext>({
       headless: env.HEADLESS !== 'false',
       args: noSandbox ? ['--no-sandbox', '--disable-dev-shm-usage'] : [],
     });
-    onTeardown(() => browser.close());
-    const page = await browser.newPage();
+    // 跨 run 的登录会话：正常 run 注入 storageState 缓存；登录初始化 run
+    // 通过 QA_SESSION_SAVE_PATH 把登录后的 cookie/localStorage 写回共享目录。
+    const statePath = process.env.QA_SESSION_STATE;
+    const browserContext = await browser.newContext(
+      statePath && fs.existsSync(statePath) ? { storageState: statePath } : undefined,
+    );
+    const page = await browserContext.newPage();
     const context: ProjectContext = { page };
-    onTeardown(async () => { await context.agent?.destroy(); });
+    onTeardown(async () => {
+      await context.agent?.destroy();
+      try {
+        const savePath = process.env.QA_SESSION_SAVE_PATH;
+        if (savePath) await browserContext.storageState({ path: savePath });
+      } finally {
+        await browserContext.close();
+        await browser.close();
+      }
+    });
     return context;
   },
 });

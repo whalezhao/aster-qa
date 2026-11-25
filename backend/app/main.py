@@ -26,6 +26,7 @@ from .api import (
     projects,
     runs,
     schedules,
+    session,
     settings,
     stats,
     tags,
@@ -130,6 +131,7 @@ app.include_router(ai_drafts.router)
 app.include_router(settings.router)
 app.include_router(environments.router)
 app.include_router(files.router)
+app.include_router(session.router)
 app.include_router(api_tokens.router)
 app.include_router(ci.router)
 app.include_router(preflight.router)

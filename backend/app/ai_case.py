@@ -229,7 +229,7 @@ class DraftResult:
     test_cases: list[dict] | None = None
 
 
-def extract_yaml(reply: str) -> str | None:
+def extract_yaml(reply: str, *, allow_bare: bool = True) -> str | None:
     """从回复里取 YAML。
 
     返回值的三种含义，前端据此决定右侧怎么动：
@@ -247,7 +247,7 @@ def extract_yaml(reply: str) -> str | None:
         content = blocks[-1].strip()
         return f"{content}\n" if content else ""
 
-    return _bare_yaml(reply)
+    return _bare_yaml(reply) if allow_bare else None
 
 
 _YAML_STARTS = ("beforeEach:", "beforeAll:", "cases:")

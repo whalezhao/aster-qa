@@ -183,6 +183,35 @@ class ProjectFilePageOut(BaseModel):
     total: int
 
 
+class SessionStateOut(BaseModel):
+    environment_id: uuid.UUID
+    environment_name: str
+    refreshed_at: datetime | None = None
+    last_used_at: datetime | None = None
+    last_error: str | None = None
+
+
+class SessionConfigOut(BaseModel):
+    project_id: uuid.UUID
+    environment_id: uuid.UUID
+    enabled: bool
+    login_case_id: uuid.UUID | None = None
+    check_case_id: uuid.UUID | None = None
+    login_case_name: str | None = None
+    check_case_name: str | None = None
+    ttl_seconds: int = 1800
+    retry_on_expiry: bool = True
+    states: list[SessionStateOut] = []
+
+
+class SessionConfigIn(In):
+    enabled: bool = False
+    login_case_id: uuid.UUID | None = None
+    check_case_id: uuid.UUID | None = None
+    ttl_seconds: int = Field(default=1800, ge=60, le=86400)
+    retry_on_expiry: bool = True
+
+
 class ModelConfigOut(BaseModel):
     """项目级模型配置。
 

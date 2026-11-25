@@ -642,6 +642,35 @@ export interface ProjectFilePage {
   total: number;
 }
 
+export interface SessionState {
+  environment_id: string;
+  environment_name: string;
+  refreshed_at: string | null;
+  last_used_at: string | null;
+  last_error: string | null;
+}
+
+export interface SessionConfig {
+  project_id: string;
+  environment_id: string;
+  enabled: boolean;
+  login_case_id: string | null;
+  check_case_id: string | null;
+  login_case_name: string | null;
+  check_case_name: string | null;
+  ttl_seconds: number;
+  retry_on_expiry: boolean;
+  states: SessionState[];
+}
+
+export interface SessionConfigInput {
+  enabled: boolean;
+  login_case_id: string | null;
+  check_case_id: string | null;
+  ttl_seconds: number;
+  retry_on_expiry: boolean;
+}
+
 export interface ApiToken {
   id: string;
   team_id: string;

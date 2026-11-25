@@ -14,6 +14,7 @@ from app.project_files import (
     validate_file_key,
 )
 from app.runner import staging
+from app.yamlcheck import structure_regression
 from app.yamlcheck import validate as validate_yaml
 
 
@@ -221,6 +222,49 @@ cases:
         "timeoutMs": 30000,
         "saveAs": "result.txt",
     }
+
+
+def test_structure_regression_rejects_truncated_repair():
+    old = """
+beforeEach:
+  - gotoUrl: ${BASE_URL}
+cases:
+  - name: A
+    steps:
+      - aiAct: a1
+      - aiAct: a2
+      - aiAssert: 最后一条
+  - name: B
+    steps:
+      - aiAct: b1
+"""
+    # 只改前面一步，步骤数不变：允许
+    same = old.replace("a1", "a1-fixed")
+    assert structure_regression(old, same) is None
+
+    # 后面的步骤被截掉：拒绝
+    truncated = """
+cases:
+  - name: A
+    steps:
+      - aiAct: a1-fixed
+"""
+    assert "用例数" in (structure_regression(old, truncated) or "")
+
+    # 用例还在，但最后一步/第二条 case 被删：拒绝
+    fewer_steps = """
+beforeEach:
+  - gotoUrl: ${BASE_URL}
+cases:
+  - name: A
+    steps:
+      - aiAct: a1-fixed
+      - aiAct: a2
+  - name: B
+    steps:
+      - aiAct: b1
+"""
+    assert "第 1 条用例的步骤" in (structure_regression(old, fewer_steps) or "")
 
 
 def test_stage_copies_referenced_file(tmp_path):

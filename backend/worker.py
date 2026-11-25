@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import signal
 import socket
 import time
@@ -43,6 +44,8 @@ from app.models import (
     ProjectEnvironment,
     ProjectFile,
     ProjectModelConfig,
+    ProjectSessionConfig,
+    ProjectSessionState,
     Run,
     RunBatch,
     TaskCase,
@@ -55,6 +58,7 @@ from app.project_files import referenced_file_keys, resolve_storage_path
 from app.quality_gate import evaluate_gate
 from app.runner import execute as exec_mod
 from app.runner import parsers, persist, staging
+from app.runner import session as session_mod
 from app.taskstatus import ACTIVE_RUN_STATUSES, refresh_task_status
 from app.webhook import enqueue
 
@@ -112,6 +116,8 @@ def _build_env(
     project_id: uuid.UUID | None = None,
     cache: bool = True,
     max_download_bytes: int = 50 * 1024 * 1024,
+    session_state: Path | None = None,
+    session_save_path: Path | None = None,
 ) -> dict[str, str]:
     """组装子进程环境。
 
@@ -152,6 +158,14 @@ def _build_env(
     env["QA_FILES_DIR"] = str(staged.files_dir)
     env["QA_DOWNLOADS_DIR"] = str(staged.downloads_dir)
     env["QA_MAX_DOWNLOAD_BYTES"] = str(max_download_bytes)
+    if session_state is not None:
+        env["QA_SESSION_STATE"] = str(session_state)
+    else:
+        env.pop("QA_SESSION_STATE", None)
+    if session_save_path is not None:
+        env["QA_SESSION_SAVE_PATH"] = str(session_save_path)
+    else:
+        env.pop("QA_SESSION_SAVE_PATH", None)
 
     # 复刻参考实现的做法：每次执行换一个上游会话头，避免所有 run 挤在同一个会话里
     raw = env.get("MIDSCENE_MODEL_INIT_CONFIG_JSON")
@@ -287,6 +301,274 @@ async def bind_case_versions(
     return mapping
 
 
+async def _latest_case_version(db, case_id: uuid.UUID) -> TestCaseVersion | None:
+    return (
+        await db.execute(
+            select(TestCaseVersion)
+            .where(TestCaseVersion.case_id == case_id)
+            .order_by(TestCaseVersion.version_no.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+async def _run_session_case(
+    *,
+    case: TestCase,
+    runner_root: Path,
+    runner_env: dict[str, str],
+    project_overrides: dict[str, str],
+    secret_vars: dict[str, str],
+    variables: dict[str, str],
+    base_url: str | None,
+    project_id: uuid.UUID,
+    settings,
+    cache: bool,
+    session_state: Path | None,
+    save_path: Path | None,
+) -> tuple[bool, str | None]:
+    """跑一次登录/检查用例，不创建用户可见的 Run。"""
+    run_id = uuid.uuid4()
+    try:
+        staged = staging.stage(
+            runner_root=runner_root,
+            run_id=run_id,
+            cases=[(case.id, case.yaml_content)],
+            base_url=base_url,
+            retry=0,
+            timeout_ms=settings.case_timeout_ms,
+            variables=variables,
+            files=[],
+        )
+    except (OSError, ValueError) as exc:
+        return False, f"准备会话用例失败：{exc}"
+
+    try:
+        outcome = await exec_mod.execute(
+            runner_root=runner_root,
+            staged=staged,
+            env=_build_env(
+                runner_env,
+                staged,
+                runner_root,
+                project_overrides,
+                secret_vars,
+                project_id=project_id,
+                cache=cache,
+                max_download_bytes=settings.max_download_bytes,
+                session_state=session_state,
+                session_save_path=save_path,
+            ),
+            timeout_ms=max(settings.case_timeout_ms * 2, 120_000),
+        )
+        summary = parsers.parse_summary(staged.result_dir)
+        status, error = parsers.run_outcome(
+            summary, cancelled=outcome.cancelled, timed_out=outcome.timed_out
+        )
+        if outcome.spawn_error:
+            return False, outcome.spawn_error
+        if status != "succeeded" or (summary.failed or 0) > 0:
+            errors_text = "；".join(summary.errors) if summary.errors else ""
+            detail = error or errors_text or "用例未通过"
+            tail = (outcome.stdout_tail or "").strip()[-800:]
+            return False, f"{detail}" + (f"\n{tail}" if tail else "")
+        if (summary.total or 0) < 1:
+            return False, "会话用例没有产出结果"
+        if save_path is not None and not session_mod.is_readable_storage_state(save_path):
+            return False, "登录用例执行了，但没有生成可用的 storageState"
+        return True, None
+    finally:
+        shutil.rmtree(staged.work_dir, ignore_errors=True)
+
+
+async def prepare_session(
+    *,
+    db,
+    run: Run,
+    env_row: ProjectEnvironment,
+    runner_root: Path,
+    runner_env: dict[str, str],
+    project_overrides: dict[str, str],
+    secret_vars: dict[str, str],
+    plain_vars: dict[str, str],
+    base_url: str | None,
+    settings,
+    cache: bool,
+    force_refresh: bool = False,
+) -> tuple[Path | None, bool, str | None]:
+    """确保当前环境有可用会话。返回 (缓存路径, 是否刷新, 错误)。"""
+    if run.project_id is None:
+        return None, False, None
+    config = await db.get(ProjectSessionConfig, env_row.id)
+    if config is None or not config.enabled or config.login_case_id is None:
+        return None, False, None
+    login_case = await db.get(TestCase, config.login_case_id)
+    if login_case is None:
+        return None, False, "登录会话用例不存在，请重新配置"
+    check_case = (
+        await db.get(TestCase, config.check_case_id) if config.check_case_id else None
+    )
+    latest = await _latest_case_version(db, login_case.id)
+    version_id = latest.id if latest else None
+    url_hash = session_mod.base_url_hash(base_url)
+    cache_path = session_mod.storage_state_path(
+        runner_root, config.project_id, env_row.id
+    )
+    storage_path = session_mod.storage_relative_path(config.project_id, env_row.id)
+
+    async def current_state() -> ProjectSessionState | None:
+        return (
+            await db.execute(
+                select(ProjectSessionState).where(
+                    ProjectSessionState.project_id == config.project_id,
+                    ProjectSessionState.environment_id == env_row.id,
+                )
+            )
+        ).scalar_one_or_none()
+
+    def valid(state: ProjectSessionState | None) -> bool:
+        if state is None or not cache_path.is_file():
+            return False
+        if not session_mod.is_readable_storage_state(cache_path):
+            return False
+        if state.login_case_id != login_case.id:
+            return False
+        if state.login_case_version_id != version_id:
+            return False
+        if state.base_url_hash != url_hash:
+            return False
+        age = datetime.now(UTC) - state.refreshed_at
+        return age.total_seconds() <= config.ttl_seconds
+
+    async def refresh() -> tuple[bool, str | None]:
+        state = await current_state()
+        if state is None:
+            state = ProjectSessionState(
+                project_id=config.project_id,
+                environment_id=env_row.id,
+                login_case_id=login_case.id,
+                login_case_version_id=version_id,
+                storage_path=storage_path,
+                base_url_hash=url_hash,
+            )
+            db.add(state)
+        temp = cache_path.with_name(f".storage.{uuid.uuid4().hex}.tmp")
+        temp.parent.mkdir(parents=True, exist_ok=True)
+        ok, error = await _run_session_case(
+            case=login_case,
+            runner_root=runner_root,
+            runner_env=runner_env,
+            project_overrides=project_overrides,
+            secret_vars=secret_vars,
+            variables=plain_vars,
+            base_url=base_url,
+            project_id=config.project_id,
+            settings=settings,
+            cache=cache,
+            session_state=None,
+            save_path=temp,
+        )
+        if not ok:
+            temp.unlink(missing_ok=True)
+            state.last_error = error
+            await db.flush()
+            return False, error
+        session_mod.install_storage_state(temp, cache_path)
+        state.login_case_id = login_case.id
+        state.login_case_version_id = version_id
+        state.storage_path = storage_path
+        state.base_url_hash = url_hash
+        state.refreshed_at = datetime.now(UTC)
+        state.last_used_at = datetime.now(UTC)
+        state.last_error = None
+        await db.flush()
+        return True, None
+
+    async def run_check() -> tuple[bool, str | None]:
+        assert check_case is not None
+        return await _run_session_case(
+            case=check_case,
+            runner_root=runner_root,
+            runner_env=runner_env,
+            project_overrides=project_overrides,
+            secret_vars=secret_vars,
+            variables=plain_vars,
+            base_url=base_url,
+            project_id=config.project_id,
+            settings=settings,
+            cache=cache,
+            session_state=cache_path,
+            save_path=None,
+        )
+
+    state = await current_state()
+    if not force_refresh and valid(state):
+        if check_case is None:
+            if state is not None:
+                state.last_used_at = datetime.now(UTC)
+                state.last_error = None
+                await db.flush()
+            return cache_path, False, None
+        check_ok, _check_error = await run_check()
+        if check_ok:
+            if state is not None:
+                state.last_used_at = datetime.now(UTC)
+                state.last_error = None
+                await db.flush()
+            return cache_path, False, None
+        # 缓存看起来有效，但登录后页面打不开：进入刷新流程
+
+    try:
+        with session_mod.session_lock(runner_root, config.project_id, env_row.id):
+            state = await current_state()
+            if not force_refresh and valid(state) and check_case is None:
+                if state is not None:
+                    state.last_used_at = datetime.now(UTC)
+                    state.last_error = None
+                    await db.flush()
+                return cache_path, False, None
+            ok, error = await refresh()
+            if not ok:
+                return None, False, error or "登录会话初始化失败"
+
+            if check_case is not None and not force_refresh:
+                check_ok, check_error = await _run_session_case(
+                    case=check_case,
+                    runner_root=runner_root,
+                    runner_env=runner_env,
+                    project_overrides=project_overrides,
+                    secret_vars=secret_vars,
+                    variables=plain_vars,
+                    base_url=base_url,
+                    project_id=config.project_id,
+                    settings=settings,
+                    cache=cache,
+                    session_state=cache_path,
+                    save_path=None,
+                )
+                if not check_ok:
+                    ok, error = await refresh()
+                    if not ok:
+                        return None, False, error or "登录会话刷新失败"
+                    check_ok, check_error = await _run_session_case(
+                        case=check_case,
+                        runner_root=runner_root,
+                        runner_env=runner_env,
+                        project_overrides=project_overrides,
+                        secret_vars=secret_vars,
+                        variables=plain_vars,
+                        base_url=base_url,
+                        project_id=config.project_id,
+                        settings=settings,
+                        cache=cache,
+                        session_state=cache_path,
+                        save_path=None,
+                    )
+                    if not check_ok:
+                        return None, False, check_error or "登录会话检查失败"
+            return cache_path, True, None
+    except OSError as exc:
+        return None, False, f"登录会话缓存不可用：{exc}"
 
 
 async def notify_batch_finished(db, run: Run) -> None:
@@ -503,6 +785,34 @@ async def process(run_id: uuid.UUID) -> None:
         if not cases:
             await _fail(db, run, "任务下没有可执行的用例")
             return
+        env_row = None
+        if run.environment_id:
+            env_row = await db.get(ProjectEnvironment, run.environment_id)
+        if env_row is None and run.project_id:
+            env_name = (run.environment_name or "默认").strip() or "默认"
+            env_row = (
+                await db.execute(
+                    select(ProjectEnvironment).where(
+                        ProjectEnvironment.project_id == run.project_id,
+                        ProjectEnvironment.name == env_name,
+                    )
+                )
+            ).scalar_one_or_none()
+            if env_row is None and env_name == "默认":
+                env_row = await ensure_default_environment(db, run.project_id)
+
+        session_config = (
+            await db.get(ProjectSessionConfig, env_row.id) if env_row is not None else None
+        )
+        if session_config is not None and session_config.enabled and not run.is_debug:
+            excluded = {
+                session_config.login_case_id,
+                session_config.check_case_id,
+            } - {None}
+            cases = [case for case in cases if case[0] not in excluded]
+            if not cases:
+                await _fail(db, run, "任务里只包含登录会话用例，没有可执行的普通用例")
+                return
         # 报告里的用例名读脚本内的 name，改名不会自动同步过去，落盘前在这里对齐。
         # 试跑没有 TestCase 可对齐，保持 YAML 里的名字。
         named_cases = (
@@ -542,22 +852,6 @@ async def process(run_id: uuid.UUID) -> None:
             )
             return
         overrides = project_model_overrides(model_config)
-
-        env_row = None
-        if run.environment_id:
-            env_row = await db.get(ProjectEnvironment, run.environment_id)
-        if env_row is None and run.project_id:
-            env_name = (run.environment_name or "默认").strip() or "默认"
-            env_row = (
-                await db.execute(
-                    select(ProjectEnvironment).where(
-                        ProjectEnvironment.project_id == run.project_id,
-                        ProjectEnvironment.name == env_name,
-                    )
-                )
-            ).scalar_one_or_none()
-            if env_row is None and env_name == "默认":
-                env_row = await ensure_default_environment(db, run.project_id)
 
         plain_vars: dict[str, str] = {}
         secret_vars: dict[str, str] = {}
@@ -633,6 +927,31 @@ async def process(run_id: uuid.UUID) -> None:
             )
             return
 
+        debug_cache = run.debug_cache if run.is_debug else True
+        session_state_path: Path | None = None
+        session_used = False
+        if session_config is not None and session_config.enabled and not run.is_debug:
+            if env_row is None:
+                await _fail(db, run, "登录会话需要环境，但执行记录未关联环境")
+                return
+            session_state_path, _refreshed, session_error = await prepare_session(
+                db=db,
+                run=run,
+                env_row=env_row,
+                runner_root=runner_root,
+                runner_env=runner_env,
+                project_overrides=overrides,
+                secret_vars=secret_vars,
+                plain_vars=plain_vars,
+                base_url=base_url,
+                settings=settings,
+                cache=debug_cache,
+            )
+            if session_error:
+                await _fail(db, run, f"登录会话准备失败：{session_error}")
+                return
+            session_used = session_state_path is not None
+
         try:
             staged = staging.stage(
                 runner_root=runner_root,
@@ -661,7 +980,6 @@ async def process(run_id: uuid.UUID) -> None:
             },
             variables={**plain_vars, **{key: "" for key in secret_vars}},
         )
-        debug_cache = run.debug_cache if run.is_debug else True
         run.status = "running"
         await db.commit()
 
@@ -703,6 +1021,7 @@ async def process(run_id: uuid.UUID) -> None:
             project_id=run.project_id,
             cache=debug_cache,
             max_download_bytes=settings.max_download_bytes,
+            session_state=session_state_path,
         ),
         timeout_ms=timeout_ms,
         poll_cancel=poll_cancel,
@@ -767,6 +1086,103 @@ async def process(run_id: uuid.UUID) -> None:
         await refresh_task_status(db, run.task_id)
         # 先把终态落库：后面的 webhook / AI 入队哪怕炸了，也不能让这次 run 卡在 parsing
         await db.commit()
+
+        # 会话过期自动重试：只在用例失败、使用了缓存、不是模型/网络失败时做一次。
+        # 子批次会正常出现在执行记录里，和手动「只重跑失败用例」同一套血缘。
+        if (
+            session_used
+            and not run.is_debug
+            and run.retry_of_run_id is None
+            and run.failed
+            and run.status == "succeeded"
+            and run.failure_kind is None
+            and session_config is not None
+            and session_config.retry_on_expiry
+            and run.task_id is not None
+        ):
+            failed_case_ids: list[uuid.UUID] = []
+            for item in summary.cases:
+                if item.status in {"success", "passed"} or not item.source_path:
+                    continue
+                case_id = staging.case_id_from_source_path(item.source_path)
+                if case_id is not None and case_id not in failed_case_ids:
+                    failed_case_ids.append(case_id)
+            if failed_case_ids:
+                current_env = (
+                    await db.get(ProjectEnvironment, run.environment_id)
+                    if run.environment_id
+                    else None
+                )
+                config = (
+                    await db.get(ProjectSessionConfig, current_env.id)
+                    if current_env is not None
+                    else None
+                )
+                if current_env is not None and config is not None:
+                    _path, _refreshed, retry_error = await prepare_session(
+                        db=db,
+                        run=run,
+                        env_row=current_env,
+                        runner_root=runner_root,
+                        runner_env=runner_env,
+                        project_overrides=overrides,
+                        secret_vars=secret_vars,
+                        plain_vars=plain_vars,
+                        base_url=base_url,
+                        settings=settings,
+                        cache=debug_cache,
+                        force_refresh=True,
+                    )
+                    if retry_error:
+                        log.warning(
+                            "run %s 会话过期重试前刷新登录失败：%s", run.id, retry_error
+                        )
+                    else:
+                        task_row = await db.get(TestTask, run.task_id)
+                        batch_row = (
+                            await db.get(RunBatch, run.batch_id)
+                            if run.batch_id
+                            else None
+                        )
+                        if task_row is not None:
+                            retry_batch = RunBatch(
+                                task_id=run.task_id,
+                                team_id=run.team_id,
+                                iteration_id=run.iteration_id,
+                                name=(
+                                    (batch_row.name if batch_row else task_row.name)
+                                    + "（会话过期重试）"
+                                )[:128],
+                                trigger="rerun",
+                                parent_batch_id=run.batch_id,
+                                environment_name=run.environment_name,
+                                created_by=run.created_by,
+                            )
+                            db.add(retry_batch)
+                            await db.flush()
+                            retry_run = Run(
+                                task_id=run.task_id,
+                                team_id=run.team_id,
+                                project_id=run.project_id,
+                                batch_id=retry_batch.id,
+                                iteration_id=run.iteration_id,
+                                environment_id=run.environment_id,
+                                environment_name=run.environment_name,
+                                environment_base_url=run.environment_base_url,
+                                status="queued",
+                                case_ids=[str(case_id) for case_id in failed_case_ids],
+                                retry_of_run_id=run.id,
+                                created_by=run.created_by,
+                            )
+                            db.add(retry_run)
+                            await refresh_task_status(db, run.task_id)
+                            await db.commit()
+                            log.warning(
+                                "run %s 疑似会话过期，已刷新会话并排队重试 %d 个失败用例（batch=%s）",
+                                run.id,
+                                len(failed_case_ids),
+                                retry_batch.id,
+                            )
 
         # 报告转 Markdown（纯展示层，失败不影响执行结果）
         if run.report_html_path:

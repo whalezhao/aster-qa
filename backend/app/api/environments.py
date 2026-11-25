@@ -21,6 +21,7 @@ from ..models import (
     TestTask,
 )
 from ..project_files import resolve_storage_path
+from ..runner import session as session_mod
 from ..schemas import (
     EnvironmentIn,
     EnvironmentOut,
@@ -245,6 +246,7 @@ async def delete_environment(
             pass
     await db.delete(env)
     await db.commit()
+    session_mod.remove_session(settings.runner_path, project.id, environment_id)
     for path in file_paths:
         path.unlink(missing_ok=True)
         try:

@@ -27,6 +27,7 @@ import {
 import { apiError } from '../api/client';
 import { t } from '../i18n';
 import EnvironmentFilesModal from './EnvironmentFilesModal';
+import EnvironmentSessionModal from './EnvironmentSessionModal';
 import type {
   Environment,
   EnvironmentVariableInput,
@@ -259,6 +260,7 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
   const [formOpen, setFormOpen] = useState(false);
   const [variablesFor, setVariablesFor] = useState<Environment | null>(null);
   const [filesFor, setFilesFor] = useState<Environment | null>(null);
+  const [sessionFor, setSessionFor] = useState<Environment | null>(null);
 
   const { data: environments = [], isLoading } = useQuery({
     queryKey: ['environments', projectId],
@@ -342,7 +344,7 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
           },
           {
             title: t('操作'),
-            width: 300,
+            width: 390,
             render: (_value, row) => (
               <Space>
                 <Button size="small" onClick={() => setVariablesFor(row)}>
@@ -365,6 +367,9 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
                     </Button>
                   </Popconfirm>
                 )}
+                <Button size="small" onClick={() => setSessionFor(row)}>
+                  {t('登录会话')}
+                </Button>
               </Space>
             ),
           },
@@ -398,6 +403,7 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
       </Modal>
       <VariablesModal env={variablesFor} onClose={() => setVariablesFor(null)} />
       <EnvironmentFilesModal env={filesFor} onClose={() => setFilesFor(null)} />
+      <EnvironmentSessionModal env={sessionFor} onClose={() => setSessionFor(null)} />
     </div>
   );
 }
