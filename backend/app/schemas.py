@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 ORM = ConfigDict(from_attributes=True)
 
@@ -907,10 +907,15 @@ class WorkerStatusOut(BaseModel):
     oldest_queue_seconds: int | None = None
 
 
+EnvironmentVariableMode = Literal["fixed", "random_string", "random_number"]
+
+
 class EnvironmentVariableOut(BaseModel):
     id: uuid.UUID
     key: str
     value: str | None = None
+    value_mode: EnvironmentVariableMode = "fixed"
+    random_length: int | None = None
     is_secret: bool
     value_set: bool
     description: str | None = None
@@ -939,9 +944,23 @@ class EnvironmentUpdate(In):
 class EnvironmentVariableIn(In):
     key: str = Field(min_length=1, max_length=64)
     value: str | None = None
+    # None = 旧客户端没传：新行按 fixed，已有行保留原模式
+    value_mode: EnvironmentVariableMode | None = None
+    random_length: int | None = Field(default=None, ge=1, le=128)
     is_secret: bool = False
     description: str | None = Field(default=None, max_length=255)
     clear: bool = False
+
+    @model_validator(mode="after")
+    def _random_length_required(self) -> "EnvironmentVariableIn":
+        if (
+            not self.clear
+            and self.value_mode
+            and self.value_mode != "fixed"
+            and self.random_length is None
+        ):
+            raise ValueError("随机变量必须设置长度")
+        return self
 
 
 class EnvironmentVariablesIn(In):

@@ -5,8 +5,10 @@ import {
   Checkbox,
   Form,
   Input,
+  InputNumber,
   Modal,
   Popconfirm,
+  Select,
   Space,
   Switch,
   Table,
@@ -24,11 +26,17 @@ import {
 } from '../api/environments';
 import { apiError } from '../api/client';
 import { t } from '../i18n';
-import type { Environment, EnvironmentVariableInput } from '../api/types';
+import type {
+  Environment,
+  EnvironmentVariableInput,
+  EnvironmentVariableMode,
+} from '../api/types';
 
 interface VariableRow {
   key: string;
   value: string;
+  value_mode: EnvironmentVariableMode;
+  random_length: number | null;
   is_secret: boolean;
   existing: boolean;
   clear: boolean;
@@ -53,6 +61,8 @@ function VariablesModal({
       env.variables.map((item) => ({
         key: item.key,
         value: item.is_secret ? '' : item.value ?? '',
+        value_mode: item.value_mode ?? 'fixed',
+        random_length: item.random_length ?? 8,
         is_secret: item.is_secret,
         existing: true,
         clear: false,
@@ -68,7 +78,9 @@ function VariablesModal({
         .filter((row) => row.key.trim())
         .map((row) => ({
           key: row.key.trim(),
-          value: row.value,
+          value: row.value_mode === 'fixed' ? row.value : null,
+          value_mode: row.value_mode,
+          random_length: row.value_mode === 'fixed' ? null : (row.random_length ?? 8),
           is_secret: row.is_secret,
           description: row.description ?? null,
           clear: row.clear,
@@ -90,7 +102,7 @@ function VariablesModal({
     <Modal
       open={Boolean(env)}
       title={t('环境变量 · {name}', { name: env?.name ?? '' })}
-      width={760}
+      width={900}
       onCancel={onClose}
       footer={
         <Space>
@@ -105,6 +117,9 @@ function VariablesModal({
         {t('普通变量在 YAML 里用')} <Typography.Text code>{'${KEY}'}</Typography.Text>{' '}
         {t('引用；密钥用')} <Typography.Text code>{'${{KEY}}'}</Typography.Text>{' '}
         {t('引用，只注入进程环境，不写进配置文件。密钥留空表示不修改。')}
+      </Typography.Paragraph>
+      <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+        {t('随机变量每次执行生成；普通随机值会写入本次执行配置，密钥随机值只注入进程环境，不落盘。')}
       </Typography.Paragraph>
       <Table
         size="small"
@@ -124,15 +139,56 @@ function VariablesModal({
             ),
           },
           {
-            title: t('值'),
+            title: t('类型'),
+            width: 140,
             render: (_value, row, index) => (
-              <Input
-                value={row.value}
+              <Select
+                value={row.value_mode}
                 disabled={row.clear}
-                placeholder={row.existing && row.is_secret ? t('留空 = 不修改') : ''}
-                onChange={(e) => update(index, { value: e.target.value })}
+                style={{ width: '100%' }}
+                options={[
+                  { value: 'fixed', label: t('固定值') },
+                  { value: 'random_string', label: t('随机字符串') },
+                  { value: 'random_number', label: t('随机数字') },
+                ]}
+                onChange={(mode: EnvironmentVariableMode) =>
+                  update(index, {
+                    value_mode: mode,
+                    random_length: mode === 'fixed' ? null : (row.random_length ?? 8),
+                  })
+                }
               />
             ),
+          },
+          {
+            title: t('值 / 长度'),
+            render: (_value, row, index) =>
+              row.value_mode === 'fixed' ? (
+                <Input
+                  value={row.value}
+                  disabled={row.clear}
+                  placeholder={row.existing && row.is_secret ? t('留空 = 不修改') : ''}
+                  onChange={(e) => update(index, { value: e.target.value })}
+                />
+              ) : (
+                <Space size={6} wrap>
+                  <InputNumber
+                    min={1}
+                    max={128}
+                    precision={0}
+                    value={row.random_length ?? 8}
+                    disabled={row.clear}
+                    addonAfter={t('位')}
+                    style={{ width: 150 }}
+                    onChange={(value) =>
+                      update(index, { random_length: value ?? 8 })
+                    }
+                  />
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {t('每次执行生成')}
+                  </Typography.Text>
+                </Space>
+              ),
           },
           {
             title: t('密钥'),
@@ -175,7 +231,15 @@ function VariablesModal({
         onClick={() =>
           setRows((prev) => [
             ...prev,
-            { key: '', value: '', is_secret: false, existing: false, clear: false },
+            {
+              key: '',
+              value: '',
+              value_mode: 'fixed',
+              random_length: 8,
+              is_secret: false,
+              existing: false,
+              clear: false,
+            },
           ])
         }
       >

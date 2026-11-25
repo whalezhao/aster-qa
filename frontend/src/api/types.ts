@@ -573,10 +573,14 @@ export interface WorkerStatus {
   oldest_queue_seconds: number | null;
 }
 
+export type EnvironmentVariableMode = 'fixed' | 'random_string' | 'random_number';
+
 export interface EnvironmentVariable {
   id: string;
   key: string;
   value: string | null;
+  value_mode: EnvironmentVariableMode;
+  random_length: number | null;
   is_secret: boolean;
   value_set: boolean;
   description: string | null;
@@ -594,6 +598,8 @@ export interface Environment {
 export interface EnvironmentVariableInput {
   key: string;
   value?: string | null;
+  value_mode?: EnvironmentVariableMode;
+  random_length?: number | null;
   is_secret?: boolean;
   description?: string | null;
   clear?: boolean;

@@ -7,7 +7,10 @@
 """
 
 import re
+import secrets
+import string
 import uuid
+from collections.abc import Callable
 
 import yaml
 from sqlalchemy import select
@@ -176,10 +179,33 @@ def referenced_variables(text: str) -> set[str]:
     return {plain or secret for plain, secret in _VAR_REF.findall(text)} - local
 
 
+RANDOM_STRING_CHARS = string.ascii_letters + string.digits
+RANDOM_NUMBER_CHARS = string.digits
+RANDOM_MODES = frozenset({"random_string", "random_number"})
+MAX_RANDOM_LENGTH = 128
+DEFAULT_RANDOM_LENGTH = 8
+
+
+def generate_random_value(
+    mode: str, length: int, *, choice: Callable[[str], str] = secrets.choice
+) -> str:
+    """生成一次执行用的随机值；choice 可注入，测试用固定序列。"""
+    if mode not in RANDOM_MODES:
+        raise ValueError(f"未知随机变量类型：{mode}")
+    if not 1 <= length <= MAX_RANDOM_LENGTH:
+        raise ValueError(f"随机变量长度必须在 1-{MAX_RANDOM_LENGTH} 之间")
+    alphabet = RANDOM_NUMBER_CHARS if mode == "random_number" else RANDOM_STRING_CHARS
+    return "".join(choice(alphabet) for _ in range(length))
+
+
 async def load_environment_variables(
     db: AsyncSession, environment_id: uuid.UUID
 ) -> tuple[dict[str, str], dict[str, str]]:
-    """返回 (普通变量, 密钥变量)。密钥只在这里解密，调用方不得记录其值。"""
+    """返回 (普通变量, 密钥变量)。密钥只在这里解密，调用方不得记录其值。
+
+    随机变量在每次调用时生成一份新值；worker 每个 run 只调用一次，
+    所以同一个 run 内所有步骤共用，重试/新 run 会重新生成。
+    """
     rows = list(
         (
             await db.execute(
@@ -192,6 +218,20 @@ async def load_environment_variables(
     plain: dict[str, str] = {}
     secret: dict[str, str] = {}
     for row in rows:
+        if row.value_mode in RANDOM_MODES:
+            try:
+                value = generate_random_value(
+                    row.value_mode, row.random_length or DEFAULT_RANDOM_LENGTH
+                )
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"环境变量 {row.key} 的随机配置无效：{exc}"
+                ) from exc
+            if row.is_secret:
+                secret[row.key] = value
+            else:
+                plain[row.key] = value
+            continue
         value = row.value or ""
         if row.is_secret:
             secret[row.key] = decrypt_secret(value) if value else ""

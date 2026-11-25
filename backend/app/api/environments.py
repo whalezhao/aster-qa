@@ -51,9 +51,11 @@ async def _variables(db, environment_id: uuid.UUID) -> list[EnvironmentVariableO
         EnvironmentVariableOut(
             id=row.id,
             key=row.key,
-            value=None if row.is_secret else row.value,
+            value=None if row.is_secret or row.value_mode != "fixed" else row.value,
+            value_mode=row.value_mode,
+            random_length=row.random_length,
             is_secret=row.is_secret,
-            value_set=bool(row.value),
+            value_set=row.value_mode == "fixed" and bool(row.value),
             description=row.description,
         )
         for row in rows
@@ -262,21 +264,53 @@ async def set_variables(
             if row is not None:
                 await db.delete(row)
             continue
+
+        # 旧客户端不传 value_mode：新变量按 fixed，已有变量保留原模式
+        mode = item.value_mode or (row.value_mode if row is not None else "fixed")
+        if (
+            row is not None
+            and row.value_mode != "fixed"
+            and mode == "fixed"
+            and not item.value
+        ):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"变量 {key} 从随机变量切换为固定值时必须填写值",
+            )
+        random_length = None
+        if mode != "fixed":
+            random_length = item.random_length
+            if random_length is None and item.value_mode is None and row is not None:
+                random_length = row.random_length
+            if random_length is None:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"变量 {key} 是随机变量，长度必须在 1-128 之间",
+                )
+
         if row is None:
             row = ProjectEnvironmentVariable(
-                environment_id=env.id, key=key, is_secret=item.is_secret
+                environment_id=env.id,
+                key=key,
+                is_secret=item.is_secret,
+                value_mode=mode,
+                random_length=random_length,
             )
             db.add(row)
-        # 密钥留空 = 不改；新建时必须给值，否则存一个空密钥没有意义
-        if item.is_secret:
+        row.value_mode = mode
+        row.random_length = random_length
+        row.is_secret = item.is_secret
+        if mode != "fixed":
+            # 随机变量不存值：旧明文/旧密文一起清掉
+            row.value = None
+        elif item.is_secret:
+            # 密钥留空 = 不改；新建时必须给值，否则存一个空密钥没有意义
             if item.value:
                 row.value = encrypt_secret(item.value)
             elif row.value is None:
                 row.value = ""
-            row.is_secret = True
         else:
             row.value = item.value or ""
-            row.is_secret = False
         row.description = item.description
     await db.commit()
     await db.refresh(env)

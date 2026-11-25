@@ -244,7 +244,10 @@ class ProjectEnvironment(Timestamped, Base):
 
 
 class ProjectEnvironmentVariable(Timestamped, Base):
-    """环境变量。密钥值在库里是 Fernet 密文，接口只回 value_set。"""
+    """环境变量。密钥值在库里是 Fernet 密文，接口只回 value_set。
+
+    随机变量不存生成值：value 保持 NULL，执行时按 value_mode/random_length 生成。
+    """
 
     __tablename__ = "project_environment_variables"
     __table_args__ = (
@@ -252,6 +255,15 @@ class ProjectEnvironmentVariable(Timestamped, Base):
             "environment_id", "key", name="uq_project_environment_variables_key"
         ),
         Index("ix_project_environment_variables_env", "environment_id"),
+        CheckConstraint(
+            _in("value_mode", "fixed", "random_string", "random_number"),
+            name="ck_project_environment_variables_value_mode",
+        ),
+        CheckConstraint(
+            "(value_mode = 'fixed' AND random_length IS NULL)"
+            " OR (value_mode <> 'fixed' AND random_length BETWEEN 1 AND 128)",
+            name="ck_project_environment_variables_random_length",
+        ),
     )
 
     id: Mapped[uuid.UUID] = _pk()
@@ -262,6 +274,10 @@ class ProjectEnvironmentVariable(Timestamped, Base):
     )
     key: Mapped[str] = mapped_column(String(128), nullable=False)
     value: Mapped[str | None] = mapped_column(Text)
+    value_mode: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="fixed", server_default="fixed"
+    )
+    random_length: Mapped[int | None] = mapped_column(Integer)
     is_secret: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     description: Mapped[str | None] = mapped_column(String(255))
 
