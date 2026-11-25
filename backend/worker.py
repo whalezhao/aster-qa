@@ -25,6 +25,7 @@ from pathlib import Path
 
 from sqlalchemy import and_, delete, func, or_, select, update
 
+from app.case_versions import snapshot_case
 from app.config import get_settings
 from app.db import SessionLocal, engine
 from app.environments import (
@@ -40,14 +41,17 @@ from app.models import (
     Feature,
     Project,
     ProjectEnvironment,
+    ProjectFile,
     ProjectModelConfig,
     Run,
     RunBatch,
     TaskCase,
     TestCase,
+    TestCaseVersion,
     TestTask,
     WorkerHeartbeat,
 )
+from app.project_files import referenced_file_keys, resolve_storage_path
 from app.quality_gate import evaluate_gate
 from app.runner import execute as exec_mod
 from app.runner import parsers, persist, staging
@@ -107,6 +111,7 @@ def _build_env(
     secret_env: dict[str, str] | None = None,
     project_id: uuid.UUID | None = None,
     cache: bool = True,
+    max_download_bytes: int = 50 * 1024 * 1024,
 ) -> dict[str, str]:
     """组装子进程环境。
 
@@ -141,6 +146,12 @@ def _build_env(
     else:
         env.pop("QA_CACHE_DIR", None)
     env.setdefault("HEADLESS", "true")
+    # 测试文件与下载产物都放在本次 run 的私有目录；路径以 JSON map 交给执行器，
+    # YAML 里只出现逻辑 key，不出现宿主机路径。
+    env["QA_FILES"] = json.dumps(staged.files, ensure_ascii=False)
+    env["QA_FILES_DIR"] = str(staged.files_dir)
+    env["QA_DOWNLOADS_DIR"] = str(staged.downloads_dir)
+    env["QA_MAX_DOWNLOAD_BYTES"] = str(max_download_bytes)
 
     # 复刻参考实现的做法：每次执行换一个上游会话头，避免所有 run 挤在同一个会话里
     raw = env.get("MIDSCENE_MODEL_INIT_CONFIG_JSON")
@@ -234,6 +245,46 @@ async def collect_cases(db, run: Run) -> list[tuple[uuid.UUID | str, str, str]]:
             return []
         stmt = stmt.where(TestCase.id.in_(case_ids))
     return [(row[0], row[1], row[2]) for row in (await db.execute(stmt)).all()]
+
+
+async def bind_case_versions(
+    db, cases: list[tuple[uuid.UUID | str, str, str]]
+) -> dict[str, dict]:
+    """把这次要执行的用例绑定到版本快照。
+
+    优先用当前内容对应的最新版本；历史用例没有快照时在执行前补一版，
+    保证执行记录能回到当时的 YAML，而不是今天的最新版本。
+    """
+    mapping: dict[str, dict] = {}
+    for case_id, _name, yaml_text in cases:
+        if not isinstance(case_id, uuid.UUID):
+            continue
+        case = await db.get(TestCase, case_id)
+        if case is None:
+            continue
+        latest = (
+            await db.execute(
+                select(TestCaseVersion)
+                .where(TestCaseVersion.case_id == case.id)
+                .order_by(TestCaseVersion.version_no.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if latest is not None and latest.yaml_content == yaml_text:
+            version = latest
+        else:
+            version = await snapshot_case(
+                db,
+                case,
+                source="backfill",
+                note="执行前自动留档",
+                yaml_content=yaml_text,
+            )
+        mapping[str(case.id)] = {
+            "version_id": str(version.id),
+            "version_no": version.version_no,
+        }
+    return mapping
 
 
 
@@ -454,14 +505,19 @@ async def process(run_id: uuid.UUID) -> None:
             return
         # 报告里的用例名读脚本内的 name，改名不会自动同步过去，落盘前在这里对齐。
         # 试跑没有 TestCase 可对齐，保持 YAML 里的名字。
-        cases = (
-            [(case_id, yaml_text) for case_id, _name, yaml_text in cases]
+        named_cases = (
+            [(case_id, "", yaml_text) for case_id, _name, yaml_text in cases]
             if run.is_debug
             else [
-                (case_id, staging.with_case_name(yaml_text, case_name))
+                (case_id, case_name, staging.with_case_name(yaml_text, case_name))
                 for case_id, case_name, yaml_text in cases
             ]
         )
+        # 执行记录要能回到这次真正执行的版本，而不是用例的最新版本。
+        # 用已有的映射（恢复/重跑同一 run）或按最终落盘 YAML 现在绑定一次。
+        if run.case_versions is None:
+            run.case_versions = await bind_case_versions(db, named_cases)
+        cases = [(case_id, yaml_text) for case_id, _name, yaml_text in named_cases]
 
         project = await db.get(Project, run.project_id) if run.project_id else None
         task = await db.get(TestTask, run.task_id) if run.task_id else None
@@ -514,6 +570,50 @@ async def process(run_id: uuid.UUID) -> None:
             run.environment_id = env_row.id
             run.environment_name = env_row.name
             run.environment_base_url = env_row.base_url
+
+        # 测试文件按环境绑定：同名 key 在不同环境可以对应不同文件。
+        file_keys: set[str] = set()
+        for _case_id, yaml_text in cases:
+            file_keys |= referenced_file_keys(yaml_text)
+        staged_file_inputs: list[tuple[str, Path, str]] = []
+        if file_keys:
+            if env_row is None:
+                await _fail(db, run, "执行记录未关联环境，无法读取测试文件")
+                return
+            rows = list(
+                (
+                    await db.execute(
+                        select(ProjectFile).where(
+                            ProjectFile.environment_id == env_row.id,
+                            ProjectFile.key.in_(file_keys),
+                        )
+                    )
+                ).scalars()
+            )
+            missing = sorted(file_keys - {row.key for row in rows})
+            if missing:
+                await _fail(
+                    db,
+                    run,
+                    f"环境「{env_row.name}」缺少用例引用的测试文件：{'、'.join(missing)}；"
+                    "请在环境 → 测试文件里上传后重试。",
+                )
+                return
+            for row in rows:
+                try:
+                    source = resolve_storage_path(settings.assets_path, row.storage_path)
+                except ValueError:
+                    await _fail(db, run, f"测试文件「{row.key}」路径非法")
+                    return
+                if not source.is_file():
+                    await _fail(
+                        db,
+                        run,
+                        f"测试文件「{row.key}」在磁盘上不存在；请重新上传",
+                    )
+                    return
+                staged_file_inputs.append((row.key, source, row.original_name))
+
         base_url = (
             env_row.base_url
             if env_row is not None and env_row.base_url
@@ -542,8 +642,9 @@ async def process(run_id: uuid.UUID) -> None:
                 retry=retry,
                 timeout_ms=settings.case_timeout_ms,
                 variables=plain_vars,
+                files=staged_file_inputs,
             )
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             await _fail(db, run, f"准备工作目录失败：{exc}")
             return
 
@@ -601,6 +702,7 @@ async def process(run_id: uuid.UUID) -> None:
             secret_vars,
             project_id=run.project_id,
             cache=debug_cache,
+            max_download_bytes=settings.max_download_bytes,
         ),
         timeout_ms=timeout_ms,
         poll_cancel=poll_cancel,

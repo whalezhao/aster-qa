@@ -136,6 +136,20 @@ export interface CaseStep {
   index: number;
   kind: string;
   text: string;
+  /** upload / download 的可编辑字段，供步骤面板回填 */
+  prompt?: string | null;
+  trigger?: string | null;
+  file?: string | null;
+  files?: string[] | null;
+  filename?: string | null;
+  minBytes?: number | null;
+  timeoutMs?: number | null;
+  saveAs?: string | null;
+  message?: string | null;
+  cacheable?: boolean | null;
+  deepLocate?: boolean | null;
+  effort?: 'fast' | 'balance' | 'deepThink' | null;
+  context?: string | null;
 }
 
 export type TestCasePhase = 'precondition' | 'action' | 'wait' | 'assert' | 'cleanup';
@@ -335,6 +349,8 @@ export interface RunDetail extends Run {
 export interface RunCase {
   id: string;
   test_case_id: string | null;
+  test_case_version_id: string | null;
+  test_case_version_no: number | null;
   source_path: string | null;
   name: string;
   case_index: number;
@@ -603,6 +619,27 @@ export interface EnvironmentVariableInput {
   is_secret?: boolean;
   description?: string | null;
   clear?: boolean;
+}
+
+export interface ProjectFile {
+  id: string;
+  project_id: string;
+  environment_id: string;
+  key: string;
+  original_name: string;
+  content_type: string | null;
+  size: number;
+  sha256: string;
+  description: string | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectFilePage {
+  items: ProjectFile[];
+  total: number;
 }
 
 export interface ApiToken {

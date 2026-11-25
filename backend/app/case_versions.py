@@ -45,13 +45,14 @@ async def snapshot_case(
     source: str,
     note: str | None = None,
     user_id: uuid.UUID | None = None,
+    yaml_content: str | None = None,
 ) -> TestCaseVersion:
     version = TestCaseVersion(
         case_id=case.id,
         version_no=await next_version_no(db, case.id),
         name=case.name,
         description=case.description,
-        yaml_content=case.yaml_content,
+        yaml_content=case.yaml_content if yaml_content is None else yaml_content,
         priority=case.priority,
         defect_ids=case.defect_ids,
         stage_override=case.stage_override,

@@ -1,10 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Col, Progress, Row, Space, Spin, Statistic, Tabs, Tag } from 'antd';
+import { Alert, App, Button, Col, Modal, Progress, Row, Space, Spin, Statistic, Tabs, Tag } from 'antd';
 import { ProCard, ProDescriptions } from '@ant-design/pro-components';
 import { ReloadOutlined, StopOutlined } from '@ant-design/icons';
-import { cancelRun, getRun, getRunCases, isRunActive, reparseRun, rerunFailedRun } from '../api/runs';
+import {
+  cancelRun,
+  downloadRunFile,
+  getRun,
+  getRunCases,
+  getRunDownloads,
+  isRunActive,
+  reparseRun,
+  rerunFailedRun,
+} from '../api/runs';
+import { getCaseVersion } from '../api/caseVersions';
 import { apiError } from '../api/client';
 import { t } from '../i18n';
 import { fmtDateTime, fmtDuration, fmtPercent, fmtTokens, runStatusView } from '../lib/format';
@@ -12,6 +22,7 @@ import { PAGE, byNumber, byRank, byText } from '../lib/table';
 import type { RunCase } from '../api/types';
 import QaTable from '../components/QaTable';
 import AiFixModal from '../components/AiFixModal';
+import YamlPreview from '../components/YamlPreview';
 import { RunReportView } from '../components/report/ReportView';
 
 export default function RunDetail() {
@@ -180,6 +191,8 @@ export default function RunDetail() {
         <ProDescriptions.Item label={t('结束')}>{fmtDateTime(run.ended_at)}</ProDescriptions.Item>
       </ProDescriptions>
 
+      <RunDownloads rid={rid} active={active} />
+
       <Tabs
         activeKey={activeTab}
         onChange={(key) => setActiveTab(key === 'report' ? 'report' : 'cases')}
@@ -197,8 +210,44 @@ export default function RunDetail() {
   );
 }
 
+function RunDownloads({ rid, active }: { rid: string; active: boolean }) {
+  const { message } = App.useApp();
+  const { data: files = [] } = useQuery({
+    queryKey: ['run-downloads', rid],
+    queryFn: () => getRunDownloads(rid),
+    refetchInterval: active ? 5000 : false,
+  });
+  const download = useMutation({
+    mutationFn: (name: string) => downloadRunFile(rid, name),
+    onError: (e) => message.error(apiError(e)),
+  });
+  if (files.length === 0) return null;
+  return (
+    <ProCard size="small" title={t('下载产物')} style={{ marginTop: 16 }}>
+      <Space wrap>
+        {files.map((file) => (
+          <Button
+            key={file.name}
+            size="small"
+            loading={download.isPending}
+            onClick={() => download.mutate(file.name)}
+          >
+            {file.name}（{(file.size / 1024).toFixed(1)} KB）
+          </Button>
+        ))}
+      </Space>
+    </ProCard>
+  );
+}
+
 function CasesTab({ rid }: { rid: string }) {
   const [fixing, setFixing] = useState<{ id: string; name: string } | null>(null);
+  const [versionFor, setVersionFor] = useState<{
+    caseId: string;
+    versionId: string;
+    versionNo: number | null;
+    name: string;
+  } | null>(null);
   const { data: cases = [], isLoading } = useQuery({
     queryKey: ['run-cases', rid],
     queryFn: () => getRunCases(rid),
@@ -221,6 +270,30 @@ function CasesTab({ rid }: { rid: string }) {
             sorter: byNumber<RunCase>((r) => r.case_index),
           },
           { title: t('用例'), dataIndex: 'name', sorter: byText<RunCase>((r) => r.name) },
+          {
+            title: t('执行版本'),
+            dataIndex: 'test_case_version_no',
+            width: 110,
+            render: (value: number | null, row) =>
+              row.test_case_id && row.test_case_version_id ? (
+                <Button
+                  size="small"
+                  type="link"
+                  onClick={() =>
+                    setVersionFor({
+                      caseId: row.test_case_id!,
+                      versionId: row.test_case_version_id!,
+                      versionNo: value,
+                      name: row.name,
+                    })
+                  }
+                >
+                  {value ? t('查看 v{n}', { n: value }) : t('查看')}
+                </Button>
+              ) : (
+                '-'
+              ),
+          },
           {
             title: t('结果'),
             dataIndex: 'status',
@@ -266,6 +339,46 @@ function CasesTab({ rid }: { rid: string }) {
         caseName={fixing?.name}
         onClose={() => setFixing(null)}
       />
+      <ExecutionVersionModal target={versionFor} onClose={() => setVersionFor(null)} />
     </>
+  );
+}
+
+function ExecutionVersionModal({
+  target,
+  onClose,
+}: {
+  target: {
+    caseId: string;
+    versionId: string;
+    versionNo: number | null;
+    name: string;
+  } | null;
+  onClose: () => void;
+}) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['case-version', target?.caseId, target?.versionId],
+    queryFn: () => getCaseVersion(target!.caseId, target!.versionId),
+    enabled: Boolean(target),
+  });
+  return (
+    <Modal
+      open={Boolean(target)}
+      title={t('执行版本 v{n} · {name}', {
+        n: target?.versionNo ?? '?',
+        name: target?.name ?? '',
+      })}
+      width={860}
+      onCancel={onClose}
+      footer={<Button onClick={onClose}>{t('关闭')}</Button>}
+    >
+      {error ? (
+        <Alert type="error" showIcon message={apiError(error)} />
+      ) : (
+        <Spin spinning={isLoading}>
+          <YamlPreview code={data?.yaml_content ?? ''} />
+        </Spin>
+      )}
+    </Modal>
   );
 }

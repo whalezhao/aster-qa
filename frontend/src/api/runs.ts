@@ -20,6 +20,32 @@ export async function getRun(id: string): Promise<RunDetail> {
   return data;
 }
 
+export interface RunDownload {
+  name: string;
+  size: number;
+}
+
+export async function getRunDownloads(id: string): Promise<RunDownload[]> {
+  const { data } = await http.get<{ files: RunDownload[] }>(`/api/runs/${id}/downloads`);
+  return data.files;
+}
+
+/** 下载要带 Authorization，不能用普通 <a href>。 */
+export async function downloadRunFile(id: string, name: string): Promise<void> {
+  const { data } = await http.get<Blob>(
+    `/api/runs/${id}/downloads/${encodeURIComponent(name)}`,
+    { responseType: 'blob' },
+  );
+  const url = URL.createObjectURL(data);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function getRunCases(id: string): Promise<RunCase[]> {
   const { data } = await http.get<RunCase[]>(`/api/runs/${id}/cases`);
   return data;

@@ -11,6 +11,8 @@
         <run_id>/
           midscene.config.run.ts    # 生成的 config
           cases/<case_uuid>.yaml    # 暂存的选中用例，文件名就是 DB 用例 UUID
+          files/<key>/<name>        # 本次用例引用的测试文件
+          downloads/                # 用例下载产物
           result/<runId>/summary.json ...   # --result-dir
           midscene_run/{log,report}/  # MIDSCENE_RUN_DIR → 天然隔离
           stdout.log
@@ -27,6 +29,8 @@ from pathlib import Path
 
 import yaml
 
+from ..project_files import sanitize_filename, validate_file_key
+
 _SAFE_RUN_ID = re.compile(r"[A-Za-z0-9._-]+")
 
 # 生成的 config 里不含任何密钥：后端读 .env 后用 subprocess 环境变量注入，
@@ -39,13 +43,14 @@ import { defineProjectSetup, defineTestProject } from '@midscene/test/config';
 import { createMidsceneNodes } from '@midscene/test/midscene';
 import { PlaywrightAgent } from '@midscene/web/playwright/agent';
 import { type Page, chromium } from 'playwright';
+import { createFileNodes } from '../../scripts/file-nodes';
 
 interface ProjectContext {
   page: Page;
   agent?: PlaywrightAgent;
 }
 
-const getAgent = ({ context }: NodeExecutionContext<unknown, ProjectContext>) => {
+const getAgentFromContext = (context: ProjectContext) => {
   if (!context.agent) {
     // 缓存目录由平台注入为跨 run 共享目录；不传的话会落在本次 run 的私有目录里，
     // 每次执行都是冷缓存，cacheable 永远命中不了。
@@ -57,6 +62,9 @@ const getAgent = ({ context }: NodeExecutionContext<unknown, ProjectContext>) =>
   }
   return context.agent;
 };
+
+const getAgent = ({ context }: NodeExecutionContext<unknown, ProjectContext>) =>
+  getAgentFromContext(context);
 
 const setup = defineProjectSetup<ProjectContext>({
   name: 'web',
@@ -91,6 +99,7 @@ export default defineTestProject<ProjectContext>({
   ],
   nodes: [
     ...createMidsceneNodes<ProjectContext>({ agentClass: PlaywrightAgent, getAgent }),
+    ...createFileNodes<ProjectContext>(getAgentFromContext),
   ],
   // bail: 0 —— 回归要跑完所有用例拿到完整分布，不能第一个失败就停
   test: {
@@ -113,6 +122,9 @@ class StagedRun:
     run_dir: Path  # MIDSCENE_RUN_DIR
     stdout_path: Path
     case_count: int
+    files_dir: Path
+    downloads_dir: Path
+    files: dict[str, str]
 
     @property
     def report_dir(self) -> Path:
@@ -253,6 +265,7 @@ def stage(
     tag_exclude: list[str] | None = None,
     timeout_ms: int = 600_000,
     variables: dict[str, str] | None = None,
+    files: list[tuple[str, Path, str]] | None = None,
 ) -> StagedRun:
     """建立 run 私有目录、落盘用例 YAML、生成 config。
 
@@ -262,13 +275,24 @@ def stage(
     cases_dir = work_dir / "cases"
     result_dir = work_dir / "result"
     run_dir = work_dir / "midscene_run"
-    for path in (cases_dir, result_dir, run_dir):
+    files_dir = work_dir / "files"
+    downloads_dir = work_dir / "downloads"
+    for path in (cases_dir, result_dir, run_dir, files_dir, downloads_dir):
         path.mkdir(parents=True, exist_ok=True)
 
     for case_id, yaml_text in cases:
         # 文件名来自用例 UUID，UUID 的字符集里不可能出现 `..` 或路径分隔符，
         # 所以这是安全的（这是唯一由数据决定落盘路径的地方）
         (cases_dir / f"{case_id}.yaml").write_text(yaml_text, encoding="utf-8")
+
+    staged_files: dict[str, str] = {}
+    for key, source, original_name in files or []:
+        key = validate_file_key(key)
+        dest_dir = files_dir / key
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / sanitize_filename(original_name)
+        shutil.copyfile(source, dest)
+        staged_files[key] = str(dest)
 
     config_path = work_dir / "midscene.config.run.ts"
     config_path.write_text(
@@ -294,6 +318,9 @@ def stage(
         run_dir=run_dir,
         stdout_path=work_dir / "stdout.log",
         case_count=len(cases),
+        files_dir=files_dir,
+        downloads_dir=downloads_dir,
+        files=staged_files,
     )
 
 

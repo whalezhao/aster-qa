@@ -32,6 +32,13 @@ export interface TrialStepOption {
   effort?: 'fast' | 'balance' | 'deepThink';
   context?: string;
   message?: string;
+  prompt?: string;
+  trigger?: string;
+  file?: string;
+  files?: string[];
+  filename?: string;
+  min_bytes?: number | null;
+  save_as?: string;
 }
 
 export interface TrialRunResult {

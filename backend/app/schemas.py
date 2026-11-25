@@ -161,6 +161,28 @@ class ProjectUpdate(In):
     status: str | None = None
 
 
+class ProjectFileOut(BaseModel):
+    model_config = ORM
+    id: uuid.UUID
+    project_id: uuid.UUID
+    environment_id: uuid.UUID
+    key: str
+    original_name: str
+    content_type: str | None = None
+    size: int
+    sha256: str
+    description: str | None = None
+    created_by: uuid.UUID | None = None
+    created_by_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProjectFilePageOut(BaseModel):
+    items: list[ProjectFileOut]
+    total: int
+
+
 class ModelConfigOut(BaseModel):
     """项目级模型配置。
 
@@ -450,6 +472,14 @@ class TrialStepOption(In):
     context: str | None = None
     # 只对 aiAssert 生效：失败文案，写在步骤级而不是 options 里
     message: str | None = None
+    # upload / download 的步骤级字段
+    prompt: str | None = None
+    trigger: str | None = None
+    file: str | None = None
+    files: list[str] | None = None
+    filename: str | None = None
+    min_bytes: int | None = Field(default=None, ge=0)
+    save_as: str | None = None
 
 
 class TrialRunIn(In):
@@ -594,6 +624,8 @@ class CaseResultOut(BaseModel):
     model_config = ORM
     id: uuid.UUID
     test_case_id: uuid.UUID | None
+    test_case_version_id: uuid.UUID | None = None
+    test_case_version_no: int | None = None
     source_path: str | None
     name: str | None
     case_index: int

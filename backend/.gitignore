@@ -4,5 +4,6 @@ __pycache__/
 .env
 node_modules/
 .runs/
+assets/
 dist/
 .ruff_cache/

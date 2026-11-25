@@ -7,6 +7,8 @@ x-backend-env: &backend-env
   CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
   ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-720}
   RUNNER_DIR: runner
+  # 测试文件库：API 上传、worker 读取，必须挂同一个卷
+  ASSETS_DIR: /app/assets
   CASE_TIMEOUT_MS: ${CASE_TIMEOUT_MS:-600000}
   MODEL_HEALTH_ENABLED: ${MODEL_HEALTH_ENABLED:-true}
   MODEL_HEALTH_INTERVAL_SECONDS: ${MODEL_HEALTH_INTERVAL_SECONDS:-1800}
@@ -46,6 +48,7 @@ services:
       # worker 产出的报告/产物由 API 托管，两个容器必须共享同一份目录
       - run_artifacts:/app/runner/.runs
       - midscene_global:/app/runner/midscene_run
+      - test_assets:/app/assets
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
@@ -94,6 +97,7 @@ services:
     volumes:
       - run_artifacts:/app/runner/.runs
       - midscene_global:/app/runner/midscene_run
+      - test_assets:/app/assets
     depends_on:
       api:
         condition: service_healthy
@@ -117,3 +121,4 @@ volumes:
   pgdata:
   run_artifacts:
   midscene_global:
+  test_assets:

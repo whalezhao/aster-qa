@@ -16,9 +16,30 @@ export const STEP_KIND_LABELS: Record<string, string> = {
   aiLongPress: '长按',
   aiPinch: '缩放',
   aiDragAndDrop: '拖拽',
+  aiHover: '悬停',
+  aiDoubleClick: '双击',
+  aiRightClick: '右键',
+  aiMiddleClick: '中键',
+  aiClearInput: '清空输入',
+  aiBoolean: '判断',
+  aiNumber: '取数字',
+  aiString: '取文本',
+  aiAsk: '提问',
   evaluateJavaScript: '脚本',
+  javascript: '脚本',
   sleep: '等待',
+  wait: '等待',
   gotoUrl: '打开',
+  action: '动作',
+  observe: '观察',
+  recordToReport: '记录报告',
+  setAIContext: 'AI 上下文',
+  runGherkinScenario: 'Gherkin',
+  setCookies: '设置 Cookie',
+  clearCookies: '清除 Cookie',
+  setViewportSize: '设置视口',
+  upload: '上传文件',
+  download: '下载文件',
 };
 
 export function stepKindLabel(kind: string): string {
@@ -36,6 +57,15 @@ export type StepOption = {
   context?: string;
   /** aiAssert 的失败文案（步骤级键，不在 options 里） */
   message?: string;
+  /** upload / download 的步骤级字段 */
+  prompt?: string;
+  trigger?: string;
+  file?: string;
+  /** 界面用逗号分隔，写 YAML 时单值写 file、多值写 files */
+  files?: string;
+  filename?: string;
+  minBytes?: number | null;
+  saveAs?: string;
 };
 
 export type YamlRow = {
@@ -116,6 +146,8 @@ const TIMEOUT_KIND = 'aiWaitFor';
 const EFFORT_KINDS = new Set(['aiAct']);
 const CONTEXT_KINDS = new Set(['aiAct', 'aiAssert', 'aiWaitFor']);
 const MESSAGE_KINDS = new Set(['aiAssert']);
+const UPLOAD_KIND = 'upload';
+const DOWNLOAD_KIND = 'download';
 
 /**
  * 这一步要写进 YAML 的东西：
@@ -147,6 +179,47 @@ export function optionSpec(
     const text = o.message.trim();
     stepKeys.message = text ? JSON.stringify(text) : null;
   }
+  if (kind === UPLOAD_KIND || kind === DOWNLOAD_KIND) {
+    if (o.prompt !== undefined) {
+      const text = o.prompt.trim();
+      stepKeys.prompt = text ? JSON.stringify(text) : null;
+    }
+    if (o.trigger !== undefined) {
+      const text = o.trigger.trim();
+      stepKeys.trigger = text ? JSON.stringify(text) : null;
+    }
+    if (o.file !== undefined || o.files !== undefined) {
+      const raw = (o.files ?? o.file ?? '').trim();
+      const parts = raw
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+      if (parts.length > 1) {
+        stepKeys.files = JSON.stringify(parts);
+        stepKeys.file = null;
+      } else if (parts.length === 1) {
+        stepKeys.file = JSON.stringify(parts[0]);
+        stepKeys.files = null;
+      } else {
+        stepKeys.file = null;
+        stepKeys.files = null;
+      }
+    }
+    if (kind === DOWNLOAD_KIND && o.filename !== undefined) {
+      const text = o.filename.trim();
+      stepKeys.filename = text ? JSON.stringify(text) : null;
+    }
+    if (kind === DOWNLOAD_KIND && o.minBytes !== undefined) {
+      stepKeys.minBytes = o.minBytes == null ? null : String(o.minBytes);
+    }
+    if (kind === DOWNLOAD_KIND && o.timeoutMs !== undefined) {
+      stepKeys.timeoutMs = o.timeoutMs == null ? null : String(o.timeoutMs);
+    }
+    if (kind === DOWNLOAD_KIND && o.saveAs !== undefined) {
+      const text = o.saveAs.trim();
+      stepKeys.saveAs = text ? JSON.stringify(text) : null;
+    }
+  }
   if (!Object.keys(opts).length && !Object.keys(stepKeys).length) return null;
   return { opts, stepKeys };
 }
@@ -163,6 +236,34 @@ function mergeBlockOptions(
   const shorthand = /^\s*-\s*\w+\s*:\s*\S/.test(first);
   const entries = Object.entries(opts).filter(([, v]) => v !== null);
   const stepEntries = Object.entries(stepKeys).filter(([, v]) => v !== null);
+
+  // `- upload: { prompt: ..., file: KEY }` 这类行内映射：编辑后转成块写法，
+  // 否则后面的 shorthand 分支会把它误当成「- aiAct: 文本」。
+  const inlineMap = first.match(/^(\s*-\s*(\w+)\s*:)\s*\{(.*)\}\s*$/);
+  if (inlineMap && ['upload', 'download'].includes(inlineMap[2])) {
+    const raw = inlineMap[3].trim();
+    const parts =
+      raw.match(/(?:[^,"']|"[^"]*"|'[^']*')+/g)?.map((item) => item.trim()) ?? [];
+    const existing = new Map<string, string>();
+    for (const part of parts) {
+      const colon = part.indexOf(':');
+      if (colon <= 0) continue;
+      existing.set(part.slice(0, colon).trim(), part.slice(colon + 1).trim());
+    }
+    for (const [key, value] of Object.entries(stepKeys)) {
+      if (value === null) existing.delete(key);
+      else existing.set(key, value);
+    }
+    block.splice(
+      0,
+      1,
+      inlineMap[1],
+      ...Array.from(existing.entries()).map(
+        ([key, value]) => `${childIndent}${key}: ${value}`,
+      ),
+    );
+    return;
+  }
 
   if (shorthand) {
     const m = first.match(/^(\s*-\s*\w+\s*:)\s*(.*)$/);

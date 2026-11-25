@@ -282,6 +282,46 @@ class ProjectEnvironmentVariable(Timestamped, Base):
     description: Mapped[str | None] = mapped_column(String(255))
 
 
+class ProjectFile(Timestamped, Base):
+    """环境测试文件。文件内容在共享卷上，这里只存元数据。
+
+    文件按环境绑定：同一个 key 可以在不同环境指向不同文件，执行时按所选环境解析。
+    storage_path 是相对 assets_dir 的路径，换机器/容器时不用改库。
+    """
+
+    __tablename__ = "project_files"
+    __table_args__ = (
+        UniqueConstraint(
+            "environment_id", "key", name="uq_project_files_environment_key"
+        ),
+        Index("ix_project_files_project", "project_id"),
+        Index("ix_project_files_environment", "environment_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    environment_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("project_environments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # YAML 里 upload 节点引用的逻辑名，例如 INVOICE_PDF
+    key: Mapped[str] = mapped_column(String(64), nullable=False)
+    original_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str | None] = mapped_column(String(128))
+    size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(255))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+
 class TeamApiToken(Base):
     """CI 用的测试团队级 token。库里只存 SHA-256，明文只在创建时返回一次。"""
 
@@ -799,6 +839,9 @@ class Run(Timestamped, Base):
     debug_step_limit: Mapped[int | None] = mapped_column(Integer)
     # 试跑是否使用 AI 缓存（跨 run 共享目录）。默认开：验证过的步骤第二次直接命中
     debug_cache: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # 执行时绑定的用例版本：{case_id: {version_id, version_no}}。
+    # 执行记录查看 YAML 时按这里跳转，而不是跳到用例的最新版本。
+    case_versions: Mapped[dict | None] = mapped_column(JSONB)
     # 单项目任务分片：这个 run 只跑其中一部分用例；为空表示老数据/不分片
     case_ids: Mapped[list[str] | None] = mapped_column(JSONB)
     shard_index: Mapped[int | None] = mapped_column(Integer)
@@ -856,6 +899,7 @@ class CaseResult(Base):
         ),
         Index("ix_case_results_run", "run_id"),
         Index("ix_case_results_case", "test_case_id"),
+        Index("ix_case_results_version", "test_case_version_id"),
         Index("ix_case_results_status", "status"),
     )
 
@@ -867,6 +911,12 @@ class CaseResult(Base):
     test_case_id: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("test_cases.id", ondelete="SET NULL")
     )
+    # 执行时绑定的版本；版本被删后 id 置空，version_no 仍保留用于显示
+    test_case_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("test_case_versions.id", ondelete="SET NULL"),
+    )
+    test_case_version_no: Mapped[int | None] = mapped_column(Integer)
     midscene_document_id: Mapped[str] = mapped_column(String(128), nullable=False)
     midscene_case_id: Mapped[str] = mapped_column(String(128), nullable=False)
     source_path: Mapped[str | None] = mapped_column(String(255))

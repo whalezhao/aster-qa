@@ -425,6 +425,34 @@ export const team: Record<string, string> = {
   '如 staging': 'e.g. staging',
   '默认环境地址跟随系统 Base URL': 'The default environment follows the system Base URL',
 
+  // ---- 测试文件 ----
+  测试文件: 'Test files',
+  '测试文件 · {name}': 'Test files · {name}',
+  '共 {n} 个文件': '{n} file(s)',
+  '文件只对当前环境生效；用例里用 upload 节点的 file 字段引用 key。':
+    'Files are scoped to this environment; cases reference the key through the upload node file field.',
+  文件: 'File',
+  上传文件: 'Upload file',
+  '用例里用 upload 节点的 file 字段引用文件 key；文件不会写进 YAML。':
+    'Cases reference a file key through the upload node file field; files are never written into YAML.',
+  '文件 key': 'File key',
+  文件名: 'File name',
+  大小: 'Size',
+  上传人: 'Uploaded by',
+  上传时间: 'Uploaded at',
+  下载: 'Download',
+  上传测试文件: 'Upload test file',
+  选择文件: 'Choose file',
+  '覆盖已存在的同名 key': 'Overwrite an existing key',
+  文件已上传: 'File uploaded',
+  文件已删除: 'File deleted',
+  '删除这个文件？': 'Delete this file?',
+  '引用它的用例会执行失败，需要重新上传。':
+    'Cases that reference it will fail until it is uploaded again.',
+  请选择文件: 'Please choose a file',
+  '只能包含字母、数字、下划线，且不能以数字开头':
+    'Only letters, digits and underscores; cannot start with a digit',
+
   // ---- 定时任务 ----
   定时计划已保存: 'Schedule saved',
   定时计划已删除: 'Schedule deleted',

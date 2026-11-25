@@ -20,6 +20,7 @@ from .api import (
     ci,
     environments,
     features,
+    files,
     iterations,
     preflight,
     projects,
@@ -128,6 +129,7 @@ app.include_router(ai.router)
 app.include_router(ai_drafts.router)
 app.include_router(settings.router)
 app.include_router(environments.router)
+app.include_router(files.router)
 app.include_router(api_tokens.router)
 app.include_router(ci.router)
 app.include_router(preflight.router)

@@ -14,7 +14,7 @@ from .ai_case import call_model, extract_yaml
 from .case_versions import diff_text
 from .model_health import describe_model_error
 from .modelconfig import missing_fields
-from .models import CaseResult, Feature, Project, ProjectModelConfig, Run, TestCase
+from .models import CaseResult, Feature, Project, ProjectFile, ProjectModelConfig, Run, TestCase
 from .quota import ensure_quota, record_usage
 from .runner.parsers import read_case_evidence
 from .yamlcheck import validate as validate_yaml
@@ -29,6 +29,12 @@ SYSTEM_PROMPT = """你是 UI 自动化测试用例修复助手。用户会给你
 - 保留 `beforeEach` 里的 `gotoUrl: ${BASE_URL}`，不要写死 URL。
 - 保留每个 aiAct 的 `options.cacheable` 判断；不要因为修复而删掉缓存配置。
 - 只修改导致失败的部分，不要顺手改写无关用例。
+- 保留 `upload` / `download` 节点及其 `file` / `files` / `trigger` / `filename` /
+  `minBytes` 字段；不要改写成 `aiAct`，也不要删除。
+- 文件 key 只能使用用户消息里「可用测试文件」列出的值；没有对应文件时直接说明原因，
+  不要编造 key。测试文件按环境绑定，不要假设某个 key 在所有环境都存在。
+  失败与文件有关时，优先检查 key 是否存在、upload 的上传入口描述是否准确、
+  download 的 trigger 是否真的会触发浏览器下载。
 - 如果失败原因明确是产品缺陷、无法通过改用例绕过，就不要硬改，直接在说明里讲清楚。
 - 最终把完整 YAML 放在 ```yaml 代码块里；代码块外写简短的原因说明。
 """
@@ -119,12 +125,30 @@ async def propose_case_fix(
     result_dir = _resolve_data_path(run.result_dir)
     evidence = _evidence(case, result_dir)
     evidence_text = json.dumps(evidence, ensure_ascii=False, indent=2)[:12_000]
+    files = list(
+        (
+            await db.execute(
+                select(ProjectFile)
+                .where(ProjectFile.project_id == project_id)
+                .order_by(ProjectFile.key)
+            )
+        ).scalars()
+    )
+    file_map: dict[str, str] = {}
+    for row in files:
+        file_map.setdefault(row.key, row.original_name)
+    file_text = (
+        "\n".join(f"- `{key}`（{name}）" for key, name in sorted(file_map.items()))
+        if file_map
+        else "当前项目还没有测试文件。"
+    )
     prompt = (
         f"## 当前用例 YAML\n```yaml\n{case.yaml_content.strip()}\n```\n\n"
         f"## 最近一次失败\n"
         f"- 用例结果：{result.status}（尝试 {result.attempt_count} 次）\n"
         f"- 运行 ID：{run.id}\n"
         f"- 失败步骤与理由（JSON）：\n```json\n{evidence_text or '[]'}\n```\n\n"
+        f"## 可用测试文件\n\n{file_text}\n\n"
         "请判断根因并给出修复后的完整 YAML。"
     )
 

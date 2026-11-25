@@ -327,6 +327,10 @@ export default function CaseDraft() {
     const stepOptions: TrialStepOption[] = Object.entries(stepOpts).map(
       ([key, opt]) => {
         const [ci, si] = key.split(':').map(Number);
+        const files = (opt.files ?? '')
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean);
         return {
           case_index: ci,
           step: si,
@@ -336,6 +340,13 @@ export default function CaseDraft() {
           effort: opt.effort,
           context: opt.context,
           message: opt.message,
+          prompt: opt.prompt,
+          trigger: opt.trigger,
+          file: files.length === 1 ? files[0] : opt.file,
+          files: files.length > 1 ? files : undefined,
+          filename: opt.filename,
+          min_bytes: opt.minBytes,
+          save_as: opt.saveAs,
         };
       },
     );

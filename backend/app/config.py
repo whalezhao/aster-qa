@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     runner_dir: str = "runner"
     case_timeout_ms: int = 600_000
 
+    # 测试文件库。API 与 worker 必须指向同一份目录（Compose 里挂同一个卷）
+    assets_dir: str = "assets"
+    max_upload_bytes: int = 20 * 1024 * 1024
+    max_project_assets_bytes: int = 100 * 1024 * 1024
+    max_download_bytes: int = 50 * 1024 * 1024
+
     # 执行产物清理：后台协程每 24 小时跑一次
     artifact_cleanup_enabled: bool = True
     artifact_retention_days: int = 30
@@ -46,6 +52,11 @@ class Settings(BaseSettings):
     @property
     def runner_path(self) -> Path:
         p = Path(self.runner_dir)
+        return p if p.is_absolute() else (BACKEND_DIR / p).resolve()
+
+    @property
+    def assets_path(self) -> Path:
+        p = Path(self.assets_dir)
         return p if p.is_absolute() else (BACKEND_DIR / p).resolve()
 
 

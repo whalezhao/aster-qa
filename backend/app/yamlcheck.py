@@ -67,6 +67,31 @@ def validate(text: str) -> tuple[list[str], int]:
                     errors.append(f"{where}只能有一个节点，现在有：{names}")
                     continue
                 node, value = next(iter(step.items()))
+                if node == "upload":
+                    if not isinstance(value, dict):
+                        errors.append(f"{where}的 upload 必须是对象，例如 upload: {{prompt: ..., file: KEY}}")
+                    else:
+                        if not isinstance(value.get("prompt"), str) or not value["prompt"].strip():
+                            errors.append(f"{where}的 upload.prompt 不能为空")
+                        files = value.get("files")
+                        file_key = value.get("file")
+                        if not file_key and not (
+                            isinstance(files, list) and any(isinstance(item, str) and item.strip() for item in files)
+                        ):
+                            errors.append(f"{where}的 upload 必须指定 file 或 files")
+                        if "options" in value:
+                            errors.append(f"{where}的 upload 不支持 options")
+                if node == "download":
+                    if not isinstance(value, dict):
+                        errors.append(
+                            f"{where}的 download 必须是对象，例如 download: {{trigger: ...}}"
+                        )
+                    else:
+                        trigger = value.get("trigger")
+                        if not isinstance(trigger, str) or not trigger.strip():
+                            errors.append(f"{where}的 download.trigger 不能为空")
+                        if "options" in value:
+                            errors.append(f"{where}的 download 不支持 options")
                 if node == "aiAct" and isinstance(value, dict):
                     if "cacheable" in value:
                         errors.append(

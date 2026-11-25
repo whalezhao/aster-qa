@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from ..ai_case import call_model
+from ..config import get_settings
 from ..deps import (
     CurrentUser,
     DbSession,
@@ -18,6 +19,7 @@ from ..environments import ensure_default_environment, sync_default_environment
 from ..model_health import describe_model_error, probe_project
 from ..modelconfig import configured_project_ids_stmt, missing_fields, row_configured
 from ..models import Project, ProjectModelConfig, ProjectModelHealth
+from ..project_files import remove_project_assets
 from ..quota import project_month_usage, record_usage
 from ..schemas import (
     ModelConfigIn,
@@ -114,8 +116,10 @@ async def update_project(
 @router.delete("/api/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(project_id: uuid.UUID, user: CurrentUser, db: DbSession) -> None:
     project = await require_project_access(db, project_id, user, "admin")
+    team_id = project.team_id
     await db.delete(project)
     await db.commit()
+    remove_project_assets(get_settings().assets_path, team_id, project_id)
 
 
 # --------------------------------------------------------------- 项目级模型配置

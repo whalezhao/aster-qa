@@ -5,6 +5,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
+from ..config import get_settings
 from ..crypto import encrypt_secret
 from ..deps import CurrentUser, DbSession, require_project_access, require_team_role
 from ..environments import (
@@ -16,8 +17,10 @@ from ..models import (
     Project,
     ProjectEnvironment,
     ProjectEnvironmentVariable,
+    ProjectFile,
     TestTask,
 )
+from ..project_files import resolve_storage_path
 from ..schemas import (
     EnvironmentIn,
     EnvironmentOut,
@@ -226,8 +229,28 @@ async def delete_environment(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "仍有任务在使用这个环境，不能删除"
         )
+    file_rows = list(
+        (
+            await db.execute(
+                select(ProjectFile).where(ProjectFile.environment_id == env.id)
+            )
+        ).scalars()
+    )
+    settings = get_settings()
+    file_paths = []
+    for row in file_rows:
+        try:
+            file_paths.append(resolve_storage_path(settings.assets_path, row.storage_path))
+        except ValueError:
+            pass
     await db.delete(env)
     await db.commit()
+    for path in file_paths:
+        path.unlink(missing_ok=True)
+        try:
+            path.parent.rmdir()
+        except OSError:
+            pass
 
 
 @router.put(

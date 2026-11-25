@@ -31,9 +31,10 @@ also the idea behind the logo.
   run”. Multi-worker horizontal scaling and a global concurrency cap are supported.
 - **Preflight checks**: model connectivity, environment, quota, target URL and worker
   availability in one place. Model failures block the run with a concrete reason.
-- **Executions**: drill down from batch to run, case, and report. Reports are
-  case-centric: each step has a keyframe timeline with replay plus parameters, output,
-  logs, and reasoning.
+- **Executions**: drill down from batch to run, case, and report. Each case result is
+  bound to the case version that actually ran, so the execution record opens that YAML
+  instead of the latest version. Reports are case-centric: each step has a keyframe
+  timeline with replay plus parameters, output, logs, and reasoning.
 - **Rerun failed cases only**: rebuild a batch from the failed cases of a batch or run,
   reusing the original environment and keeping parent/child lineage.
 - **CI/CD and quality gates**: team API tokens trigger runs and read batch status; gates
@@ -43,6 +44,10 @@ also the idea behind the logo.
 - **Environments and variables**: multiple environments per project; plain variables use
   `${KEY}`, secrets are injected only into the process environment (`${{KEY}}`) and
   encrypted at rest.
+- **Test file library**: per-environment uploads for fixtures (images, PDF, Excel, etc.).
+  The same key can point to different files in different environments. Cases reference it
+  through the `upload` node; the `download` node waits for a browser download, can assert
+  its filename/size, and keeps the downloaded file on the run.
 - **Notification channels**: generic HMAC webhooks plus WeCom, Feishu, DingTalk and Slack
   bots.
 - **Compliance-ready reports**: when one execution spans multiple projects, the run
@@ -151,6 +156,31 @@ docker compose up -d
 5. Create a test task, select the feature, and run it. Open the execution to see results
    and AI diagnosis.
 
+### Test file upload and download
+
+Upload a fixture under **Project → Environments & variables → environment row → Test
+files**. Files are scoped to that environment. Note the key (for example `INVOICE_PDF`)
+and reference it from a case:
+
+```yaml
+cases:
+  - name: Upload an invoice and download the receipt
+    steps:
+      - upload:
+          prompt: Click "Upload invoice" and choose the PDF in the file chooser
+          file: INVOICE_PDF
+      - aiAssert: The page shows the upload succeeded
+      - download:
+          trigger: Click "Download receipt"
+          filename: receipt.pdf
+          minBytes: 1
+      - aiAssert: The page shows the download succeeded
+```
+
+`upload` also accepts `files: [KEY1, KEY2]`; `filename` / `minBytes` on
+`download` are optional. Downloaded files are kept on the run and listed under
+"Downloaded files" in the execution detail page.
+
 ### Docker images (Docker Hub)
 
 Each release publishes three images under `<version>`, `v<version>` and `latest`:
@@ -231,6 +261,10 @@ Every option is available as an environment variable. The backend reads `backend
 | `WORKER_CONCURRENCY` | `4` | Slot limit per worker process; the global cap is configured in the UI |
 | `WORKER_REPLICAS` | `1` | Number of worker replicas (Compose scaling); still bounded by the global cap |
 | `WORKER_STALE_SECONDS` | `90` | Worker heartbeat timeout before its runs can be recovered by another worker |
+| `ASSETS_DIR` | `assets` | Project test-file directory; the API and workers must share it (Compose mounts `test_assets`) |
+| `MAX_UPLOAD_BYTES` | `20971520` | Per-file upload limit (20 MB) |
+| `MAX_PROJECT_ASSETS_BYTES` | `104857600` | Per-project test-file quota (100 MB) |
+| `MAX_DOWNLOAD_BYTES` | `52428800` | Per-case download limit (50 MB) |
 
 The runner also supports `HEADLESS`, `CHROMIUM_NO_SANDBOX` (needed inside containers),
 and `MIDSCENE_*` variables. See `backend/runner/.env.example`.

@@ -271,7 +271,77 @@ function StepOptions({
   value: StepOption;
   onChange: (patch: Partial<StepOption>) => void;
 }) {
-  if (!['aiAct', 'aiWaitFor', 'aiAssert'].includes(step.kind)) return null;
+  if (!['aiAct', 'aiWaitFor', 'aiAssert', 'upload', 'download'].includes(step.kind)) {
+    return null;
+  }
+  if (step.kind === 'upload') {
+    const filesValue =
+      value.files ??
+      value.file ??
+      (step.files?.length ? step.files.join(', ') : (step.file ?? ''));
+    return (
+      <Space direction="vertical" size={2} style={{ marginTop: 4, width: '100%' }}>
+        <Input
+          size="small"
+          placeholder={t('上传动作描述（prompt）')}
+          value={value.prompt ?? step.prompt ?? step.text}
+          onChange={(event) => onChange({ prompt: event.target.value })}
+        />
+        <Input
+          size="small"
+          placeholder={t('文件 key，多个用逗号分隔')}
+          value={filesValue}
+          onChange={(event) => onChange({ files: event.target.value, file: undefined })}
+        />
+      </Space>
+    );
+  }
+  if (step.kind === 'download') {
+    return (
+      <Space direction="vertical" size={2} style={{ marginTop: 4, width: '100%' }}>
+        <Input
+          size="small"
+          placeholder={t('触发下载的动作（trigger）')}
+          value={value.trigger ?? step.trigger ?? step.text}
+          onChange={(event) => onChange({ trigger: event.target.value })}
+        />
+        <Space size={6} wrap>
+          <Input
+            size="small"
+            style={{ width: 190 }}
+            placeholder={t('期望文件名（可选）')}
+            value={value.filename ?? step.filename ?? ''}
+            onChange={(event) => onChange({ filename: event.target.value })}
+          />
+          <InputNumber
+            size="small"
+            min={0}
+            style={{ width: 120 }}
+            placeholder={t('最小字节')}
+            value={value.minBytes ?? step.minBytes ?? undefined}
+            onChange={(minBytes) => onChange({ minBytes })}
+          />
+          <InputNumber
+            size="small"
+            min={1000}
+            max={600000}
+            step={1000}
+            style={{ width: 140 }}
+            placeholder={t('超时 ms')}
+            value={value.timeoutMs ?? step.timeoutMs ?? undefined}
+            onChange={(timeoutMs) => onChange({ timeoutMs })}
+          />
+          <Input
+            size="small"
+            style={{ width: 190 }}
+            placeholder={t('保存文件名（可选）')}
+            value={value.saveAs ?? step.saveAs ?? ''}
+            onChange={(event) => onChange({ saveAs: event.target.value })}
+          />
+        </Space>
+      </Space>
+    );
+  }
   return (
     <Space direction="vertical" size={2} style={{ marginTop: 4, width: '100%' }}>
       {step.kind === 'aiAct' && (
@@ -280,7 +350,7 @@ function StepOptions({
             {t('缓存')}{' '}
             <Switch
               size="small"
-              checked={value.cache === true}
+              checked={value.cache ?? step.cacheable ?? false}
               onChange={(checked) => onChange({ cache: checked })}
             />
           </span>
@@ -288,14 +358,14 @@ function StepOptions({
             {t('深度定位')}{' '}
             <Switch
               size="small"
-              checked={value.deep === true}
+              checked={value.deep ?? step.deepLocate ?? false}
               onChange={(checked) => onChange({ deep: checked })}
             />
           </span>
           <Select
             size="small"
             style={{ width: 96 }}
-            value={value.effort ?? 'balance'}
+            value={value.effort ?? step.effort ?? 'balance'}
             options={[
               { value: 'fast', label: 'fast' },
               { value: 'balance', label: 'balance' },
@@ -313,7 +383,7 @@ function StepOptions({
           step={1000}
           style={{ width: 140 }}
           placeholder={t('超时 ms（默认 15000）')}
-          value={value.timeoutMs ?? undefined}
+          value={value.timeoutMs ?? step.timeoutMs ?? undefined}
           onChange={(timeoutMs) => onChange({ timeoutMs })}
         />
       )}
@@ -321,14 +391,14 @@ function StepOptions({
         <Input
           size="small"
           placeholder={t('失败文案（可选）')}
-          value={value.message ?? ''}
+          value={value.message ?? step.message ?? ''}
           onChange={(event) => onChange({ message: event.target.value })}
         />
       )}
       <Input
         size="small"
         placeholder={t('单步上下文 / 额外约束（可选）')}
-        value={value.context ?? ''}
+        value={value.context ?? step.context ?? ''}
         onChange={(event) => onChange({ context: event.target.value })}
       />
     </Space>

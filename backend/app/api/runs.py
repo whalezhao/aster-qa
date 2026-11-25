@@ -283,6 +283,47 @@ async def get_report_structured(
 # ------------------------------------------------------------------------- 报告静态
 
 
+def _downloads_dir(run: Run) -> Path | None:
+    work_dir = _resolve_data_path(run.work_dir)
+    if work_dir is None:
+        return None
+    path = (work_dir / "downloads").resolve()
+    return path if path.is_dir() else None
+
+
+@router.get("/api/runs/{run_id}/downloads")
+async def list_run_downloads(
+    run_id: uuid.UUID, user: CurrentUser, db: DbSession
+) -> dict:
+    run = await _require_run(db, run_id, user)
+    root = _downloads_dir(run)
+    if root is None:
+        return {"files": []}
+    files = []
+    for item in sorted(root.iterdir(), key=lambda p: p.name):
+        if item.is_file():
+            files.append({"name": item.name, "size": item.stat().st_size})
+    return {"files": files}
+
+
+@router.get("/api/runs/{run_id}/downloads/{name:path}")
+async def download_run_file(
+    run_id: uuid.UUID, name: str, user: CurrentUser, db: DbSession
+) -> FileResponse:
+    run = await _require_run(db, run_id, user)
+    root = _downloads_dir(run)
+    if root is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "下载产物不存在")
+    target = (root / name).resolve()
+    if not target.is_relative_to(root) or not target.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "下载产物不存在")
+    return FileResponse(
+        target,
+        filename=target.name,
+        headers={"X-Content-Type-Options": "nosniff"},
+    )
+
+
 @router.get("/reports/{run_id}/{relative:path}")
 async def serve_report(
     run_id: uuid.UUID,

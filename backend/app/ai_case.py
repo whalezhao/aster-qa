@@ -75,6 +75,21 @@ cases:
 - `aiWaitFor: <自然语言>` —— 等待某条件出现，用于页面跳转、异步加载。
 - `aiQuery: <自然语言>` —— 从页面取值。
 
+文件上传/下载（平台节点，不是 `aiAct`）：
+- `upload`：把项目里的测试文件上传到页面。
+  `upload: { prompt: <描述点击哪个上传入口、在哪个区域选择文件>, file: <文件 key> }`
+  多文件用 `files: [<key>, ...]`。prompt 只描述页面动作，不要把文件名或本地路径写进去；
+  执行器会自动把文件交给文件选择框。
+- `download`：触发一次浏览器下载，并等待文件保存完成。
+  `download: { trigger: <真正触发下载的自然语言动作>, filename: <期望文件名>, minBytes: <最小字节> }`
+  `filename` / `minBytes` 可选，只在用户明确给出或页面明确展示时填写。
+  节点自己会等待下载事件，后面不要再写 `sleep` 或 `aiWaitFor` 等文件；页面如果有
+  「导出成功」提示，再用 `aiAssert` 验证。
+- `upload` / `download` 不要再套 `options`，也不要写 `cacheable`；它们内部固定不走缓存。
+- 文件 key 只能使用「当前可用的测试文件」里列出的值；没有合适的文件时先问用户，不要编造。
+- 测试文件按环境绑定：任务执行时使用所选环境下的同名 key；不同环境可以放不同文件。
+- 只有浏览器真的开始下载文件时才用 `download`；纯页面提示的“导出”不要用。
+
 ## 缓存（每个 aiAct 都必须显式判断）
 
 平台已开启执行缓存。缓存的正确写法是 `aiAct` 的选项，不是步骤的独立字段：
@@ -140,6 +155,8 @@ cases:
 时效性资源（验证码/短信码）例外，见上面「时效性资源」一节。
 4. 用例要形成完整闭环：从打开页面到验证结果，**最后至少有一条 `aiAssert`**。
 5. 用例名称与断言描述用中文。
+6. 上传/下载使用 `upload` / `download` 平台节点；不要用 CSS 选择器、JavaScript、
+   本地文件路径或 `aiAct` 的 `fileChooserAccept` 绕过。
 
 ## 测试数据
 
@@ -293,7 +310,31 @@ def steps_of(yaml_text: str) -> list[dict]:
                 continue
             node = next(iter(step))
             value = step.get(node)
-            text = value.get("prompt") if isinstance(value, dict) else value
+            text = (
+                value.get("prompt") or value.get("trigger")
+                if isinstance(value, dict)
+                else value
+            )
+            detail = {}
+            if isinstance(value, dict):
+                for key in (
+                    "prompt",
+                    "trigger",
+                    "file",
+                    "files",
+                    "filename",
+                    "minBytes",
+                    "timeoutMs",
+                    "saveAs",
+                    "message",
+                ):
+                    if key in value:
+                        detail[key] = value[key]
+                options = value.get("options")
+                if isinstance(options, dict):
+                    for key in ("cacheable", "deepLocate", "effort", "context", "timeoutMs"):
+                        if key in options:
+                            detail[key] = options[key]
             items.append(
                 {
                     "case": name,
@@ -301,6 +342,7 @@ def steps_of(yaml_text: str) -> list[dict]:
                     "index": index,
                     "kind": node,
                     "text": str(text or "")[:200],
+                    **detail,
                 }
             )
     return items
@@ -312,12 +354,27 @@ def _test_row(step: dict, *, phase: str | None = None) -> dict | None:
         return None
     node = next(iter(step))
     value = step[node]
-    text = value.get("prompt") if isinstance(value, dict) else value
+    text = (
+        value.get("prompt") or value.get("trigger")
+        if isinstance(value, dict)
+        else value
+    )
     options = value.get("options") if isinstance(value, dict) else None
     message = value.get("message") if isinstance(value, dict) else None
     text = str(text or "").strip()
 
-    if node == "gotoUrl":
+    if node == "upload":
+        keys = value.get("files") if isinstance(value, dict) else None
+        if not isinstance(keys, list):
+            key = value.get("file") if isinstance(value, dict) else None
+            keys = [key] if key else []
+        action = text or "上传文件"
+        expected = f"上传文件：{'、'.join(str(k) for k in keys)}" if keys else "文件上传成功"
+    elif node == "download":
+        filename = value.get("filename") if isinstance(value, dict) else None
+        action = f"下载：{text}" if text else "下载文件"
+        expected = f"下载文件：{filename}" if filename else "文件下载成功"
+    elif node == "gotoUrl":
         action, expected = f"打开页面 {text}".strip(), "页面加载完成"
     elif node == "sleep":
         action, expected = f"等待 {text} ms".strip(), None
@@ -444,6 +501,43 @@ def apply_step_options(yaml_text: str, overrides: list[dict]) -> str:
             node = next(iter(step))
             value = step[node]
             chosen = override
+            if node in ("upload", "download"):
+                base = dict(value) if isinstance(value, dict) else {}
+                fields = {
+                    "prompt": "prompt",
+                    "file": "file",
+                    "files": "files",
+                }
+                if node == "download":
+                    fields.update(
+                        {
+                            "trigger": "trigger",
+                            "filename": "filename",
+                            "min_bytes": "minBytes",
+                            "timeout_ms": "timeoutMs",
+                            "save_as": "saveAs",
+                        }
+                    )
+                for source_key, yaml_key in fields.items():
+                    if source_key not in chosen:
+                        continue
+                    value_to_set = chosen[source_key]
+                    if (
+                        value_to_set is None
+                        or (isinstance(value_to_set, str) and not value_to_set.strip())
+                        or (isinstance(value_to_set, list) and not value_to_set)
+                    ):
+                        base.pop(yaml_key, None)
+                    elif isinstance(value_to_set, str):
+                        base[yaml_key] = value_to_set.strip()
+                    else:
+                        base[yaml_key] = value_to_set
+                    if yaml_key == "files":
+                        base.pop("file", None)
+                    elif yaml_key == "file":
+                        base.pop("files", None)
+                steps.append({node: base})
+                continue
             if node in (_CACHE_NODES | _TIMEOUT_NODES | _CONTEXT_NODES | _MESSAGE_NODES):
                 # 开 = 写 true；关 = 把这个键删掉（界面上就是「不要这个 key」）
                 merged = dict(value.get("options") or {}) if isinstance(value, dict) else {}
@@ -569,6 +663,8 @@ _ACTION_NODES = {
     "aiScroll",
     "aiDragAndDrop",
     "aiLongPress",
+    "upload",
+    "download",
 }
 _ASSERT_NODES = {"aiAssert"}
 
@@ -576,7 +672,7 @@ _ASSERT_NODES = {"aiAssert"}
 def _node_text(step: dict, node: str) -> str:
     value = step.get(node)
     if isinstance(value, dict):
-        value = value.get("prompt")
+        value = value.get("prompt") or value.get("trigger")
     return str(value).strip() if value else ""
 
 
@@ -706,6 +802,7 @@ def build_messages(
     *,
     current_yaml: str | None,
     feature_name: str | None,
+    files: list[dict] | None = None,
     mode: str = "rewrite",
 ) -> list[dict]:
     system = SYSTEM_PROMPT
@@ -713,6 +810,21 @@ def build_messages(
         system += APPEND_RULE
     if feature_name:
         system += f"\n\n## 当前上下文\n\n这个用例属于功能「{feature_name}」。"
+    if files:
+        lines = "\n".join(
+            f"- `{item.get('key', '')}`（{item.get('name', '')}）" for item in files
+        )
+        system += (
+            "\n\n## 当前可用的测试文件\n\n"
+            f"{lines}\n\n"
+            "引用文件时只能使用上面的 key；没有合适的文件时先让用户上传，不要编造 key。"
+        )
+    else:
+        system += (
+            "\n\n## 当前可用的测试文件\n\n"
+            "当前项目还没有测试文件。用户要求上传文件时，先提示用户到「项目 → 测试文件」"
+            "上传，不要编造 key。"
+        )
     if current_yaml:
         system += (
             "\n\n## 当前的 YAML\n\n"
@@ -773,6 +885,7 @@ _CACHE_REVIEW = (
     "请重新检查这份 YAML 的缓存策略：逐个 aiAct 判断是否需要缓存，并把每个 aiAct 都写成"
     "带 options.cacheable（true 或 false）的形式 —— 稳定的导航/准备步骤用 true，"
     "内容会变或依赖动态结果的交互用 false。只调整缓存选项，不要改其他内容；"
+    "不要改动 `upload` / `download` 节点，也不要给它们添加 options。"
     "输出完整 YAML（放在 ```yaml 代码块里）。"
 )
 
@@ -1035,6 +1148,7 @@ async def draft_stream(
     history: list[dict],
     current_yaml: str | None,
     feature_name: str | None,
+    files: list[dict] | None = None,
     mode: str = "rewrite",
 ) -> AsyncIterator[dict]:
     """流式生成：先发 delta，最后发一次 done（结构同 CaseDraftOut）。
@@ -1042,7 +1156,11 @@ async def draft_stream(
     出错时发 error 事件而不是断开连接 —— 前端能把原因显示在气泡里。
     """
     messages = build_messages(
-        history, current_yaml=current_yaml, feature_name=feature_name, mode=mode
+        history,
+        current_yaml=current_yaml,
+        feature_name=feature_name,
+        files=files,
+        mode=mode,
     )
     parts: list[str] = []
     usage: dict = {}
@@ -1106,10 +1224,15 @@ async def draft(
     history: list[dict],
     current_yaml: str | None,
     feature_name: str | None,
+    files: list[dict] | None = None,
     mode: str = "rewrite",
 ) -> DraftResult:
     messages = build_messages(
-        history, current_yaml=current_yaml, feature_name=feature_name, mode=mode
+        history,
+        current_yaml=current_yaml,
+        feature_name=feature_name,
+        files=files,
+        mode=mode,
     )
     reply, usage = await call_model(config, messages)
 

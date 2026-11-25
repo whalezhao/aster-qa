@@ -51,6 +51,8 @@ const NODE_LABELS: Record<string, string> = {
   aiTap: '点击',
   gotoUrl: '打开页面',
   sleep: '等待',
+  upload: '上传文件',
+  download: '下载文件',
   'runner:host-result': '执行异常',
   execution: '执行段',
 };
@@ -61,6 +63,8 @@ const NODE_COLORS: Record<string, string> = {
   aiWaitFor: 'orange',
   aiQuery: 'cyan',
   gotoUrl: 'blue',
+  upload: 'blue',
+  download: 'green',
   'runner:host-result': 'red',
   execution: 'blue',
 };

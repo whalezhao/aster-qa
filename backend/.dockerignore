@@ -8,5 +8,6 @@ tests/
 runner/node_modules/
 runner/.runs/
 runner/midscene_run/
+assets/
 runner/.env
 .DS_Store

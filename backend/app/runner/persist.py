@@ -19,6 +19,28 @@ from .staging import case_id_from_source_path
 FLAKY_WINDOW_DAYS = 14
 
 
+def _version_for(
+    version_map: dict, test_case_id: uuid.UUID | None
+) -> tuple[uuid.UUID | None, int | None]:
+    if test_case_id is None:
+        return None, None
+    raw = version_map.get(str(test_case_id))
+    if isinstance(raw, str):
+        raw = {"version_id": raw}
+    if not isinstance(raw, dict):
+        return None, None
+    try:
+        version_id = uuid.UUID(str(raw.get("version_id")))
+    except (TypeError, ValueError):
+        version_id = None
+    raw_no = raw.get("version_no")
+    try:
+        version_no = int(raw_no) if raw_no is not None else None
+    except (TypeError, ValueError):
+        version_no = None
+    return version_id, version_no
+
+
 async def apply_summary(db: AsyncSession, run: Run, data: SummaryData) -> None:
     run.midscene_run_id = data.midscene_run_id
     run.midscene_status = data.midscene_status
@@ -36,13 +58,17 @@ async def apply_summary(db: AsyncSession, run: Run, data: SummaryData) -> None:
     run.project_failures = data.project_failures
 
     # caseId/documentId 是内容哈希，不能当身份；暂存文件名才是我们的用例 UUID
+    version_map = run.case_versions or {}
     for outcome in data.cases:
         test_case_id = (
             case_id_from_source_path(outcome.source_path) if outcome.source_path else None
         )
+        version_id, version_no = _version_for(version_map, test_case_id)
         stmt = insert(CaseResult).values(
             run_id=run.id,
             test_case_id=test_case_id,
+            test_case_version_id=version_id,
+            test_case_version_no=version_no,
             midscene_document_id=outcome.document_id,
             midscene_case_id=outcome.case_id,
             source_path=outcome.source_path,
@@ -57,6 +83,8 @@ async def apply_summary(db: AsyncSession, run: Run, data: SummaryData) -> None:
                 constraint="uq_case_results_identity",
                 set_={
                     "test_case_id": test_case_id,
+                    "test_case_version_id": version_id,
+                    "test_case_version_no": version_no,
                     "name": outcome.name,
                     "status": outcome.status,
                     "attempt_count": outcome.attempt_count,

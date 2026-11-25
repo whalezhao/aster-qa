@@ -447,6 +447,7 @@ export const pages: Record<string, string> = {
   没有运行明细: 'No run details',
   '分片 {index}/{count}': 'Shard {index}/{count}',
   用例结果: 'Case results',
+  下载产物: 'Downloaded files',
   有用例失败: 'Some cases failed',
   '用例由 AI 驱动执行，同一个用例时过时不过属于常态，单次失败不等价于缺陷。建议结合「用例历史执行结果」判断是否稳定复现。':
     "Cases are executed by AI; the same case passing sometimes and failing other times is normal, and a single failure does not mean a defect. Check the case's run history to see whether it reproduces reliably.",
@@ -474,6 +475,9 @@ export const pages: Record<string, string> = {
   'AI 耗时': 'AI time',
   退出码: 'Exit code',
   暂无用例结果: 'No case results yet',
+  执行版本: 'Executed version',
+  '查看 v{n}': 'View v{n}',
+  '执行版本 v{n} · {name}': 'Executed version v{n} · {name}',
   尝试次数: 'Attempts',
   'AI 修复': 'AI fix',
   // ---- feature detail ----

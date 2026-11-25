@@ -26,6 +26,7 @@ import {
 } from '../api/environments';
 import { apiError } from '../api/client';
 import { t } from '../i18n';
+import EnvironmentFilesModal from './EnvironmentFilesModal';
 import type {
   Environment,
   EnvironmentVariableInput,
@@ -257,6 +258,7 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
   const [editing, setEditing] = useState<Environment | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [variablesFor, setVariablesFor] = useState<Environment | null>(null);
+  const [filesFor, setFilesFor] = useState<Environment | null>(null);
 
   const { data: environments = [], isLoading } = useQuery({
     queryKey: ['environments', projectId],
@@ -340,11 +342,14 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
           },
           {
             title: t('操作'),
-            width: 220,
+            width: 300,
             render: (_value, row) => (
               <Space>
                 <Button size="small" onClick={() => setVariablesFor(row)}>
                   {t('变量')}
+                </Button>
+                <Button size="small" onClick={() => setFilesFor(row)}>
+                  {t('测试文件')}
                 </Button>
                 <Button size="small" onClick={() => openEdit(row)}>
                   {t('编辑')}
@@ -392,6 +397,7 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
         </Form>
       </Modal>
       <VariablesModal env={variablesFor} onClose={() => setVariablesFor(null)} />
+      <EnvironmentFilesModal env={filesFor} onClose={() => setFilesFor(null)} />
     </div>
   );
 }
