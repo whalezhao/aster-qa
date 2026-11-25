@@ -48,6 +48,7 @@ from ..schemas import (
     SignoffIn,
 )
 from ..taskstatus import refresh_task_status
+from ..user_names import attach_user_names
 from .runs import _resolve_data_path
 from .task_common import active_task_ids, failed_case_ids, purge_artifacts, spawn_runs
 
@@ -396,6 +397,7 @@ async def list_batches(
         ).scalars()
     )
 
+    await attach_user_names(db, batches)
     ids = [b.id for b in batches]
     aggregates = await _run_aggregates(db, ids)
     features = await _feature_breakdown(db, ids)
@@ -428,6 +430,7 @@ async def list_batches(
                 "gate_status": batch.gate_status,
                 "gate_detail": batch.gate_detail,
                 "created_at": batch.created_at,
+                "created_by_name": getattr(batch, "created_by_name", None),
                 "started_at": agg.get("started_at"),
                 "ended_at": agg.get("ended_at"),
                 "duration_ms": agg.get("duration_ms", 0),

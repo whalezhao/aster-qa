@@ -27,6 +27,7 @@ async def attach_user_names(db: AsyncSession, items: list) -> None:
     ).all()
     names = {row[0]: row[2] or row[1] for row in rows}
     for item in items:
-        # 这两个字段只给响应序列化用，不落库
-        item.created_by_name = names.get(item.created_by)
-        item.updated_by_name = names.get(item.updated_by)
+        # 这些字段只给响应序列化用，不落库；RunBatch 只有 created_by
+        item.created_by_name = names.get(getattr(item, "created_by", None))
+        if hasattr(item, "updated_by"):
+            item.updated_by_name = names.get(item.updated_by)

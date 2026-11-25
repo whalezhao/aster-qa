@@ -272,6 +272,13 @@ export default function Executions() {
               ),
           },
           {
+            title: t('执行人'),
+            width: 110,
+            sorter: byText<Batch>((r) => r.created_by_name ?? ''),
+            render: (_, r) =>
+              r.created_by_name || <Typography.Text type="secondary">-</Typography.Text>,
+          },
+          {
             title: t('状态'),
             width: 130,
             sorter: byRank<Batch>((r) => r.status, [
