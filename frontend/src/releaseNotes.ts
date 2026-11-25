@@ -23,6 +23,24 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.4.0',
+    date: '2026-11-25',
+    items: [
+      {
+        category: 'feature',
+        title: '环境变量支持随机值',
+        description:
+          '环境变量现在可以选择固定值、随机字符串或随机数字，并设置 1–128 位长度；每次执行自动生成，适合手机号、验证码、编号等测试数据。',
+      },
+      {
+        category: 'improvement',
+        title: '执行记录显示执行人',
+        description:
+          '执行记录列表新增「执行人」列，可以直接看到这次执行由谁触发。',
+      },
+    ],
+  },
+  {
     version: '0.3.0',
     date: '2026-11-24',
     items: [

@@ -165,7 +165,7 @@ Run a pinned release:
 
 ```bash
 cp .env.example .env
-# set DOCKERHUB_NAMESPACE=whalezhao and ASTER_QA_VERSION=0.3.0
+# set DOCKERHUB_NAMESPACE=whalezhao and ASTER_QA_VERSION=0.4.0
 docker compose pull
 docker compose up -d
 ```
