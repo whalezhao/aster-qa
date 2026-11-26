@@ -11,12 +11,14 @@ from ..deps import CurrentUser, DbSession, get_team_membership, require_team_rol
 from ..environments import resolve_run_environments
 from ..feature_tree import path_map
 from ..models import (
+    CaseFlow,
     Feature,
     Project,
     Run,
     RunBatch,
     Tag,
     TaskCase,
+    TaskCaseDependency,
     TaskFeature,
     TaskSchedule,
     TaskSignoff,
@@ -40,6 +42,7 @@ from .task_common import (
     active_task_ids,
     attach_features,
     delete_tasks,
+    merge_flow_into_task,
     purge_artifacts,
     require_task,
     spawn_runs,
@@ -298,7 +301,29 @@ async def create_task(
                 f"{len(missing)} 个用例不存在、已停用或不属于该测试团队",
             )
 
-    project_ids = {f.project_id for f in features} | {row[2] for row in case_rows}
+    flows = []
+    if body.flow_ids:
+        flows = list(
+            (
+                await db.execute(
+                    select(CaseFlow)
+                    .join(Project, Project.id == CaseFlow.project_id)
+                    .where(
+                        CaseFlow.id.in_(body.flow_ids), Project.team_id == team_id
+                    )
+                )
+            ).scalars()
+        )
+        if missing := set(body.flow_ids) - {flow.id for flow in flows}:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, f"{len(missing)} 个编排不存在或不属于该测试团队"
+            )
+
+    project_ids = (
+        {f.project_id for f in features}
+        | {row[2] for row in case_rows}
+        | {flow.project_id for flow in flows}
+    )
     if body.project_id is not None:
         project_ids.add(body.project_id)
     projects = list(
@@ -338,6 +363,23 @@ async def create_task(
     case_count, feature_count = await attach_features(
         db, task, body.feature_ids, body.case_ids
     )
+    for flow in flows:
+        await merge_flow_into_task(db, task, flow)
+    if flows:
+        case_count = (
+            await db.execute(
+                select(func.count())
+                .select_from(TaskCase)
+                .where(TaskCase.task_id == task.id)
+            )
+        ).scalar_one()
+        feature_count = (
+            await db.execute(
+                select(func.count())
+                .select_from(TaskFeature)
+                .where(TaskFeature.task_id == task.id)
+            )
+        ).scalar_one()
     for tag_id in body.tag_ids:
         tag = await db.get(Tag, tag_id)
         if tag is None or tag.team_id != team_id:
@@ -512,7 +554,34 @@ async def set_task_cases(
     task_id: uuid.UUID, body: CaseIdList, user: CurrentUser, db: DbSession
 ) -> dict[str, int]:
     task = await require_task(db, task_id, user)
+    # 重设用例集合时尽量保留编排：先记下标记和边，只保留两端都还在的边
+    old_flags = {
+        row[0]: row[1]
+        for row in (
+            await db.execute(
+                select(TaskCase.case_id, TaskCase.is_flow_node).where(
+                    TaskCase.task_id == task_id
+                )
+            )
+        ).all()
+    }
+    old_edges = {
+        (row[0], row[1])
+        for row in (
+            await db.execute(
+                select(
+                    TaskCaseDependency.case_id,
+                    TaskCaseDependency.depends_on_case_id,
+                ).where(TaskCaseDependency.task_id == task_id)
+            )
+        ).all()
+    }
+
+    await db.execute(
+        delete(TaskCaseDependency).where(TaskCaseDependency.task_id == task_id)
+    )
     await db.execute(delete(TaskCase).where(TaskCase.task_id == task_id))
+    new_ids: set[uuid.UUID] = set()
     if body.case_ids:
         # 必须连团队一起过滤：只用 id 查会让 A 团队的成员把 B 团队的用例挂到自己
         # 任务上执行，从而读到别人的用例内容
@@ -529,13 +598,25 @@ async def set_task_cases(
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST, f"{len(missing)} 个用例不存在或不属于该测试团队"
             )
+        edge_ids = {case_id for edge in old_edges for case_id in edge}
         for position, (case_id, feature_id) in enumerate(rows):
+            new_ids.add(case_id)
             db.add(
                 TaskCase(
                     task_id=task_id,
                     case_id=case_id,
                     source_feature_id=feature_id,
                     position=position,
+                    is_flow_node=old_flags.get(case_id, False) or case_id in edge_ids,
+                )
+            )
+    for case_id, depends_on in old_edges:
+        if case_id in new_ids and depends_on in new_ids:
+            db.add(
+                TaskCaseDependency(
+                    task_id=task_id,
+                    case_id=case_id,
+                    depends_on_case_id=depends_on,
                 )
             )
     await db.commit()

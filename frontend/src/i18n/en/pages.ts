@@ -412,6 +412,8 @@ export const pages: Record<string, string> = {
   // ---- 执行详情 ----
   已提交重新评估: 'Re-assessment submitted',
   '已提交重跑 {n} 个失败用例': 'Submitted rerun of {n} failed case(s)',
+  '已提交重跑 {n} 个失败/阻塞用例':
+    'Submitted rerun of {n} failed/blocked case(s)',
   '这些执行里的用例失败不是用例本身的问题（模型额度/配置/网络），不计入通过率':
     "Case failures in these runs are not the cases' fault (model quota/config/network) and are excluded from the pass rate",
   '{n} 次未计入统计': '{n} run(s) excluded from stats',
@@ -490,4 +492,75 @@ export const pages: Record<string, string> = {
   '确定删除该用例？': 'Delete this test case?',
   '用例内容为自然语言 YAML。建用例和改用例都走 AI 对话；手写 YAML 只在 AI 改不动时用（在「详情」里）。':
     'Test cases are natural-language YAML. Creating and editing them goes through the AI chat; write YAML by hand only when the AI cannot make the change (under Details).',
+  // ---- case flows ----
+  用例编排: 'Case flows',
+  新建编排: 'New flow',
+  编排: 'Flow',
+  '选择功能': 'Choose a feature',
+  编排已保存: 'Flow saved',
+  编排已开始执行: 'Flow started',
+  编排已删除: 'Flow deleted',
+  '删除这个编排？已套用的任务不受影响':
+    'Delete this flow? Tasks that already applied it are not affected.',
+  依赖数: 'Dependencies',
+  更新时间: 'Updated',
+  运行: 'Run',
+  运行编排: 'Run flow',
+  新建用例编排: 'New case flow',
+  编辑用例编排: 'Edit case flow',
+  说明: 'Description',
+  '按功能勾选要编排的用例': 'Pick cases across features',
+  '这里只选择用例；可以跨功能勾选，功能节点仅用于分组':
+    'Only cases can be selected here. You can pick across features; feature nodes are just grouping.',
+  前置用例: 'Depends on',
+  不选表示没有前置: 'None means no dependency',
+  '第 {n} 层': 'Layer {n}',
+  '编排存在循环依赖，请调整前置用例':
+    'The flow has a dependency cycle; adjust the prerequisites.',
+  '执行层预览：同一层的用例没有依赖关系，可以并行执行':
+    'Layer preview: cases in the same layer have no dependencies and can run in parallel.',
+  还没有用例: 'No cases yet',
+  '已套用编排：新增 {cases} 个用例、{edges} 条依赖':
+    'Flow applied: {cases} cases and {edges} dependencies added',
+  '编排是可复用的模板：可以跨功能选用例并设置依赖，再套用到任务或直接运行。':
+    'A flow is a reusable template: pick cases across features, set dependencies, then apply it to a task or run it directly.',
+  选择一个可复用的编排: 'Choose a reusable flow',
+  套用编排: 'Apply flow',
+  '可选。编排按系统定义，先选择系统后才能套用；编排里的用例和依赖会快照进任务。':
+    'Optional. A flow belongs to one system; choose the system first. Its cases and dependencies are snapshotted into the task.',
+  先选择系统: 'Choose a system first',
+  这个任务还没有编排依赖: 'This task has no flow dependencies yet',
+  '已编排 {cases} 个用例、{edges} 条依赖':
+    '{cases} cases and {edges} dependencies are orchestrated',
+  '跨系统任务暂不支持编排：编排按系统定义，依赖也只能在同一个系统内。':
+    'Cross-system tasks cannot use flows: a flow belongs to one system and its dependencies must stay in that system.',
+  编辑任务依赖: 'Edit task dependencies',
+  依赖已保存: 'Dependencies saved',
+  被前置用例阻塞: 'Blocked by a prerequisite',
+  编排节点: 'Flow node',
+  编排执行: 'Flow execution',
+  '重跑本批次的失败/阻塞节点？':
+    'Rerun the failed/blocked nodes of this batch?',
+  '会按依赖关系重跑失败/阻塞节点；已成功的前置不会重跑。':
+    'Failed/blocked nodes are rerun in dependency order; succeeded prerequisites are not rerun.',
+  '重跑失败/阻塞节点': 'Rerun failed/blocked nodes',
+  默认环境: 'Default environment',
+  '不选环境时使用「默认」环境。':
+    'If no environment is selected, the default environment is used.',
+  前置执行: 'Prerequisite runs',
+  '只重跑 {n} 个失败/阻塞用例？': 'Rerun {n} failed/blocked cases only?',
+  '会创建一个新批次，按依赖关系重跑失败/阻塞节点；已成功的前置不会重跑。若失败节点依赖前置产生的数据，请重新运行整个编排。':
+    'A new batch will rerun the failed/blocked nodes in dependency order. Succeeded prerequisites are not rerun. If a failed node depends on data produced by a prerequisite, run the whole flow again.',
+  '取消这次执行？': 'Cancel this execution?',
+  '排队中的节点会直接取消；正在运行的节点会在当前用例结束后停止。':
+    'Queued nodes are cancelled immediately; running nodes stop after the current case finishes.',
+  '已取消 {cancelled} 个排队节点；{cancelling} 个运行中的节点会在当前用例结束后停止':
+    'Cancelled {cancelled} queued nodes; {cancelling} running nodes will stop after the current case.',
+  '编排执行顺序：同一层的节点没有依赖关系，并行执行':
+    'Flow order: nodes in the same layer have no dependencies and run in parallel',
+  '{n} 个节点被阻塞': '{n} nodes blocked',
+  '{n} 个用例因前置用例未通过而没有执行':
+    '{n} cases were not executed because a prerequisite did not pass',
+  '编排内的用例按依赖顺序执行；不属于编排的用例仍按任务原有分片并发执行。前置失败时，依赖它的用例不会再执行。':
+    'Orchestrated cases run in dependency order; cases outside the flow still run concurrently in the task shards. If a prerequisite fails, its dependents are not executed.',
 };

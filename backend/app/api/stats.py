@@ -64,8 +64,12 @@ def _run_scope(
     date_to: date | None,
     include_infra: bool = False,
 ):
-    # 只看跑完的：queued/running 的还没结果，failed/cancelled/timed_out 的没有指标
-    conditions = [Run.is_debug.is_(False), Run.status.in_(("succeeded", "failed"))]
+    # 只看跑完的：queued/running 的还没结果，cancelled/timed_out 的没有指标。
+    # blocked 有合成结果（total=1/failed=1），按失败计入通过率。
+    conditions = [
+        Run.is_debug.is_(False),
+        Run.status.in_(("succeeded", "failed", "blocked")),
+    ]
     if not include_infra:
         # 排除「非用例原因」的失败（模型额度用尽、服务不可达、网络不通）。
         # 它们会让整批用例记成 failed —— 算进通过率就是在报一个假数字。
@@ -96,7 +100,7 @@ def _terminal_scope(
     """所有已结束的 run（含失败/取消/非用例原因）—— 用于结果分布，不做通过率口径过滤。"""
     conditions = [
         Run.is_debug.is_(False),
-        Run.status.in_(("succeeded", "failed", "cancelled", "timed_out")),
+        Run.status.in_(("succeeded", "failed", "cancelled", "timed_out", "blocked")),
     ]
     if team_id is not None:
         conditions.append(Run.team_id == team_id)
@@ -122,9 +126,28 @@ async def _metrics(db: DbSession, conditions) -> dict:
                 func.coalesce(func.sum(Run.passed), 0),
                 func.coalesce(func.sum(Run.failed), 0),
                 func.coalesce(func.sum(Run.passed_after_retry), 0),
-                func.coalesce(func.avg(Run.duration_ms), 0),
+                # blocked 的 duration 是 0，不能拿来算耗时
                 func.coalesce(
-                    func.percentile_cont(0.5).within_group(Run.duration_ms.asc()), 0
+                    func.avg(
+                        case(
+                            (
+                                Run.status.in_(("succeeded", "failed")),
+                                Run.duration_ms,
+                            )
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.percentile_cont(0.5).within_group(
+                        case(
+                            (
+                                Run.status.in_(("succeeded", "failed")),
+                                Run.duration_ms,
+                            )
+                        ).asc()
+                    ),
+                    0,
                 ),
             ).where(*conditions)
         )
@@ -332,7 +355,7 @@ async def breakdown(
             .join(TestCase, TestCase.id == CaseResult.test_case_id)
             .join(Feature, Feature.id == TestCase.feature_id)
             .join(Project, Project.id == Feature.project_id)
-            .where(*conditions, CaseResult.status == "failed")
+            .where(*conditions, CaseResult.status.in_(("failed", "blocked")))
             .group_by(Feature.id, Feature.name, Project.name)
             .order_by(func.count(CaseResult.id).desc())
             .limit(8)
@@ -478,7 +501,7 @@ async def failures(
             .join(Run, Run.id == CaseResult.run_id)
             .join(TestCase, TestCase.id == CaseResult.test_case_id)
             .join(Feature, Feature.id == TestCase.feature_id)
-            .where(*conditions, CaseResult.status == "failed")
+            .where(*conditions, CaseResult.status.in_(("failed", "blocked")))
             .group_by(TestCase.id, TestCase.name, Feature.name)
             .order_by(func.count(CaseResult.id).desc())
             .limit(limit)

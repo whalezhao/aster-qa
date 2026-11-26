@@ -44,6 +44,7 @@ export default function FeatureTreeSelect({
   placeholder = '按系统选择功能或用例',
   style,
   disabled = false,
+  caseOnly = false,
 }: {
   teamId: string | null;
   projectId?: string | null;
@@ -52,6 +53,8 @@ export default function FeatureTreeSelect({
   placeholder?: string;
   style?: React.CSSProperties;
   disabled?: boolean;
+  /** 只允许勾选用例（编排场景）；功能节点只作为分组展示 */
+  caseOnly?: boolean;
 }) {
   const { modal } = App.useApp();
   // 编辑态只是展示已快照的选择，不做过滤和清理
@@ -164,6 +167,8 @@ export default function FeatureTreeSelect({
         title: t('{name}（{stage}）', { name: f.name, stage }),
         value: f.id,
         disabled: !ready,
+        selectable: !caseOnly,
+        checkable: !caseOnly,
         searchText: [f.name, stage].join(' '),
         children: children.length > 0 ? children : undefined,
       };
@@ -196,7 +201,9 @@ export default function FeatureTreeSelect({
         value={value}
         onChange={onChange}
         treeCheckable
-        showCheckedStrategy={TreeSelect.SHOW_PARENT}
+        showCheckedStrategy={
+          caseOnly ? TreeSelect.SHOW_CHILD : TreeSelect.SHOW_PARENT
+        }
         treeDefaultExpandAll
         showSearch
         filterTreeNode={(input, node) =>
@@ -210,7 +217,9 @@ export default function FeatureTreeSelect({
         style={{ width: '100%', ...style }}
       />
       <Typography.Text type="secondary" style={{ display: 'block', marginTop: 4 }}>
-        {t('勾选功能会包含其下所有用例；也可以只勾单个用例')}
+        {caseOnly
+          ? t('这里只选择用例；可以跨功能勾选，功能节点仅用于分组')
+          : t('勾选功能会包含其下所有用例；也可以只勾单个用例')}
       </Typography.Text>
       {blocked.length > 0 && (
         <Typography.Text type="warning" style={{ display: 'block', marginTop: 4 }}>

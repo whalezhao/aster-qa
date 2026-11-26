@@ -95,6 +95,23 @@ def test_quality_gate():
     )
     assert disabled["status"] == "disabled" and disabled["passed"] is True
 
+    blocked = {
+        "status": "blocked",
+        "failure_kind": None,
+        "total": 1,
+        "passed": 0,
+        "failed": 1,
+        "not_run": 0,
+    }
+    blocked_gate = gate_result(
+        enabled=True, min_pass_rate=None, fail_on_p0=False,
+        batch_active=False, runs=[blocked], failed_p0=0,
+    )
+    assert blocked_gate["status"] == "failed"
+    assert blocked_gate["blocked_runs"] == 1
+    assert blocked_gate["execution_failures"] == 1
+    assert blocked_gate["pass_rate"] == 0
+
 
 def test_requirement_coverage_statuses():
     rows = [

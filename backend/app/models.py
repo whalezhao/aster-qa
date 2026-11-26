@@ -18,6 +18,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -400,6 +401,8 @@ class ProjectSessionState(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 最近一次成功跑过检查用例的时间；编排节点多时用来复用检查结果
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
 
 
@@ -799,6 +802,131 @@ class TaskCase(Base):
         PGUUID(as_uuid=True), ForeignKey("features.id", ondelete="SET NULL")
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 编排节点在执行时每个用例单独一个 run；未编排的用例仍然按分片并发
+    is_flow_node: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+
+
+class TaskCaseDependency(Base):
+    """任务的用例依赖快照。两端都必须是同一个任务里的用例。"""
+
+    __tablename__ = "task_case_dependencies"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["task_id", "case_id"],
+            ["task_cases.task_id", "task_cases.case_id"],
+            ondelete="CASCADE",
+            name="fk_task_case_deps_case",
+        ),
+        ForeignKeyConstraint(
+            ["task_id", "depends_on_case_id"],
+            ["task_cases.task_id", "task_cases.case_id"],
+            ondelete="CASCADE",
+            name="fk_task_case_deps_dep",
+        ),
+        CheckConstraint(
+            "case_id <> depends_on_case_id", name="ck_task_case_deps_no_self"
+        ),
+        Index("ix_task_case_deps_dep", "task_id", "depends_on_case_id"),
+    )
+
+    task_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    case_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    depends_on_case_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True
+    )
+
+
+class CaseFlow(Timestamped, Base):
+    """项目级的可复用用例编排模板。
+
+    依赖只在同一个项目内跨功能；任务套用流程时会把节点和边快照到 TaskCase /
+    TaskCaseDependency，之后流程修改不影响已经套用的任务。
+    """
+
+    __tablename__ = "case_flows"
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_case_flows_project_name"),
+        Index("ix_case_flows_project", "project_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+
+class CaseFlowNode(Base):
+    """流程包含的用例。"""
+
+    __tablename__ = "case_flow_nodes"
+    __table_args__ = (Index("ix_case_flow_nodes_case", "case_id"),)
+
+    flow_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("case_flows.id", ondelete="CASCADE"), primary_key=True
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("test_cases.id", ondelete="CASCADE"), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+
+
+class CaseFlowEdge(Base):
+    """`case_id` 依赖 `depends_on_case_id`；复合外键保证两端都是流程节点。"""
+
+    __tablename__ = "case_flow_edges"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["flow_id", "case_id"],
+            ["case_flow_nodes.flow_id", "case_flow_nodes.case_id"],
+            ondelete="CASCADE",
+            name="fk_case_flow_edges_case",
+        ),
+        ForeignKeyConstraint(
+            ["flow_id", "depends_on_case_id"],
+            ["case_flow_nodes.flow_id", "case_flow_nodes.case_id"],
+            ondelete="CASCADE",
+            name="fk_case_flow_edges_dep",
+        ),
+        CheckConstraint(
+            "case_id <> depends_on_case_id", name="ck_case_flow_edges_no_self"
+        ),
+        Index("ix_case_flow_edges_dep", "flow_id", "depends_on_case_id"),
+    )
+
+    flow_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    case_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    depends_on_case_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True
+    )
+
+
+class RunDependency(Base):
+    """执行期的编排边：run_id 必须等 depends_on_run_id 成功后才能被认领。"""
+
+    __tablename__ = "run_dependencies"
+    __table_args__ = (
+        CheckConstraint("run_id <> depends_on_run_id", name="ck_run_dependencies_no_self"),
+        Index("ix_run_dependencies_dep", "depends_on_run_id"),
+    )
+
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    depends_on_run_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("runs.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 # --------------------------------------------------------------------- 执行域（投影）
@@ -913,8 +1041,13 @@ class Run(Timestamped, Base):
                 "failed",
                 "cancelled",
                 "timed_out",
+                "blocked",
             ),
             name="ck_runs_status",
+        ),
+        CheckConstraint(
+            _in("run_kind", "shard", "flow", "debug"),
+            name="ck_runs_kind",
         ),
         Index("ix_runs_team", "team_id"),
         Index("ix_runs_project", "project_id"),
@@ -952,6 +1085,10 @@ class Run(Timestamped, Base):
     environment_base_url: Mapped[str | None] = mapped_column(String(512))
 
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    # flow：一个编排节点一个 run；shard：普通分片 run；debug：调试试跑
+    run_kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="shard", server_default="shard"
+    )
     # 认领这个 run 的 worker 进程。多 worker 下用来判断「原 worker 是否还活着」，
     # 只有拥有者失联时才允许恢复逻辑把它标失败。
     owner_worker_id: Mapped[str | None] = mapped_column(String(64))
@@ -1049,6 +1186,8 @@ class CaseResult(Base):
     case_index: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str | None] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(32), nullable=False)
+    # 编排节点因为前置未成功而没有执行时的原因
+    blocked_reason: Mapped[str | None] = mapped_column(String(255))
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     passed_after_retry: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

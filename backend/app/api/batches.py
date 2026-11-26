@@ -31,6 +31,7 @@ from ..models import (
     Project,
     Run,
     RunBatch,
+    RunDependency,
     TaskCase,
     TaskFeature,
     Team,
@@ -224,6 +225,7 @@ async def _run_aggregates(db, batch_ids: list[uuid.UUID]) -> dict:
                 func.coalesce(
                     func.sum(Run.failed).filter(Run.failure_kind.is_not(None)), 0
                 ),
+                func.count(Run.id).filter(Run.status == "blocked"),
             )
             .where(Run.batch_id.in_(batch_ids))
             .group_by(Run.batch_id)
@@ -248,6 +250,7 @@ async def _run_aggregates(db, batch_ids: list[uuid.UUID]) -> dict:
             "statuses": list(row[9]),
             "excluded_runs": int(row[10]),
             "excluded_failed": int(row[11]),
+            "blocked_runs": int(row[12]),
         }
         for row in rows
     }
@@ -267,6 +270,7 @@ async def _feature_breakdown(db, batch_ids: list[uuid.UUID]) -> dict:
                 func.count(CaseResult.id),
                 func.count(CaseResult.id).filter(CaseResult.status == "success"),
                 func.count(CaseResult.id).filter(CaseResult.status == "failed"),
+                func.count(CaseResult.id).filter(CaseResult.status == "blocked"),
             )
             .join(Run, Run.id == CaseResult.run_id)
             .join(TestCase, TestCase.id == CaseResult.test_case_id)
@@ -277,7 +281,7 @@ async def _feature_breakdown(db, batch_ids: list[uuid.UUID]) -> dict:
         )
     ).all()
     out: dict[uuid.UUID, list[dict]] = {}
-    for batch_id, fid, fname, fstage, total, passed, failed in rows:
+    for batch_id, fid, fname, fstage, total, passed, failed, blocked in rows:
         out.setdefault(batch_id, []).append(
             {
                 "feature_id": str(fid),
@@ -285,7 +289,8 @@ async def _feature_breakdown(db, batch_ids: list[uuid.UUID]) -> dict:
                 "stage": fstage,
                 "total": int(total),
                 "passed": int(passed),
-                "failed": int(failed),
+                "failed": int(failed) + int(blocked),
+                "blocked": int(blocked),
             }
         )
     return out
@@ -440,6 +445,7 @@ async def list_batches(
                 "passed": agg.get("passed", 0),
                 "failed": agg.get("failed", 0),
                 "excluded_runs": agg.get("excluded_runs", 0),
+                "blocked_runs": agg.get("blocked_runs", 0),
                 "status": derive_status(
                     statuses,
                     real_failed=agg.get("failed", 0) - agg.get("excluded_failed", 0),
@@ -483,6 +489,76 @@ async def get_batch(batch_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Ba
     task_obj = await db.get(TestTask, batch.task_id) if batch.task_id else None
     gate = batch.gate_detail or await evaluate_gate(db, batch, task_obj)
 
+    run_ids = [run.id for run, _ in runs]
+    deps_map: dict[uuid.UUID, list[uuid.UUID]] = {}
+    if run_ids:
+        for run_id, depends_on in (
+            await db.execute(
+                select(
+                    RunDependency.run_id, RunDependency.depends_on_run_id
+                ).where(RunDependency.run_id.in_(run_ids))
+            )
+        ).all():
+            deps_map.setdefault(run_id, []).append(depends_on)
+
+    flow_case_ids: set[uuid.UUID] = set()
+    for run, _ in runs:
+        if run.run_kind == "flow" and run.case_ids:
+            try:
+                flow_case_ids.add(uuid.UUID(str(run.case_ids[0])))
+            except (TypeError, ValueError):
+                pass
+    case_names = (
+        dict(
+            (
+                await db.execute(
+                    select(TestCase.id, TestCase.name).where(
+                        TestCase.id.in_(flow_case_ids)
+                    )
+                )
+            ).all()
+        )
+        if flow_case_ids
+        else {}
+    )
+
+    def run_case_name(run: Run) -> str | None:
+        if run.run_kind != "flow" or not run.case_ids:
+            return None
+        try:
+            return case_names.get(uuid.UUID(str(run.case_ids[0])))
+        except (TypeError, ValueError):
+            return None
+
+    blocked_rows = (
+        (
+            await db.execute(
+                select(
+                    CaseResult.run_id,
+                    CaseResult.test_case_id,
+                    CaseResult.name,
+                    CaseResult.blocked_reason,
+                )
+                .join(Run, Run.id == CaseResult.run_id)
+                .where(
+                    Run.batch_id == batch_id, CaseResult.status == "blocked"
+                )
+            )
+        ).all()
+        if runs
+        else []
+    )
+    blocked_by_run = {row[0]: row[3] for row in blocked_rows}
+    blocked_cases = [
+        {
+            "case_id": str(row[1]) if row[1] else None,
+            "name": row[2],
+            "run_id": str(row[0]),
+            "reason": row[3],
+        }
+        for row in blocked_rows
+    ]
+
     return BatchDetailOut(
         id=batch.id,
         task_id=batch.task_id,
@@ -513,6 +589,7 @@ async def get_batch(batch_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Ba
         passed=agg.get("passed", 0),
         failed=agg.get("failed", 0),
         excluded_runs=agg.get("excluded_runs", 0),
+        blocked_runs=agg.get("blocked_runs", 0),
         status=derive_status(
             agg.get("statuses", []),
             real_failed=agg.get("failed", 0) - agg.get("excluded_failed", 0),
@@ -536,9 +613,14 @@ async def get_batch(batch_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Ba
                 "started_at": run.started_at,
                 "shard_index": run.shard_index,
                 "shard_count": run.shard_count,
+                "run_kind": run.run_kind,
+                "depends_on_run_ids": deps_map.get(run.id, []),
+                "blocked_reason": blocked_by_run.get(run.id),
+                "case_name": run_case_name(run),
             }
             for run, project_name in runs
         ],
+        blocked_cases=blocked_cases,
     )
 
 
@@ -598,6 +680,42 @@ async def _rerun_failed(
         "case_count": len(available),
         "parent_batch_id": str(parent_batch_id) if parent_batch_id else None,
     }
+
+
+@router.post("/{batch_id}/cancel")
+async def cancel_batch(
+    batch_id: uuid.UUID, user: CurrentUser, db: DbSession
+) -> dict[str, int]:
+    batch = await db.get(RunBatch, batch_id)
+    if batch is None:
+        raise HTTPException(404, "执行记录不存在")
+    await require_team_role(batch.team_id, user, db, "member")
+
+    queued = list(
+        (
+            await db.execute(
+                select(Run).where(Run.batch_id == batch_id, Run.status == "queued")
+            )
+        ).scalars()
+    )
+    for run in queued:
+        run.status = "cancelled"
+        run.ended_at = datetime.now(UTC)
+    active = list(
+        (
+            await db.execute(
+                select(Run).where(
+                    Run.batch_id == batch_id,
+                    Run.status.in_(("preparing", "running", "parsing")),
+                )
+            )
+        ).scalars()
+    )
+    for run in active:
+        run.cancel_requested = True
+    await refresh_task_status(db, batch.task_id)
+    await db.commit()
+    return {"cancelled": len(queued), "cancelling": len(active)}
 
 
 @router.post("/{batch_id}/rerun-failed")
@@ -664,6 +782,29 @@ async def get_batch_report_structured(
         raise HTTPException(404, "执行记录不存在")
     await require_team_role(batch.team_id, user, db, "member")
 
+    blocked_cases = [
+        {
+            "case_id": str(row[1]) if row[1] else None,
+            "name": row[2],
+            "run_id": str(row[0]),
+            "reason": row[3],
+        }
+        for row in (
+            await db.execute(
+                select(
+                    CaseResult.run_id,
+                    CaseResult.test_case_id,
+                    CaseResult.name,
+                    CaseResult.blocked_reason,
+                )
+                .join(Run, Run.id == CaseResult.run_id)
+                .where(
+                    Run.batch_id == batch_id, CaseResult.status == "blocked"
+                )
+            )
+        ).all()
+    ]
+
     report_dir = await _batch_report_dir(db, batch_id)
     if report_dir is not None:
         json_path = report_dir / "report.json"
@@ -672,7 +813,12 @@ async def get_batch_report_structured(
         except (OSError, json.JSONDecodeError):
             data = None
         if isinstance(data, dict) and data.get("version") == 2:
-            return {"available": True, "data": data, "fallback_run_id": None}
+            return {
+                "available": True,
+                "data": data,
+                "fallback_run_id": None,
+                "blocked_cases": blocked_cases,
+            }
 
     # 老批次没有聚合报告：只有单 run 时可以直接退回那份 run 的报告
     runs = list(
@@ -687,7 +833,12 @@ async def get_batch_report_structured(
         report = _resolve_data_path(runs[0].report_html_path)
         if report is not None and report.exists():
             fallback = str(runs[0].id)
-    return {"available": False, "data": None, "fallback_run_id": fallback}
+    return {
+        "available": False,
+        "data": None,
+        "fallback_run_id": fallback,
+        "blocked_cases": blocked_cases,
+    }
 
 
 @router.get("/{batch_id}/report-assets/{relative:path}")

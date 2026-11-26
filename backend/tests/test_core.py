@@ -52,6 +52,9 @@ def test_aggregate_task_status():
     assert aggregate(["failed"]) == "failed"
     assert aggregate(["cancelled", "failed"]) == "failed"
     assert aggregate(["cancelled", "cancelled"]) == "cancelled"
+    assert aggregate(["blocked"]) == "failed"
+    assert aggregate(["succeeded", "blocked"]) == "completed"
+    assert aggregate(["queued", "blocked"]) == "running"
 
 
 def test_split_shards():

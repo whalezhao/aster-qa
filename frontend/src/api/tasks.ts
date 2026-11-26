@@ -25,6 +25,8 @@ export interface TaskInput {
   feature_ids?: string[];
   /** 只挑单条用例；与 feature_ids 可同时传，后端按 id 去重 */
   case_ids?: string[];
+  /** 套用可复用编排；节点/边会快照进任务 */
+  flow_ids?: string[];
   tag_ids?: string[];
   run_now?: boolean;
 }

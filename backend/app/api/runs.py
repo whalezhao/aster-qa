@@ -10,7 +10,8 @@ from sqlalchemy import func, select
 
 from ..config import get_settings
 from ..deps import CurrentUser, DbSession, require_team_role, visible_team_ids
-from ..models import AiCall, CaseResult, Run, RunBatch, TestTask
+from ..models import AiCall, CaseResult, Run, RunBatch, RunDependency, TestTask
+from ..run_dependencies import resolve_run_dependents
 from ..runner import parsers, persist
 from ..schemas import CaseResultOut, RunDetailOut, RunListOut, RunProgressOut
 from ..taskstatus import ACTIVE_RUN_STATUSES, refresh_task_status
@@ -81,7 +82,12 @@ async def rerun_run_failed(
     task = await db.get(TestTask, run.task_id)
     if task is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "源任务已删除，无法重跑")
-    case_ids, unresolved = await failed_case_ids(db, run_id=run.id)
+    # 编排节点单独重跑没有意义：前置可能已成功，或它本身就是被阻塞的节点。
+    # 按批次重跑失败/阻塞子图，才能保留节点之间的依赖边。
+    if run.run_kind == "flow" and run.batch_id is not None:
+        case_ids, unresolved = await failed_case_ids(db, batch_id=run.batch_id)
+    else:
+        case_ids, unresolved = await failed_case_ids(db, run_id=run.id)
     batch = await db.get(RunBatch, run.batch_id) if run.batch_id else None
     # batches 依赖 runs 的路径解析，这里延迟导入避免循环
     from .batches import _rerun_failed
@@ -161,6 +167,15 @@ async def get_run(run_id: uuid.UUID, user: CurrentUser, db: DbSession) -> RunDet
         progress = RunProgressOut(**parsers.read_progress(Path(run.result_dir), 0))
 
     payload = RunDetailOut.model_validate(run)
+    payload.depends_on_run_ids = list(
+        (
+            await db.execute(
+                select(RunDependency.depends_on_run_id).where(
+                    RunDependency.run_id == run_id
+                )
+            )
+        ).scalars()
+    )
     payload.ai_calls = stats[0]
     payload.ai_total_tokens = int(stats[1])
     payload.ai_cost_ms = int(stats[2])
@@ -379,6 +394,7 @@ async def cancel_run(run_id: uuid.UUID, user: CurrentUser, db: DbSession) -> dic
         # 否则任务会一直停在「排队中」（这一条以前漏了）
         run.status = "cancelled"
         run.ended_at = datetime.now(UTC)
+        await resolve_run_dependents(db, run)
         await refresh_task_status(db, run.task_id)
         await db.commit()
         return {"status": run.status}

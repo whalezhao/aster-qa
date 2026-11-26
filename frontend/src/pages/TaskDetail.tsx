@@ -30,6 +30,7 @@ import { useAuth } from '../auth/AuthContext';
 import AiInsightCard from '../components/AiInsightCard';
 import PreflightModal from '../components/PreflightModal';
 import TaskScheduleTab from '../components/TaskScheduleTab';
+import TaskFlowTab from '../components/TaskFlowTab';
 import { t } from '../i18n';
 import {
   BATCH_STATUS_COLORS,
@@ -259,6 +260,11 @@ export default function TaskDetail() {
       <Tabs
         items={[
           { key: 'cases', label: t('用例'), children: <CasesTab tid={tid} taskName={task?.name} /> },
+          {
+            key: 'flow',
+            label: t('编排'),
+            children: <TaskFlowTab tid={tid} projectId={task?.project_id ?? null} />,
+          },
           { key: 'tags', label: t('标签'), children: <TagsTab tid={tid} teamId={task?.team_id} /> },
           { key: 'features', label: t('功能'), children: <FeaturesTab tid={tid} /> },
           { key: 'batches', label: t('执行记录'), children: <BatchesTab tid={tid} /> },

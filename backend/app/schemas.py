@@ -601,6 +601,7 @@ class TaskCreate(In):
     gate_fail_on_p0: bool = False
     feature_ids: list[uuid.UUID] = []
     case_ids: list[uuid.UUID] = []
+    flow_ids: list[uuid.UUID] = []
     tag_ids: list[uuid.UUID] = []
     run_now: bool = False
 
@@ -614,6 +615,71 @@ class TaskUpdate(In):
     gate_enabled: bool | None = None
     gate_min_pass_rate: float | None = Field(default=None, ge=0, le=1)
     gate_fail_on_p0: bool | None = None
+
+
+class CaseFlowEdgeIn(In):
+    case_id: uuid.UUID
+    depends_on_case_id: uuid.UUID
+
+
+class CaseFlowIn(In):
+    name: str = Field(min_length=1, max_length=128)
+    description: str | None = None
+    nodes: list[uuid.UUID] = []
+    edges: list[CaseFlowEdgeIn] = []
+
+
+class CaseFlowSummaryOut(BaseModel):
+    model_config = ORM
+    id: uuid.UUID
+    project_id: uuid.UUID
+    name: str
+    description: str | None
+    node_count: int = 0
+    edge_count: int = 0
+    updated_at: datetime
+
+
+class CaseFlowNodeOut(BaseModel):
+    case_id: uuid.UUID
+    name: str
+    feature_id: uuid.UUID
+    feature_name: str
+    priority: str | None
+    position: int
+    depends_on: list[uuid.UUID] = []
+
+
+class CaseFlowDetailOut(BaseModel):
+    id: uuid.UUID
+    project_id: uuid.UUID
+    name: str
+    description: str | None
+    nodes: list[CaseFlowNodeOut]
+    edges: list[CaseFlowEdgeIn]
+    layers: list[list[uuid.UUID]] = []
+
+
+class CaseFlowRunIn(In):
+    environment_names: list[str] = []
+
+
+class TaskFlowApplyIn(In):
+    flow_id: uuid.UUID
+    replace_dependencies: bool = False
+
+
+class TaskDependencyIn(In):
+    case_id: uuid.UUID
+    depends_on_case_id: uuid.UUID
+
+
+class TaskDependenciesIn(In):
+    dependencies: list[TaskDependencyIn] = []
+
+
+class TaskDependenciesOut(BaseModel):
+    dependencies: list[TaskDependencyIn] = []
 
 
 class TaskRunIn(In):
@@ -669,6 +735,7 @@ class CaseResultOut(BaseModel):
     name: str | None
     case_index: int
     status: str
+    blocked_reason: str | None = None
     attempt_count: int
     passed_after_retry: bool
 
@@ -681,6 +748,7 @@ class RunOut(BaseModel):
     project_id: uuid.UUID | None
     iteration_id: uuid.UUID | None
     status: str
+    run_kind: str = "shard"
     midscene_status: str | None
     exit_code: int | None
     started_at: datetime | None
@@ -719,6 +787,7 @@ class RunDetailOut(RunOut):
     ai_total_tokens: int = 0
     ai_cost_ms: int = 0
     progress: RunProgressOut = Field(default_factory=RunProgressOut)
+    depends_on_run_ids: list[uuid.UUID] = []
 
 
 class RunListOut(BaseModel):
@@ -738,6 +807,7 @@ class BatchFeatureOut(BaseModel):
     total: int
     passed: int
     failed: int
+    blocked: int = 0
 
 
 class BatchOut(BaseModel):
@@ -774,6 +844,8 @@ class BatchOut(BaseModel):
     failed: int = 0
     # 因非用例原因（模型额度/配置/网络）被排除在统计之外的 run 数
     excluded_runs: int = 0
+    # 因前置用例失败而没有执行的编排节点数
+    blocked_runs: int = 0
     status: str
     features: list[BatchFeatureOut] = []
 
@@ -796,10 +868,16 @@ class BatchRunOut(BaseModel):
     started_at: datetime | None = None
     shard_index: int | None = None
     shard_count: int | None = None
+    run_kind: str = "shard"
+    depends_on_run_ids: list[uuid.UUID] = []
+    blocked_reason: str | None = None
+    case_name: str | None = None
 
 
 class BatchDetailOut(BatchOut):
     run_items: list[BatchRunOut] = []
+    # 被前置用例阻塞、从未执行的用例（midscene 报告里没有它们，平台自己补）
+    blocked_cases: list[dict] = []
 
 
 class BatchListOut(BaseModel):

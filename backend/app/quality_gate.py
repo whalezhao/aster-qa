@@ -25,13 +25,17 @@ def gate_result(
     eligible = [
         r
         for r in runs
-        if r.get("status") in {"succeeded", "failed"} and not r.get("failure_kind")
+        if r.get("status") in {"succeeded", "failed", "blocked"}
+        and not r.get("failure_kind")
     ]
     total = sum(int(r.get("total") or 0) for r in eligible)
     passed = sum(int(r.get("passed") or 0) for r in eligible)
     failed = sum(int(r.get("failed") or 0) for r in eligible)
     not_run = sum(int(r.get("not_run") or 0) for r in eligible)
-    execution_failures = sum(1 for r in eligible if r.get("status") == "failed")
+    execution_failures = sum(
+        1 for r in eligible if r.get("status") in {"failed", "blocked"}
+    )
+    blocked_runs = sum(1 for r in eligible if r.get("status") == "blocked")
     pass_rate = (passed / total) if total else None
 
     detail = {
@@ -44,6 +48,7 @@ def gate_result(
         "not_run": not_run,
         "failed_p0": failed_p0,
         "execution_failures": execution_failures,
+        "blocked_runs": blocked_runs,
         "excluded_runs": excluded_runs,
         "pass_rate": pass_rate,
     }

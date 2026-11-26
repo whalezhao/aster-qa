@@ -7,7 +7,7 @@
 import uuid
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, exists, func, select, update
 
 from ..config import get_settings
 from ..deps import require_team_role
@@ -17,6 +17,9 @@ from ..modelconfig import assert_projects_configured
 from ..models import (
     AiCheck,
     AppSetting,
+    CaseFlow,
+    CaseFlowEdge,
+    CaseFlowNode,
     CaseResult,
     Feature,
     Iteration,
@@ -24,11 +27,15 @@ from ..models import (
     ProjectModelConfig,
     Run,
     RunBatch,
+    RunDependency,
     TaskCase,
+    TaskCaseDependency,
     TaskFeature,
     TestCase,
+    TestCaseVersion,
     TestTask,
 )
+from ..orchestration import validate_graph
 from ..quota import ensure_quota
 from ..runner import staging
 from ..taskstatus import ACTIVE_RUN_STATUSES
@@ -73,6 +80,24 @@ async def _cases_by_project(db, task: TestTask) -> dict[uuid.UUID, list[uuid.UUI
     for project_id, case_id in rows:
         grouped.setdefault(project_id, []).append(case_id)
     return grouped
+
+
+async def _case_plan_by_project(db, task: TestTask) -> dict:
+    """按项目拆分编排节点和普通用例；同一条用例只会进其中一组。"""
+    rows = (
+        await db.execute(
+            select(Feature.project_id, TestCase.id, TaskCase.is_flow_node)
+            .join(TestCase, TestCase.feature_id == Feature.id)
+            .join(TaskCase, TaskCase.case_id == TestCase.id)
+            .where(TaskCase.task_id == task.id, TestCase.is_active.is_(True))
+            .order_by(TaskCase.position, TestCase.name)
+        )
+    ).all()
+    plan: dict[uuid.UUID, dict[str, list[uuid.UUID]]] = {}
+    for project_id, case_id, is_flow_node in rows:
+        group = plan.setdefault(project_id, {"flow": [], "free": []})
+        group["flow" if is_flow_node else "free"].append(case_id)
+    return plan
 
 
 async def attach_features(
@@ -136,6 +161,194 @@ async def attach_features(
             )
         )
     return len(cases), len(feature_set)
+
+
+async def task_case_meta(db, task_id: uuid.UUID):
+    """任务用例的 id/位置/编排标记/用例名/启用状态/所属项目。"""
+    return (
+        await db.execute(
+            select(
+                TaskCase.case_id,
+                TaskCase.position,
+                TaskCase.is_flow_node,
+                TestCase.name,
+                TestCase.is_active,
+                Feature.project_id,
+            )
+            .join(TestCase, TestCase.id == TaskCase.case_id)
+            .join(Feature, Feature.id == TestCase.feature_id)
+            .where(TaskCase.task_id == task_id)
+        )
+    ).all()
+
+
+async def validate_task_edges(
+    db, task_id: uuid.UUID, edges: list[tuple[uuid.UUID, uuid.UUID]]
+) -> list[str]:
+    rows = await task_case_meta(db, task_id)
+    ids = {row[0] for row in rows}
+    names = {row[0]: row[3] for row in rows}
+    active = {row[0]: row[4] for row in rows}
+    projects = {row[0]: row[5] for row in rows}
+
+    errors = validate_graph(ids, edges, names)
+    for case_id, depends_on in edges:
+        if case_id in active and not active[case_id]:
+            errors.append(f"用例「{names[case_id]}」已停用")
+        if depends_on in active and not active[depends_on]:
+            errors.append(f"用例「{names[depends_on]}」已停用")
+        if (
+            case_id in projects
+            and depends_on in projects
+            and projects[case_id] != projects[depends_on]
+        ):
+            errors.append("依赖的两端必须属于同一个系统")
+    return errors
+
+
+async def load_flow_graph(db, flow_id: uuid.UUID):
+    nodes = (
+        await db.execute(
+            select(CaseFlowNode, TestCase, Feature)
+            .join(TestCase, TestCase.id == CaseFlowNode.case_id)
+            .join(Feature, Feature.id == TestCase.feature_id)
+            .where(CaseFlowNode.flow_id == flow_id)
+            .order_by(CaseFlowNode.position, TestCase.name)
+        )
+    ).all()
+    edges = [
+        (row[0], row[1])
+        for row in (
+            await db.execute(
+                select(CaseFlowEdge.case_id, CaseFlowEdge.depends_on_case_id).where(
+                    CaseFlowEdge.flow_id == flow_id
+                )
+            )
+        ).all()
+    ]
+    return nodes, edges
+
+
+async def merge_flow_into_task(
+    db, task: TestTask, flow: CaseFlow, *, replace_dependencies: bool = False
+) -> tuple[int, int]:
+    """把流程的节点/边合并进任务；返回 (新增用例数, 新增边数)。"""
+    if task.status in {"queued", "running"}:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "任务正在执行，无法修改编排")
+
+    nodes, flow_edges = await load_flow_graph(db, flow.id)
+    if not nodes:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "编排里还没有用例")
+    inactive = [case.name for _, case, _ in nodes if not case.is_active]
+    if inactive:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"编排里的用例已停用：{'、'.join(inactive[:5])}",
+        )
+
+    existing = {row[0]: row for row in await task_case_meta(db, task.id)}
+    features = set(
+        (
+            await db.execute(
+                select(TaskFeature.feature_id).where(TaskFeature.task_id == task.id)
+            )
+        ).scalars()
+    )
+    max_position = max((row[1] for row in existing.values()), default=-1)
+
+    added_cases = 0
+    for node, case, feature in nodes:
+        if node.case_id in existing:
+            await db.execute(
+                update(TaskCase)
+                .where(
+                    TaskCase.task_id == task.id, TaskCase.case_id == node.case_id
+                )
+                .values(is_flow_node=True)
+            )
+        else:
+            max_position += 1
+            db.add(
+                TaskCase(
+                    task_id=task.id,
+                    case_id=node.case_id,
+                    source_feature_id=feature.id,
+                    position=max_position,
+                    is_flow_node=True,
+                )
+            )
+            added_cases += 1
+        if feature.id not in features:
+            db.add(TaskFeature(task_id=task.id, feature_id=feature.id))
+            features.add(feature.id)
+
+    if replace_dependencies:
+        await db.execute(
+            delete(TaskCaseDependency).where(TaskCaseDependency.task_id == task.id)
+        )
+        existing_edges: set[tuple[uuid.UUID, uuid.UUID]] = set()
+    else:
+        existing_edges = {
+            (row[0], row[1])
+            for row in (
+                await db.execute(
+                    select(
+                        TaskCaseDependency.case_id,
+                        TaskCaseDependency.depends_on_case_id,
+                    ).where(TaskCaseDependency.task_id == task.id)
+                )
+            ).all()
+        }
+
+    added_edges = 0
+    for case_id, depends_on in flow_edges:
+        if (case_id, depends_on) not in existing_edges:
+            db.add(
+                TaskCaseDependency(
+                    task_id=task.id,
+                    case_id=case_id,
+                    depends_on_case_id=depends_on,
+                )
+            )
+            added_edges += 1
+
+    await db.flush()
+    errors = await validate_task_edges(
+        db, task.id, list(existing_edges | set(flow_edges))
+    )
+    if errors:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "；".join(errors))
+    return added_cases, added_edges
+
+
+async def replace_task_dependencies(
+    db, task: TestTask, edges: list[tuple[uuid.UUID, uuid.UUID]]
+) -> None:
+    if task.status in {"queued", "running"}:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "任务正在执行，无法修改编排")
+    errors = await validate_task_edges(db, task.id, edges)
+    if errors:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "；".join(errors))
+
+    await db.execute(
+        delete(TaskCaseDependency).where(TaskCaseDependency.task_id == task.id)
+    )
+    for case_id, depends_on in edges:
+        db.add(
+            TaskCaseDependency(
+                task_id=task.id,
+                case_id=case_id,
+                depends_on_case_id=depends_on,
+            )
+        )
+    if edges:
+        involved = {case_id for edge in edges for case_id in edge}
+        await db.execute(
+            update(TaskCase)
+            .where(TaskCase.task_id == task.id, TaskCase.case_id.in_(involved))
+            .values(is_flow_node=True)
+        )
+    await db.flush()
 
 
 def split_shards(case_ids: list[uuid.UUID], shard_size: int) -> list[list[uuid.UUID]]:
@@ -212,17 +425,56 @@ async def spawn_runs(
     批次是用户视角的「一次执行」，run 是技术粒度（一次 midscene 进程只能跑一个项目）。
     `case_ids` 用于「只重跑失败用例」：只跑指定用例，仍然按项目拆 run。
     """
-    cases_by_project = await _cases_by_project(db, task)
+    plan = await _case_plan_by_project(db, task)
     if case_ids is not None:
         wanted = set(case_ids)
-        cases_by_project = {
-            project_id: [cid for cid in ids if cid in wanted]
-            for project_id, ids in cases_by_project.items()
+        plan = {
+            project_id: {
+                "flow": [cid for cid in group["flow"] if cid in wanted],
+                "free": [cid for cid in group["free"] if cid in wanted],
+            }
+            for project_id, group in plan.items()
         }
-        cases_by_project = {pid: ids for pid, ids in cases_by_project.items() if ids}
+        plan = {
+            pid: group
+            for pid, group in plan.items()
+            if group["flow"] or group["free"]
+        }
+
+    task_dependencies = [
+        (row[0], row[1])
+        for row in (
+            await db.execute(
+                select(
+                    TaskCaseDependency.case_id,
+                    TaskCaseDependency.depends_on_case_id,
+                ).where(TaskCaseDependency.task_id == task.id)
+            )
+        ).all()
+    ]
+    edge_ids = {case_id for edge in task_dependencies for case_id in edge}
+    # 标记可能因为历史数据/手工改库没刷新；边上的用例一律按编排节点执行
+    for group in plan.values():
+        moved = [cid for cid in group["free"] if cid in edge_ids]
+        if moved:
+            group["free"] = [cid for cid in group["free"] if cid not in edge_ids]
+            group["flow"].extend(moved)
+
+    cases_by_project = {
+        project_id: group["flow"] + group["free"]
+        for project_id, group in plan.items()
+        if group["flow"] or group["free"]
+    }
     groups = {pid: len(ids) for pid, ids in cases_by_project.items()}
     if not groups:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "任务下没有可执行的用例")
+    if case_ids is None:
+        executable = {cid for ids in cases_by_project.values() for cid in ids}
+        if edge_ids - executable:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "编排引用的用例已停用或删除；请重新编辑编排后再执行",
+            )
     # 执行门禁：项目必须明确配过模型才允许跑。所有执行路径都汇到这里，拦一处就够。
     await assert_projects_configured(db, set(groups))
     # 额度门禁：超限就不让跑 —— 报错里带已用/限额，管理员调高即可
@@ -262,15 +514,34 @@ async def spawn_runs(
     shard_size = max(0, int(settings.run_shard_size if settings else 4))
 
     runs: list[Run] = []
+    flow_run_by_case: dict[uuid.UUID, Run] = {}
     for project_id in sorted(groups, key=str):
-        project_case_ids = cases_by_project.get(project_id, [])
-        if not project_case_ids:
-            continue
-        # 一个项目内的 YAML 默认串行；按 shard_size 切片后每个 run 一个浏览器，
-        # 可以分发到不同槽位/worker 并行跑。0 表示不分片（保持老行为）。
-        chunks = split_shards(project_case_ids, shard_size)
-        shard_count = len(chunks)
+        group = plan[project_id]
         env = environments[project_id]
+        # 编排节点：一个用例一个 run，run 之间用 RunDependency 门禁。
+        for case_id in group["flow"]:
+            run = Run(
+                task_id=task.id,
+                batch_id=batch.id,
+                team_id=task.team_id,
+                project_id=project_id,
+                iteration_id=task.iteration_id,
+                environment_id=env.id,
+                environment_name=env.name,
+                environment_base_url=env.base_url,
+                created_by=user.id if user else created_by_id,
+                status="queued",
+                run_kind="flow",
+                case_ids=[str(case_id)],
+            )
+            db.add(run)
+            runs.append(run)
+            flow_run_by_case[case_id] = run
+
+        # 未编排的用例保持原行为：按 shard_size 切片，每个 run 一个浏览器。
+        # case_ids 必须显式落库，否则同一项目里的分片 run 会把编排用例也跑一遍。
+        chunks = split_shards(group["free"], shard_size)
+        shard_count = len(chunks)
         for chunk_index, chunk in enumerate(chunks):
             run = Run(
                 task_id=task.id,
@@ -283,12 +554,8 @@ async def spawn_runs(
                 environment_base_url=env.base_url,
                 created_by=user.id if user else created_by_id,
                 status="queued",
-                # 分片或显式指定子集时必须落 case_ids，否则 worker 会跑整个任务
-                case_ids=(
-                    [str(case_id) for case_id in chunk]
-                    if shard_count > 1 or case_ids is not None
-                    else None
-                ),
+                run_kind="shard",
+                case_ids=[str(case_id) for case_id in chunk],
                 shard_index=chunk_index + 1 if shard_count > 1 else None,
                 shard_count=shard_count if shard_count > 1 else None,
             )
@@ -298,6 +565,41 @@ async def spawn_runs(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "任务下没有可执行的用例")
     task.status = "queued"
     # flush 才能拿到主键 —— id 的默认值是 Python 侧 uuid4，构造时还没赋值
+    await db.flush()
+
+    # 编排节点先绑定最近的版本：即使后面被阻塞，报告里也能显示它是哪一版
+    if flow_run_by_case:
+        versions: dict[str, dict] = {}
+        version_rows = (
+            await db.execute(
+                select(
+                    TestCaseVersion.case_id,
+                    TestCaseVersion.id,
+                    TestCaseVersion.version_no,
+                )
+                .where(TestCaseVersion.case_id.in_(list(flow_run_by_case)))
+                .order_by(TestCaseVersion.case_id, TestCaseVersion.version_no.desc())
+            )
+        ).all()
+        for case_id, version_id, version_no in version_rows:
+            versions.setdefault(
+                str(case_id),
+                {"version_id": str(version_id), "version_no": version_no},
+            )
+        for case_id, run in flow_run_by_case.items():
+            if str(case_id) in versions:
+                run.case_versions = {str(case_id): versions[str(case_id)]}
+
+    # 只有在本次真正创建的节点之间建边；重跑时被排除的已成功前置自然不再连线
+    for case_id, depends_on in task_dependencies:
+        run = flow_run_by_case.get(case_id)
+        predecessor = flow_run_by_case.get(depends_on)
+        if run is not None and predecessor is not None:
+            db.add(
+                RunDependency(
+                    run_id=run.id, depends_on_run_id=predecessor.id
+                )
+            )
     await db.flush()
     return batch, runs
 
@@ -320,7 +622,30 @@ async def failed_case_ids(
     if run_id is not None:
         stmt = stmt.where(CaseResult.run_id == run_id)
     rows = list((await db.execute(stmt)).scalars())
-    resolvable = sorted({row for row in rows if row is not None}, key=str)
+    # 编排节点在产出结果前就失败/超时（例如浏览器没起来）时没有 CaseResult，
+    # 回退到 run 上绑定的单个 case，否则这些节点永远无法重跑。
+    flow_conditions = [
+        Run.run_kind == "flow",
+        Run.status.in_(("failed", "blocked", "timed_out")),
+        ~exists(select(CaseResult.id).where(CaseResult.run_id == Run.id)),
+    ]
+    if batch_id is not None:
+        flow_conditions.append(Run.batch_id == batch_id)
+    if run_id is not None:
+        flow_conditions.append(Run.id == run_id)
+    extra: set[uuid.UUID] = set()
+    for case_ids in (
+        await db.execute(select(Run.case_ids).where(*flow_conditions))
+    ).scalars():
+        if not case_ids:
+            continue
+        try:
+            extra.add(uuid.UUID(str(case_ids[0])))
+        except (TypeError, ValueError):
+            continue
+    resolvable = sorted(
+        {row for row in rows if row is not None} | extra, key=str
+    )
     unresolved = sum(1 for row in rows if row is None)
     return resolvable, unresolved
 

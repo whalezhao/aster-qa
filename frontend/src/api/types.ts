@@ -130,6 +130,58 @@ export interface CaseOption {
   priority: Priority | null;
 }
 
+export interface CaseFlowEdge {
+  case_id: string;
+  depends_on_case_id: string;
+}
+
+export interface CaseFlowSummary {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  node_count: number;
+  edge_count: number;
+  updated_at: string;
+}
+
+export interface CaseFlowNode {
+  case_id: string;
+  name: string;
+  feature_id: string;
+  feature_name: string;
+  priority: Priority | null;
+  position: number;
+  depends_on: string[];
+}
+
+export interface CaseFlowDetail {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  nodes: CaseFlowNode[];
+  edges: CaseFlowEdge[];
+  layers: string[][];
+}
+
+export interface CaseFlowInput {
+  name: string;
+  description?: string | null;
+  nodes: string[];
+  edges: CaseFlowEdge[];
+}
+
+export interface TaskDependency {
+  case_id: string;
+  depends_on_case_id: string;
+}
+
+export interface FlowRunResult {
+  task_id: string;
+  batches: { batch_id: string; environment_name: string | null; run_ids: string[] }[];
+}
+
 export interface CaseStep {
   case: string;
   case_index: number;
@@ -301,7 +353,9 @@ export type RunStatus =
   | 'succeeded'
   | 'failed'
   | 'cancelled'
-  | 'timed_out';
+  | 'timed_out'
+  /** 编排节点：前置用例未通过，本用例没有执行 */
+  | 'blocked';
 
 export interface Run {
   id: string;
@@ -310,6 +364,7 @@ export interface Run {
   project_id: string | null;
   iteration_id: string | null;
   status: RunStatus;
+  run_kind: 'shard' | 'flow' | 'debug';
   midscene_status: string | null;
   exit_code: number | null;
   started_at: string | null;
@@ -354,6 +409,7 @@ export interface RunDetail extends Run {
   ai_total_tokens: number;
   ai_cost_ms: number;
   progress: RunProgress;
+  depends_on_run_ids: string[];
 }
 
 export interface RunCase {
@@ -365,6 +421,7 @@ export interface RunCase {
   name: string;
   case_index: number;
   status: string;
+  blocked_reason: string | null;
   attempt_count: number;
   passed_after_retry: boolean;
 }

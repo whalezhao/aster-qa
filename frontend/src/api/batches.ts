@@ -22,6 +22,7 @@ export interface BatchFeature {
   total: number;
   passed: number;
   failed: number;
+  blocked?: number;
 }
 
 export interface Batch {
@@ -57,6 +58,8 @@ export interface Batch {
   failed: number;
   /** 因非用例原因（模型额度/配置/网络）被排除在统计之外的 run 数 */
   excluded_runs: number;
+  /** 因前置用例失败而没有执行的编排节点数 */
+  blocked_runs: number;
   status: BatchStatus;
   features: BatchFeature[];
 }
@@ -78,10 +81,20 @@ export interface BatchRun {
   started_at: string | null;
   shard_index: number | null;
   shard_count: number | null;
+  run_kind: 'shard' | 'flow' | 'debug';
+  depends_on_run_ids: string[];
+  blocked_reason: string | null;
+  case_name: string | null;
 }
 
 export interface BatchDetail extends Batch {
   run_items: BatchRun[];
+  blocked_cases: {
+    case_id: string | null;
+    name: string | null;
+    run_id: string;
+    reason: string | null;
+  }[];
 }
 
 export interface BatchListParams {
@@ -124,13 +137,38 @@ export async function rerunFailedBatch(
 }
 
 /** 任务级聚合报告：批次下所有 run 的报告合并后的 v2 结构。 */
+export async function cancelBatch(
+  id: string,
+): Promise<{ cancelled: number; cancelling: number }> {
+  const { data } = await http.post<{ cancelled: number; cancelling: number }>(
+    `/api/batches/${id}/cancel`,
+  );
+  return data;
+}
+
 export async function getBatchReportStructured(
   id: string,
-): Promise<{ available: boolean; data: ReportStructured | null; fallback_run_id: string | null }> {
+): Promise<{
+  available: boolean;
+  data: ReportStructured | null;
+  fallback_run_id: string | null;
+  blocked_cases?: {
+    case_id: string | null;
+    name: string | null;
+    run_id: string;
+    reason: string | null;
+  }[];
+}> {
   const { data } = await http.get<{
     available: boolean;
     data: ReportStructured | null;
     fallback_run_id: string | null;
+    blocked_cases?: {
+      case_id: string | null;
+      name: string | null;
+      run_id: string;
+      reason: string | null;
+    }[];
   }>(`/api/batches/${id}/report-structured`);
   return data;
 }

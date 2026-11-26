@@ -15,6 +15,7 @@ import {
   type TaskListParams,
 } from '../api/tasks';
 import { getProjects } from '../api/projects';
+import { listCaseFlows } from '../api/flows';
 import { getIterationsByTeam } from '../api/iterations';
 import { apiError } from '../api/client';
 import { useActiveTeam } from '../team/TeamContext';
@@ -52,6 +53,8 @@ interface TaskFormValues {
   feature_ids?: string[];
   /** 建任务时只挑单条用例；和 feature_ids 一起提交 */
   case_ids?: string[];
+  /** 套用可复用的编排；编排按系统定义，需先选系统 */
+  flow_ids?: string[];
   run_now?: boolean;
 }
 
@@ -117,6 +120,10 @@ export default function Tasks() {
   const [form] = Form.useForm<TaskFormValues>();
   // 系统先选后选都要能约束功能树：选了系统就只看该系统，切系统时清掉别系统的功能
   const selectedProjectId = Form.useWatch('project_id', form);
+  // 编排按系统定义：切换系统时清掉已选编排，避免跨系统的旧选择残留
+  useEffect(() => {
+    form.setFieldValue('flow_ids', []);
+  }, [selectedProjectId, form]);
   // 勾选的任务 —— 「快速多任务执行」就是一次跑掉这几条
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -149,6 +156,11 @@ export default function Tasks() {
     queryKey: ['projects', teamId],
     queryFn: () => getProjects(teamId as string),
     enabled: Boolean(teamId),
+  });
+  const { data: projectFlows = [] } = useQuery({
+    queryKey: ['case-flows', selectedProjectId],
+    queryFn: () => listCaseFlows(selectedProjectId as string),
+    enabled: Boolean(selectedProjectId) && !editing,
   });
   const { data: iterations = [] } = useQuery({
     queryKey: ['iterations', teamId],
@@ -713,6 +725,25 @@ export default function Tasks() {
               disabled={Boolean(editing)}
             />
           </Form.Item>
+
+          {!editing && (
+            <Form.Item
+              name="flow_ids"
+              label={t('套用编排')}
+              tooltip={t('可选。编排按系统定义，先选择系统后才能套用；编排里的用例和依赖会快照进任务。')}
+            >
+              <Select
+                mode="multiple"
+                allowClear
+                disabled={!selectedProjectId}
+                placeholder={selectedProjectId ? t('可选') : t('先选择系统')}
+                options={projectFlows.map((flow) => ({
+                  value: flow.id,
+                  label: `${flow.name}（${flow.node_count} 个用例）`,
+                }))}
+              />
+            </Form.Item>
+          )}
 
           {!editing && (
             <Alert

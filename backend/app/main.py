@@ -22,6 +22,7 @@ from .api import (
     environments,
     features,
     files,
+    flows,
     iterations,
     preflight,
     projects,
@@ -121,6 +122,7 @@ app.include_router(tags.router)
 app.include_router(features.router)
 app.include_router(cases.router)
 app.include_router(tasks.router)
+app.include_router(flows.router)
 app.include_router(task_runs.router)
 app.include_router(task_signoff.router)
 app.include_router(runs.router)

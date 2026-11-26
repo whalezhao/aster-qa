@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Breadcrumb, Button, Col, Empty, Popconfirm, Progress, Row, Space, Statistic, Tag, Tooltip, Typography, theme } from 'antd';
 import { ProCard, ProDescriptions } from '@ant-design/pro-components';
 import { DeleteOutlined, FileTextOutlined, TrophyOutlined } from '@ant-design/icons';
-import { deleteBatch, getBatch, rerunFailedBatch, type BatchDetail, type BatchFeature, type BatchRun } from '../api/batches';
+import { cancelBatch, deleteBatch, getBatch, rerunFailedBatch, type BatchDetail, type BatchFeature, type BatchRun } from '../api/batches';
 import { useActiveTeam } from '../team/TeamContext';
 import { useAuth } from '../auth/AuthContext';
 import { t } from '../i18n';
@@ -20,6 +20,7 @@ import { PAGE, byNumber, byRank, byText } from '../lib/table';
 import { getBatchCheck, rerunBatchCheck } from '../api/ai';
 import { apiError } from '../api/client';
 import AiInsightCard from '../components/AiInsightCard';
+import FlowDagView from '../components/FlowDagView';
 import QaTable from '../components/QaTable';
 
 const ACTIVE = ['running'];
@@ -57,10 +58,25 @@ export default function ExecutionDetail() {
   const rerunFailed = useMutation({
     mutationFn: () => rerunFailedBatch(bid),
     onSuccess: (res) => {
-      message.success(t('已提交重跑 {n} 个失败用例', { n: res.case_count }));
+      message.success(t('已提交重跑 {n} 个失败/阻塞用例', { n: res.case_count }));
       queryClient.invalidateQueries({ queryKey: ['batch', bid] });
       queryClient.invalidateQueries({ queryKey: ['batches'] });
       navigate(`/executions/${res.batch_id}`);
+    },
+    onError: (e) => message.error(apiError(e)),
+  });
+
+  const cancel = useMutation({
+    mutationFn: () => cancelBatch(bid),
+    onSuccess: (res) => {
+      message.success(
+        t('已取消 {cancelled} 个排队节点；{cancelling} 个运行中的节点会在当前用例结束后停止', {
+          cancelled: res.cancelled,
+          cancelling: res.cancelling,
+        }),
+      );
+      queryClient.invalidateQueries({ queryKey: ['batch', bid] });
+      queryClient.invalidateQueries({ queryKey: ['batches'] });
     },
     onError: (e) => message.error(apiError(e)),
   });
@@ -109,6 +125,11 @@ export default function ExecutionDetail() {
                 <Tag>{t('{n} 次未计入统计', { n: batch.excluded_runs })}</Tag>
               </Tooltip>
             )}
+            {batch.blocked_runs > 0 && (
+              <Tag color="warning">
+                {t('{n} 个节点被阻塞', { n: batch.blocked_runs })}
+              </Tag>
+            )}
           </Space>
         }
         extra={
@@ -118,14 +139,31 @@ export default function ExecutionDetail() {
                 loading={rerunFailed.isPending}
                 onClick={() =>
                   modal.confirm({
-                    title: t('只重跑 {n} 个失败用例？', { n: batch.failed }),
-                    content: t('会创建一个新批次，并沿用本次执行的环境；一个 YAML 里的其他用例也会一起再跑。'),
+                    title: t('只重跑 {n} 个失败/阻塞用例？', { n: batch.failed }),
+                    content: t(
+                      '会创建一个新批次，按依赖关系重跑失败/阻塞节点；已成功的前置不会重跑。若失败节点依赖前置产生的数据，请重新运行整个编排。',
+                    ),
                     onOk: () => rerunFailed.mutateAsync(),
                   })
                 }
               >
                 {t('仅重跑失败用例')}
               </Button>
+            )}
+            {running && (
+              <Popconfirm
+                title={t('取消这次执行？')}
+                description={t(
+                  '排队中的节点会直接取消；正在运行的节点会在当前用例结束后停止。',
+                )}
+                okText={t('取消执行')}
+                cancelText={t('返回')}
+                onConfirm={() => cancel.mutate()}
+              >
+                <Button danger loading={cancel.isPending}>
+                  {t('取消执行')}
+                </Button>
+              </Popconfirm>
             )}
             <Button
               icon={<FileTextOutlined />}
@@ -192,6 +230,26 @@ export default function ExecutionDetail() {
             </Typography.Text>
           </ProDescriptions.Item>
         </ProDescriptions>
+
+        {batch.blocked_cases.length > 0 && (
+          <Alert
+            style={{ marginTop: 12 }}
+            type="warning"
+            showIcon
+            message={t('{n} 个用例因前置用例未通过而没有执行', {
+              n: batch.blocked_cases.length,
+            })}
+            description={
+              <Space direction="vertical" size={2}>
+                {batch.blocked_cases.map((item) => (
+                  <span key={item.run_id}>
+                    {item.name ?? item.case_id}：{item.reason}
+                  </span>
+                ))}
+              </Space>
+            }
+          />
+        )}
 
         {batch.gate_detail && batch.gate_detail.status !== 'disabled' && (
           <Alert
@@ -316,6 +374,12 @@ export default function ExecutionDetail() {
         )}
       </ProCard>
 
+      {batch.run_items.some((item) => item.run_kind === 'flow') && (
+        <ProCard title={t('编排执行')} style={{ marginTop: 16 }} size="small">
+          <FlowDagView runs={batch.run_items} />
+        </ProCard>
+      )}
+
       <ProCard title={t('各系统的执行明细')} style={{ marginTop: 16 }}>
         <Typography.Paragraph type="secondary">
           {t('跨系统或用例分片的任务会拆成多次运行（一个 run 只跑一个系统的一部分用例），下面是每一份运行的结果。点「报告」查看该系统报告；需要归档签章时用右上角的「测试报告」。')}
@@ -341,6 +405,7 @@ export default function ExecutionDetail() {
                         {t('分片 {index}/{count}', { index: r.shard_index ?? 0, count: r.shard_count })}
                       </Tag>
                     )}
+                    {r.run_kind === 'flow' && <Tag color="blue">{t('编排节点')}</Tag>}
                   </Space>
                 ),
               },

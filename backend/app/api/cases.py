@@ -255,6 +255,7 @@ async def trial_run(
         team_id=project.team_id,
         project_id=feature.project_id,
         status="queued",
+        run_kind="debug",
         is_debug=True,
         debug_yaml=text,
         debug_step_limit=body.step_limit,

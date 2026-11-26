@@ -182,6 +182,26 @@ export default function BatchReport() {
         />
       )}
 
+      {(reportQuery.data?.blocked_cases?.length ?? 0) > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={t('{n} 个用例因前置用例未通过而没有执行', {
+            n: reportQuery.data?.blocked_cases?.length ?? 0,
+          })}
+          description={
+            <Space direction="vertical" size={2}>
+              {(reportQuery.data?.blocked_cases ?? []).map((item) => (
+                <span key={item.run_id}>
+                  {item.name ?? item.case_id}：{item.reason}
+                </span>
+              ))}
+            </Space>
+          }
+        />
+      )}
+
       {!report ? (
         <div style={{ padding: 40 }}>
           <Empty description={t('这份执行还没有可用的聚合报告')} />

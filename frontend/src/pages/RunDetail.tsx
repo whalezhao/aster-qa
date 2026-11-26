@@ -37,7 +37,7 @@ export default function RunDetail() {
   useEffect(() => {
     setActiveTab(tabParam === 'report' ? 'report' : 'cases');
   }, [tabParam]);
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -71,7 +71,11 @@ export default function RunDetail() {
   const rerunFailed = useMutation({
     mutationFn: () => rerunFailedRun(rid),
     onSuccess: (res) => {
-      message.success(t('已提交重跑 {n} 个失败用例', { n: res.case_count }));
+      message.success(
+        run?.run_kind === 'flow'
+          ? t('已提交重跑 {n} 个失败/阻塞用例', { n: res.case_count })
+          : t('已提交重跑 {n} 个失败用例', { n: res.case_count }),
+      );
       navigate(`/executions/${res.batch_id}`);
     },
     onError: (e) => message.error(apiError(e)),
@@ -101,8 +105,25 @@ export default function RunDetail() {
       extra={
         <Space>
           {!active && (run.failed ?? 0) > 0 && (
-            <Button loading={rerunFailed.isPending} onClick={() => rerunFailed.mutate()}>
-              {t('仅重跑失败用例')}
+            <Button
+              loading={rerunFailed.isPending}
+              onClick={() => {
+                if (run.run_kind !== 'flow') {
+                  rerunFailed.mutate();
+                  return;
+                }
+                modal.confirm({
+                  title: t('重跑本批次的失败/阻塞节点？'),
+                  content: t(
+                    '会按依赖关系重跑失败/阻塞节点；已成功的前置不会重跑。',
+                  ),
+                  onOk: () => rerunFailed.mutateAsync(),
+                });
+              }}
+            >
+              {run.run_kind === 'flow'
+                ? t('重跑失败/阻塞节点')
+                : t('仅重跑失败用例')}
             </Button>
           )}
           <Button
@@ -125,8 +146,41 @@ export default function RunDetail() {
         </Space>
       }
     >
-      {run.error_message && (
-        <Alert type="error" showIcon message={t('执行报错')} description={run.error_message} style={{ marginBottom: 16 }} />
+      {run.error_message &&
+        (run.status === 'blocked' ? (
+          <Alert
+            type="warning"
+            showIcon
+            message={t('被前置用例阻塞')}
+            description={run.error_message}
+            style={{ marginBottom: 16 }}
+          />
+        ) : (
+          <Alert
+            type="error"
+            showIcon
+            message={t('执行报错')}
+            description={run.error_message}
+            style={{ marginBottom: 16 }}
+          />
+        ))}
+
+      {run.depends_on_run_ids.length > 0 && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={t('前置执行')}
+          description={
+            <Space wrap>
+              {run.depends_on_run_ids.map((runId) => (
+                <Link key={runId} to={`/runs/${runId}`}>
+                  {runId.slice(0, 8)}
+                </Link>
+              ))}
+            </Space>
+          }
+        />
       )}
 
       {active && (
@@ -298,9 +352,22 @@ function CasesTab({ rid }: { rid: string }) {
             title: t('结果'),
             dataIndex: 'status',
             width: 110,
-            sorter: byRank<RunCase>((r) => r.status, ['passed', 'failed']),
-            render: (s: string) => (
-              <Tag color={s === 'passed' ? 'success' : s === 'failed' ? 'error' : 'default'}>{s}</Tag>
+            sorter: byRank<RunCase>((r) => r.status, ['passed', 'failed', 'blocked']),
+            render: (s: string, row) => (
+              <Tag
+                color={
+                  s === 'passed'
+                    ? 'success'
+                    : s === 'failed'
+                      ? 'error'
+                      : s === 'blocked'
+                        ? 'warning'
+                        : 'default'
+                }
+                title={row.blocked_reason ?? undefined}
+              >
+                {s === 'blocked' ? t('被前置用例阻塞') : s}
+              </Tag>
             ),
           },
           {

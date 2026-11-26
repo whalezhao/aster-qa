@@ -51,6 +51,10 @@ also the idea behind the logo.
 - **Database assertions**: per-environment MySQL / OceanBase (MySQL mode) / PostgreSQL
   read-only connections; the `dbAssert` node compares a page value with a database column
   using exact or tolerant matching.
+- **Case dependency orchestration**: project-scoped reusable flows that pick cases across
+  features and define prerequisites. Orchestrated nodes run in dependency order, independent
+  branches run in parallel, and dependents are blocked when a prerequisite fails. Cases
+  outside the flow keep the existing sharded concurrency.
 - **Environment login-session reuse**: choose a login case (and an optional check case)
   from an environment. Runs reuse that environment’s Playwright `storageState`; when the
   session expires, the login case is re-run and failed cases can be retried once.
@@ -217,6 +221,22 @@ cases:
 - The runner allows one `SELECT` / `WITH` only, with connection/query timeouts and a row cap.
 - Database credentials are encrypted at rest and injected only into the runner process;
   they never appear in YAML, generated config, or reports.
+
+### Case dependency orchestration
+
+Create a reusable flow under **Project → Case flows**: pick cases across features on the
+left and choose prerequisites for each case on the right. Dependencies may cross features
+but must stay within one project.
+
+- Apply a flow when creating a task, or from the task's **Flow** tab; dependencies can be
+  adjusted there after applying;
+- Each orchestrated node runs as its own run. Nodes wait for their prerequisites and
+  independent branches run in parallel;
+- When a prerequisite fails or is blocked, its dependents are not executed and are recorded
+  as **blocked by a prerequisite**, counted as failures in pass rate and quality gates;
+- Cases outside the flow keep the original sharding and concurrent execution;
+- **Rerun failed** on a flow batch reruns the failed/blocked subgraph; already successful
+  prerequisites are not rerun.
 
 ### Docker images (Docker Hub)
 

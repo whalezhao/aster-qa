@@ -24,7 +24,8 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy import and_, delete, exists, func, or_, select, update
+from sqlalchemy.orm import aliased
 
 from app.case_versions import snapshot_case
 from app.config import get_settings
@@ -52,6 +53,7 @@ from app.models import (
     ProjectSessionState,
     Run,
     RunBatch,
+    RunDependency,
     TaskCase,
     TestCase,
     TestCaseVersion,
@@ -60,6 +62,11 @@ from app.models import (
 )
 from app.project_files import referenced_file_keys, resolve_storage_path
 from app.quality_gate import evaluate_gate
+from app.run_dependencies import (
+    ensure_flow_result,
+    resolve_run_dependents,
+    sweep_blocked_dependents,
+)
 from app.runner import execute as exec_mod
 from app.runner import parsers, persist, staging
 from app.runner import session as session_mod
@@ -76,6 +83,10 @@ WORKER_ID = uuid.uuid4().hex
 HEARTBEAT_SECONDS = 10
 # 超过这个时间没心跳就认为 worker 失联；留出 3 个心跳周期的余量
 WORKER_STALE_SECONDS = max(30, int(os.environ.get("WORKER_STALE_SECONDS", "90")))
+# 编排节点一个用例一个 run；同一批次里已经检查过会话时，短时间内不再重复跑检查用例
+SESSION_CHECK_GRACE_SECONDS = max(
+    0, int(os.environ.get("SESSION_CHECK_GRACE_SECONDS", "120"))
+)
 # 认领闸门的 advisory lock key：让「数活跃 run + 认领」在一个锁里完成
 CLAIM_LOCK_KEY = 0x4153544551  # "ASTEQ"
 _stopping = asyncio.Event()
@@ -213,9 +224,24 @@ async def claim_next(db) -> Run | None:
     if active >= limit:
         return None
 
+    # 编排 run 必须等所有前置「用例级成功」；进程 succeeded 但用例失败也不算。
+    predecessor = aliased(Run)
+    not_ready = exists(
+        select(1)
+        .select_from(RunDependency)
+        .join(predecessor, predecessor.id == RunDependency.depends_on_run_id)
+        .where(
+            RunDependency.run_id == Run.id,
+            or_(
+                predecessor.status != "succeeded",
+                func.coalesce(predecessor.failed, 0) != 0,
+                func.coalesce(predecessor.passed, 0) < 1,
+            ),
+        )
+    )
     stmt = (
         select(Run)
-        .where(Run.status == "queued")
+        .where(Run.status == "queued", ~not_ready)
         .order_by(Run.created_at)
         .limit(1)
         .with_for_update(skip_locked=True)
@@ -496,9 +522,16 @@ async def prepare_session(
         state.base_url_hash = url_hash
         state.refreshed_at = datetime.now(UTC)
         state.last_used_at = datetime.now(UTC)
+        state.last_checked_at = datetime.now(UTC)
         state.last_error = error
         await db.flush()
         return True, None
+
+    def check_is_fresh(current: ProjectSessionState | None) -> bool:
+        if current is None or current.last_checked_at is None:
+            return False
+        age = datetime.now(UTC) - current.last_checked_at
+        return age.total_seconds() <= SESSION_CHECK_GRACE_SECONDS
 
     async def run_check() -> tuple[bool, str | None]:
         assert check_case is not None
@@ -526,10 +559,17 @@ async def prepare_session(
                 state.last_error = None
                 await db.flush()
             return cache_path, False, None
+        if check_is_fresh(state):
+            if state is not None:
+                state.last_used_at = datetime.now(UTC)
+                state.last_error = None
+                await db.flush()
+            return cache_path, False, None
         check_ok, _check_error = await run_check()
         if check_ok:
             if state is not None:
                 state.last_used_at = datetime.now(UTC)
+                state.last_checked_at = datetime.now(UTC)
                 state.last_error = None
                 await db.flush()
             return cache_path, False, None
@@ -587,6 +627,12 @@ async def prepare_session(
                     )
                     if not check_ok:
                         return None, False, check_error or "登录会话检查失败"
+            state = await current_state()
+            if state is not None:
+                state.last_used_at = datetime.now(UTC)
+                state.last_checked_at = datetime.now(UTC)
+                state.last_error = None
+                await db.flush()
             return cache_path, True, None
     except OSError as exc:
         return None, False, f"登录会话缓存不可用：{exc}"
@@ -846,7 +892,8 @@ async def process(run_id: uuid.UUID) -> None:
         )
         # 执行记录要能回到这次真正执行的版本，而不是用例的最新版本。
         # 用已有的映射（恢复/重跑同一 run）或按最终落盘 YAML 现在绑定一次。
-        if run.case_versions is None:
+        # flow run 在 spawn 时预绑过版本（给阻塞节点用），真正执行时以落盘 YAML 为准重绑。
+        if run.case_versions is None or run.run_kind == "flow":
             run.case_versions = await bind_case_versions(db, named_cases)
         cases = [(case_id, yaml_text) for case_id, _name, yaml_text in named_cases]
 
@@ -1122,6 +1169,9 @@ async def process(run_id: uuid.UUID) -> None:
 
         case_ids = [c.test_case_id for c in (await _case_rows(db, run.id)) if c.test_case_id]
         await persist.refresh_stability(db, case_ids)
+        # 编排：前置失败/阻塞的后继在这里直接落成 blocked，不再等认领
+        await ensure_flow_result(db, run)
+        await resolve_run_dependents(db, run)
         await refresh_task_status(db, run.task_id)
         # 先把终态落库：后面的 webhook / AI 入队哪怕炸了，也不能让这次 run 卡在 parsing
         await db.commit()
@@ -1137,6 +1187,7 @@ async def process(run_id: uuid.UUID) -> None:
             and run.failure_kind is None
             and session_config is not None
             and session_config.retry_on_expiry
+            and run.run_kind != "flow"
             and run.task_id is not None
         ):
             failed_case_ids: list[uuid.UUID] = []
@@ -1285,6 +1336,8 @@ async def _fail(db, run: Run, message: str, staged=None) -> None:
     if staged is not None:
         run.work_dir = str(staged.work_dir)
         run.result_dir = str(staged.result_dir)
+    await ensure_flow_result(db, run)
+    await resolve_run_dependents(db, run)
     await refresh_task_status(db, run.task_id)
     # 同样先落终态，再发通知；通知失败不能把失败也吞成「卡住」
     await db.commit()
@@ -1428,6 +1481,7 @@ async def recover_interrupted(db) -> int:
             error_message="worker 失联，本次执行被中断",
         )
     )
+    await sweep_blocked_dependents(db)
     for task_id in affected:
         await refresh_task_status(db, task_id)
     await db.commit()
@@ -1495,8 +1549,21 @@ async def supervise_slots() -> None:
                         recovered = await recover_interrupted(db)
                     if recovered:
                         log.warning("恢复了 %d 个失联 worker 的 run", recovered)
+                    # 安全网：补做阻塞传播 + 收尾那些已经全部终态但没发通知的批次
+                    async with SessionLocal() as db:
+                        blocked = await sweep_blocked_dependents(db)
+                        batch_ids = {run.batch_id for run in blocked if run.batch_id}
+                        for batch_id in batch_ids:
+                            representative = (
+                                await db.execute(
+                                    select(Run).where(Run.batch_id == batch_id).limit(1)
+                                )
+                            ).scalar_one_or_none()
+                            if representative is not None:
+                                await notify_batch_finished(db, representative)
+                        await db.commit()
                 except Exception:
-                    log.exception("失联 run 恢复失败")
+                    log.exception("失联 run 恢复/阻塞传播失败")
                 last_recovery = now
 
             desired = min(await read_global_limit(), WORKER_CONCURRENCY)

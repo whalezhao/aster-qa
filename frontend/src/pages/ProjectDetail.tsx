@@ -29,6 +29,7 @@ import { fmtTokens } from '../lib/format';
 import type { BulkReleaseResult, Feature, FeatureStage } from '../api/types';
 import QaTable from '../components/QaTable';
 import EnvironmentsCard from '../components/EnvironmentsCard';
+import CaseFlowsCard from '../components/CaseFlowsCard';
 
 type StageFilter = 'all' | FeatureStage;
 
@@ -585,6 +586,10 @@ export default function ProjectDetail() {
 
       <ProCard style={{ marginTop: 16 }} title={t('环境与变量')}>
         <EnvironmentsCard projectId={pid} />
+      </ProCard>
+
+      <ProCard style={{ marginTop: 16 }} title={t('用例编排')}>
+        <CaseFlowsCard projectId={pid} />
       </ProCard>
 
       <ProCard style={{ marginTop: 16 }} title={t('功能列表')}>

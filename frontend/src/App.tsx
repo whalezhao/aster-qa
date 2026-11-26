@@ -10,6 +10,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Teams = lazy(() => import('./pages/Teams'));
 const TeamDetail = lazy(() => import('./pages/TeamDetail'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
+const FlowEditor = lazy(() => import('./pages/FlowEditor'));
 const Projects = lazy(() => import('./pages/Projects'));
 const FeatureDetail = lazy(() => import('./pages/FeatureDetail'));
 const CaseEditor = lazy(() => import('./pages/CaseEditor'));
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="/users" element={<Users />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/:pid" element={<ProjectDetail />} />
+        <Route path="/projects/:pid/flows/:fid" element={<FlowEditor />} />
         <Route path="/features/:fid" element={<FeatureDetail />} />
         {/* 新建用例走对话生成；/cases/:cid 仍然可以手动编辑 YAML */}
         <Route path="/cases/new/:fid" element={<CaseDraft />} />

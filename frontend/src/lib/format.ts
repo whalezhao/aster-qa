@@ -76,6 +76,9 @@ export function runStatusView(run: {
     return { color: 'processing', label: t(ACTIVE_LABELS[run.status] ?? run.status) };
   }
   if (run.status === 'cancelled') return { color: 'default', label: t('已取消') };
+  if (run.status === 'blocked') {
+    return { color: 'warning', label: t('被前置用例阻塞') };
+  }
 
   const kind = failureKindLabel(run.failure_kind);
   if (kind) {
