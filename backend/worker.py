@@ -450,7 +450,7 @@ async def prepare_session(
         age = datetime.now(UTC) - state.refreshed_at
         return age.total_seconds() <= config.ttl_seconds
 
-    async def refresh() -> tuple[bool, str | None]:
+    async def refresh(*, allow_partial: bool) -> tuple[bool, str | None]:
         state = await current_state()
         if state is None:
             state = ProjectSessionState(
@@ -479,7 +479,12 @@ async def prepare_session(
             save_path=temp,
             data_sources=data_sources,
         )
-        if not ok:
+        # 登录动作可能已经成功，只是落地页不符合登录用例的最后一条断言（例如门户首页
+        # 404）。有检查用例时先保留这份 storageState，交给检查用例判断能否使用。
+        if not ok and not session_mod.keep_partial_login_state(
+            allow_partial=allow_partial,
+            state_readable=session_mod.is_readable_storage_state(temp),
+        ):
             temp.unlink(missing_ok=True)
             state.last_error = error
             await db.flush()
@@ -491,7 +496,7 @@ async def prepare_session(
         state.base_url_hash = url_hash
         state.refreshed_at = datetime.now(UTC)
         state.last_used_at = datetime.now(UTC)
-        state.last_error = None
+        state.last_error = error
         await db.flush()
         return True, None
 
@@ -539,7 +544,9 @@ async def prepare_session(
                     state.last_error = None
                     await db.flush()
                 return cache_path, False, None
-            ok, error = await refresh()
+            ok, error = await refresh(
+                allow_partial=check_case is not None and not force_refresh
+            )
             if not ok:
                 return None, False, error or "登录会话初始化失败"
 
@@ -560,7 +567,7 @@ async def prepare_session(
                     data_sources=data_sources,
                 )
                 if not check_ok:
-                    ok, error = await refresh()
+                    ok, error = await refresh(allow_partial=False)
                     if not ok:
                         return None, False, error or "登录会话刷新失败"
                     check_ok, check_error = await _run_session_case(

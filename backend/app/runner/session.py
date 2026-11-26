@@ -43,6 +43,11 @@ def is_readable_storage_state(path: Path) -> bool:
     )
 
 
+def keep_partial_login_state(*, allow_partial: bool, state_readable: bool) -> bool:
+    """登录用例未通过时，若这次执行仍生成了 storageState，交给检查用例裁决。"""
+    return allow_partial and state_readable
+
+
 def install_storage_state(temp: Path, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     os.replace(temp, target)

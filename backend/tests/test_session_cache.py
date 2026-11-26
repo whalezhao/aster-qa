@@ -40,6 +40,16 @@ def test_session_install_is_atomic_and_removal_is_scoped(tmp_path):
     assert session.session_root(tmp_path).exists()
 
 
+def test_partial_login_state_needs_permission_and_a_readable_file():
+    assert session.keep_partial_login_state(allow_partial=True, state_readable=True)
+    assert not session.keep_partial_login_state(
+        allow_partial=False, state_readable=True
+    )
+    assert not session.keep_partial_login_state(
+        allow_partial=True, state_readable=False
+    )
+
+
 def test_base_url_hash_is_stable_and_distinguishes_urls():
     assert session.base_url_hash("https://a.test") == session.base_url_hash(
         "https://a.test"
