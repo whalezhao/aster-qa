@@ -128,7 +128,7 @@ async def evaluate_gate(db: AsyncSession, batch: RunBatch, task: TestTask | None
                     .join(TestCase, TestCase.id == CaseResult.test_case_id)
                     .where(
                         CaseResult.run_id.in_(eligible_ids),
-                        CaseResult.status.not_in(SUCCESS_STATUSES),
+                        CaseResult.status.not_in((*SUCCESS_STATUSES, "skipped")),
                         TestCase.priority == "P0",
                     )
                 )

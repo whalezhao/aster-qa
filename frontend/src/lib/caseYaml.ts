@@ -41,6 +41,7 @@ export const STEP_KIND_LABELS: Record<string, string> = {
   upload: '上传文件',
   download: '下载文件',
   dbAssert: '数据库比对',
+  capture: '记录变量',
 };
 
 export function stepKindLabel(kind: string): string {
@@ -67,6 +68,8 @@ export type StepOption = {
   filename?: string;
   minBytes?: number | null;
   saveAs?: string;
+  /** capture 的变量名 */
+  name?: string;
   /** dbAssert 的步骤级字段 */
   datasource?: string;
   sql?: string;
@@ -232,6 +235,43 @@ export function optionSpec(
       stepKeys.saveAs = text ? JSON.stringify(text) : null;
     }
   }
+  if (kind === 'capture') {
+    if (o.name !== undefined) {
+      const text = o.name.trim();
+      stepKeys.name = text || null;
+    }
+    const textKeys: (keyof StepOption)[] = [
+      'datasource',
+      'sql',
+      'column',
+      'prompt',
+      'selector',
+    ];
+    for (const key of textKeys) {
+      const value = o[key];
+      if (value === undefined) continue;
+      const text = String(value).trim();
+      stepKeys[key] = text ? JSON.stringify(text) : null;
+    }
+    if (o.params !== undefined) {
+      const raw = o.params.trim();
+      if (!raw) stepKeys.params = null;
+      else {
+        try {
+          stepKeys.params = JSON.stringify(JSON.parse(raw));
+        } catch {
+          stepKeys.params = JSON.stringify(raw);
+        }
+      }
+    }
+    if (o.as !== undefined) stepKeys.as = o.as;
+    if (o.row !== undefined) {
+      stepKeys.row = o.row == null ? null : String(o.row);
+    }
+    if (o.timeoutMs !== undefined) {
+      stepKeys.timeoutMs = o.timeoutMs == null ? null : String(o.timeoutMs);
+    }
+  }
   if (kind === DBASSERT_KIND) {
     const textKeys: (keyof StepOption)[] = [
       'datasource',
@@ -349,7 +389,10 @@ function mergeBlockOptions(
   // `- upload: { prompt: ..., file: KEY }` 这类行内映射：编辑后转成块写法，
   // 否则后面的 shorthand 分支会把它误当成「- aiAct: 文本」。
   const inlineMap = first.match(/^(\s*-\s*(\w+)\s*:)\s*\{(.*)\}\s*$/);
-  if (inlineMap && ['upload', 'download', 'dbAssert'].includes(inlineMap[2])) {
+  if (
+    inlineMap &&
+    ['upload', 'download', 'dbAssert', 'capture'].includes(inlineMap[2])
+  ) {
     const raw = inlineMap[3].trim();
     const parts =
       raw.match(/(?:[^,"']|"[^"]*"|'[^']*')+/g)?.map((item) => item.trim()) ?? [];

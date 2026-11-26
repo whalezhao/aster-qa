@@ -17,6 +17,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -806,6 +807,11 @@ class TaskCase(Base):
     is_flow_node: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    # 编排节点的条件/循环快照（只有 is_flow_node 时生效）
+    condition: Mapped[dict | None] = mapped_column(JSONB)
+    repeat_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
 
 
 class TaskCaseDependency(Base):
@@ -857,11 +863,50 @@ class CaseFlow(Timestamped, Base):
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    # 当前版本号；每次保存/回滚都写一条 CaseFlowVersion
+    current_version_no: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
     updated_by: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+
+class CaseFlowVersion(Base):
+    """编排模板的一次快照，用于历史查看和回滚。"""
+
+    __tablename__ = "case_flow_versions"
+    __table_args__ = (
+        UniqueConstraint("flow_id", "version_no", name="uq_case_flow_versions_no"),
+        CheckConstraint(
+            _in("change_source", "create", "manual", "rollback"),
+            name="ck_case_flow_versions_source",
+        ),
+        Index("ix_case_flow_versions_flow", "flow_id", "version_no"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    flow_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("case_flows.id", ondelete="CASCADE"), nullable=False
+    )
+    version_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    # [{case_id, position, x, y}] / [{case_id, depends_on_case_id}]
+    nodes: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    edges: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    change_source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="manual"
+    )
+    change_note: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 
@@ -879,6 +924,15 @@ class CaseFlowNode(Base):
     )
     position: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
+    )
+    # 图编辑器里的画布坐标；空表示还没手动摆过，前端按分层自动布局
+    position_x: Mapped[float | None] = mapped_column(Float)
+    position_y: Mapped[float | None] = mapped_column(Float)
+    # 条件分支：{variable, op, value}，在全部前置成功后用 flow_inputs 求值
+    condition: Mapped[dict | None] = mapped_column(JSONB)
+    # 固定重复次数：1 表示不循环；N>1 时展开成 N 个串行 run
+    repeat_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
     )
 
 
@@ -1042,6 +1096,7 @@ class Run(Timestamped, Base):
                 "cancelled",
                 "timed_out",
                 "blocked",
+                "skipped",
             ),
             name="ck_runs_status",
         ),
@@ -1089,6 +1144,19 @@ class Run(Timestamped, Base):
     run_kind: Mapped[str] = mapped_column(
         String(16), nullable=False, default="shard", server_default="shard"
     )
+    # 编排数据传递：前置 run 的 capture 输出合并成 inputs，本 run 的输出回写 outputs
+    flow_inputs: Mapped[dict | None] = mapped_column(JSONB)
+    flow_outputs: Mapped[dict | None] = mapped_column(JSONB)
+    # 前置输出是否已经全部合并；有前置的编排节点在合并完成前不能被认领
+    flow_inputs_ready: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    # 条件分支：{variable, op, value}；condition_passed=False 时不能认领
+    condition: Mapped[dict | None] = mapped_column(JSONB)
+    condition_passed: Mapped[bool | None] = mapped_column(Boolean)
+    # 固定循环展开后的序号/总数（1-based）
+    loop_index: Mapped[int | None] = mapped_column(Integer)
+    loop_total: Mapped[int | None] = mapped_column(Integer)
     # 认领这个 run 的 worker 进程。多 worker 下用来判断「原 worker 是否还活着」，
     # 只有拥有者失联时才允许恢复逻辑把它标失败。
     owner_worker_id: Mapped[str | None] = mapped_column(String(64))

@@ -11,6 +11,7 @@ from ..models import (
     CaseFlow,
     CaseFlowEdge,
     CaseFlowNode,
+    CaseFlowVersion,
     Feature,
     Project,
     TaskCaseDependency,
@@ -22,9 +23,13 @@ from ..schemas import (
     CaseFlowDetailOut,
     CaseFlowEdgeIn,
     CaseFlowIn,
+    CaseFlowNodeIn,
     CaseFlowNodeOut,
     CaseFlowRunIn,
     CaseFlowSummaryOut,
+    CaseFlowVersionDetailOut,
+    CaseFlowVersionOut,
+    FlowConditionIn,
     TaskDependenciesIn,
     TaskDependenciesOut,
     TaskDependencyIn,
@@ -49,10 +54,14 @@ async def _flow_access(db, flow_id: uuid.UUID, user, minimum: str = "member") ->
 
 
 async def _validate_flow_input(db, project_id: uuid.UUID, body: CaseFlowIn):
-    nodes = list(dict.fromkeys(body.nodes))
+    node_map: dict[uuid.UUID, CaseFlowNodeIn] = {}
+    for node in body.nodes:
+        node_map.setdefault(node.case_id, node)
+    nodes = list(node_map.values())
     if not nodes:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "编排至少需要一个用例")
 
+    case_ids = [node.case_id for node in nodes]
     rows = (
         await db.execute(
             select(
@@ -64,11 +73,11 @@ async def _validate_flow_input(db, project_id: uuid.UUID, body: CaseFlowIn):
                 Feature.project_id,
             )
             .join(Feature, Feature.id == TestCase.feature_id)
-            .where(TestCase.id.in_(nodes))
+            .where(TestCase.id.in_(case_ids))
         )
     ).all()
     found = {row[0] for row in rows}
-    if missing := set(nodes) - found:
+    if missing := set(case_ids) - found:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, f"{len(missing)} 个用例不存在"
         )
@@ -86,20 +95,42 @@ async def _validate_flow_input(db, project_id: uuid.UUID, body: CaseFlowIn):
 
     names = {row[0]: row[1] for row in rows}
     edges = [(edge.case_id, edge.depends_on_case_id) for edge in body.edges]
-    errors = validate_graph(nodes, edges, names)
+    errors = validate_graph(case_ids, edges, names)
     if errors:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "；".join(errors))
+    parents = {case_id for case_id, _depends_on in edges}
+    if any(
+        node.condition is not None and node.case_id not in parents
+        for node in nodes
+    ):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "条件节点必须有至少一个前置节点；否则条件没有可用的流程变量",
+        )
     return nodes, edges, names
 
 
 async def _replace_graph(
-    db, flow_id: uuid.UUID, nodes: list[uuid.UUID], edges: list[tuple[uuid.UUID, uuid.UUID]]
+    db,
+    flow_id: uuid.UUID,
+    nodes: list[CaseFlowNodeIn],
+    edges: list[tuple[uuid.UUID, uuid.UUID]],
 ) -> None:
     await db.execute(delete(CaseFlowEdge).where(CaseFlowEdge.flow_id == flow_id))
     await db.execute(delete(CaseFlowNode).where(CaseFlowNode.flow_id == flow_id))
     await db.flush()
-    for position, case_id in enumerate(nodes):
-        db.add(CaseFlowNode(flow_id=flow_id, case_id=case_id, position=position))
+    for position, node in enumerate(nodes):
+        db.add(
+            CaseFlowNode(
+                flow_id=flow_id,
+                case_id=node.case_id,
+                position=position,
+                position_x=node.x,
+                position_y=node.y,
+                condition=node.condition.model_dump() if node.condition else None,
+                repeat_count=node.repeat_count,
+            )
+        )
     await db.flush()
     for case_id, depends_on in edges:
         db.add(
@@ -108,6 +139,54 @@ async def _replace_graph(
             )
         )
     await db.flush()
+
+
+async def _snapshot_flow(
+    db,
+    flow: CaseFlow,
+    nodes: list[CaseFlowNodeIn],
+    edges: list[tuple[uuid.UUID, uuid.UUID]],
+    *,
+    source: str,
+    note: str | None = None,
+    user_id: uuid.UUID | None = None,
+) -> CaseFlowVersion:
+    if source == "create":
+        flow.current_version_no = 1
+    else:
+        flow.current_version_no = int(flow.current_version_no or 0) + 1
+    version = CaseFlowVersion(
+        flow_id=flow.id,
+        version_no=flow.current_version_no,
+        name=flow.name,
+        description=flow.description,
+        nodes=[
+            {
+                "case_id": str(node.case_id),
+                "position": position,
+                "x": node.x,
+                "y": node.y,
+                "condition": (
+                    node.condition.model_dump() if node.condition else None
+                ),
+                "repeat_count": node.repeat_count,
+            }
+            for position, node in enumerate(nodes)
+        ],
+        edges=[
+            {
+                "case_id": str(case_id),
+                "depends_on_case_id": str(depends_on),
+            }
+            for case_id, depends_on in edges
+        ],
+        change_source=source,
+        change_note=note,
+        created_by=user_id,
+    )
+    db.add(version)
+    await db.flush()
+    return version
 
 
 async def _summary(db, flow: CaseFlow) -> CaseFlowSummaryOut:
@@ -132,6 +211,7 @@ async def _summary(db, flow: CaseFlow) -> CaseFlowSummaryOut:
         description=flow.description,
         node_count=node_count,
         edge_count=edge_count,
+        current_version_no=flow.current_version_no,
         updated_at=flow.updated_at,
     )
 
@@ -228,6 +308,9 @@ async def create_flow(
     db.add(flow)
     await db.flush()
     await _replace_graph(db, flow.id, nodes, edges)
+    await _snapshot_flow(
+        db, flow, nodes, edges, source="create", user_id=user.id
+    )
     await db.commit()
     await db.refresh(flow)
     return await _summary(db, flow)
@@ -244,6 +327,7 @@ async def get_flow(
         project_id=flow.project_id,
         name=flow.name,
         description=flow.description,
+        current_version_no=flow.current_version_no,
         nodes=nodes,
         edges=[
             CaseFlowEdgeIn(case_id=case_id, depends_on_case_id=depends_on)
@@ -284,11 +368,154 @@ async def _load_detail(db, flow_id: uuid.UUID):
             feature_name=feature.name,
             priority=case.priority,
             position=node.position,
+            x=node.position_x,
+            y=node.position_y,
+            condition=node.condition,
+            repeat_count=node.repeat_count,
             depends_on=depends.get(node.case_id, []),
         )
         for node, case, feature in rows
     ]
     return nodes, edges
+
+
+def _version_nodes(version: CaseFlowVersion) -> list[CaseFlowNodeIn]:
+    return [
+        CaseFlowNodeIn(
+            case_id=uuid.UUID(str(item["case_id"])),
+            x=item.get("x"),
+            y=item.get("y"),
+            condition=(
+                FlowConditionIn(**item["condition"])
+                if item.get("condition")
+                else None
+            ),
+            repeat_count=int(item.get("repeat_count") or 1),
+        )
+        for item in (version.nodes or [])
+    ]
+
+
+def _version_edges(version: CaseFlowVersion) -> list[CaseFlowEdgeIn]:
+    return [
+        CaseFlowEdgeIn(
+            case_id=uuid.UUID(str(item["case_id"])),
+            depends_on_case_id=uuid.UUID(str(item["depends_on_case_id"])),
+        )
+        for item in (version.edges or [])
+    ]
+
+
+@router.get(
+    "/api/case-flows/{flow_id}/versions",
+    response_model=list[CaseFlowVersionOut],
+)
+async def list_flow_versions(
+    flow_id: uuid.UUID, user: CurrentUser, db: DbSession
+) -> list[CaseFlowVersionOut]:
+    await _flow_access(db, flow_id, user)
+    versions = list(
+        (
+            await db.execute(
+                select(CaseFlowVersion)
+                .where(CaseFlowVersion.flow_id == flow_id)
+                .order_by(CaseFlowVersion.version_no.desc())
+            )
+        ).scalars()
+    )
+    return [
+        CaseFlowVersionOut(
+            version_no=version.version_no,
+            name=version.name,
+            change_source=version.change_source,
+            change_note=version.change_note,
+            created_at=version.created_at,
+            node_count=len(version.nodes or []),
+            edge_count=len(version.edges or []),
+        )
+        for version in versions
+    ]
+
+
+@router.get(
+    "/api/case-flows/{flow_id}/versions/{version_no}",
+    response_model=CaseFlowVersionDetailOut,
+)
+async def get_flow_version(
+    flow_id: uuid.UUID,
+    version_no: int,
+    user: CurrentUser,
+    db: DbSession,
+) -> CaseFlowVersionDetailOut:
+    await _flow_access(db, flow_id, user)
+    version = (
+        await db.execute(
+            select(CaseFlowVersion).where(
+                CaseFlowVersion.flow_id == flow_id,
+                CaseFlowVersion.version_no == version_no,
+            )
+        )
+    ).scalar_one_or_none()
+    if version is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "编排版本不存在")
+    return CaseFlowVersionDetailOut(
+        version_no=version.version_no,
+        name=version.name,
+        description=version.description,
+        nodes=_version_nodes(version),
+        edges=_version_edges(version),
+        change_source=version.change_source,
+        change_note=version.change_note,
+        created_at=version.created_at,
+    )
+
+
+@router.post(
+    "/api/case-flows/{flow_id}/rollback/{version_no}",
+    response_model=CaseFlowSummaryOut,
+)
+async def rollback_flow(
+    flow_id: uuid.UUID,
+    version_no: int,
+    user: CurrentUser,
+    db: DbSession,
+) -> CaseFlowSummaryOut:
+    flow = await _flow_access(db, flow_id, user)
+    version = (
+        await db.execute(
+            select(CaseFlowVersion).where(
+                CaseFlowVersion.flow_id == flow_id,
+                CaseFlowVersion.version_no == version_no,
+            )
+        )
+    ).scalar_one_or_none()
+    if version is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "编排版本不存在")
+
+    await _check_name(db, flow.project_id, version.name, exclude_id=flow.id)
+    body = CaseFlowIn(
+        name=version.name,
+        description=version.description,
+        nodes=_version_nodes(version),
+        edges=_version_edges(version),
+    )
+    nodes, edges, _ = await _validate_flow_input(db, flow.project_id, body)
+    flow.name = version.name
+    flow.description = version.description
+    flow.updated_by = user.id
+    await _replace_graph(db, flow.id, nodes, edges)
+    await _snapshot_flow(
+        db,
+        flow,
+        nodes,
+        edges,
+        source="rollback",
+        note=f"回滚到 v{version_no}",
+        user_id=user.id,
+    )
+    await db.commit()
+    await db.refresh(flow)
+    return await _summary(db, flow)
 
 
 @router.put("/api/case-flows/{flow_id}", response_model=CaseFlowSummaryOut)
@@ -309,6 +536,9 @@ async def update_flow(
     flow.description = body.description
     flow.updated_by = user.id
     await _replace_graph(db, flow.id, nodes, edges)
+    await _snapshot_flow(
+        db, flow, nodes, edges, source="manual", user_id=user.id
+    )
     await db.commit()
     await db.refresh(flow)
     return await _summary(db, flow)

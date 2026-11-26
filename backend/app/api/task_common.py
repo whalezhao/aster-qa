@@ -174,6 +174,8 @@ async def task_case_meta(db, task_id: uuid.UUID):
                 TestCase.name,
                 TestCase.is_active,
                 Feature.project_id,
+                TaskCase.condition,
+                TaskCase.repeat_count,
             )
             .join(TestCase, TestCase.id == TaskCase.case_id)
             .join(Feature, Feature.id == TestCase.feature_id)
@@ -264,7 +266,11 @@ async def merge_flow_into_task(
                 .where(
                     TaskCase.task_id == task.id, TaskCase.case_id == node.case_id
                 )
-                .values(is_flow_node=True)
+                .values(
+                    is_flow_node=True,
+                    condition=node.condition,
+                    repeat_count=node.repeat_count,
+                )
             )
         else:
             max_position += 1
@@ -275,6 +281,8 @@ async def merge_flow_into_task(
                     source_feature_id=feature.id,
                     position=max_position,
                     is_flow_node=True,
+                    condition=node.condition,
+                    repeat_count=node.repeat_count,
                 )
             )
             added_cases += 1
@@ -513,30 +521,55 @@ async def spawn_runs(
     settings = await db.get(AppSetting, 1)
     shard_size = max(0, int(settings.run_shard_size if settings else 4))
 
+    meta_rows = await task_case_meta(db, task.id)
+    flow_meta = {
+        row[0]: {"condition": row[6], "repeat_count": row[7]} for row in meta_rows
+    }
+
     runs: list[Run] = []
     flow_run_by_case: dict[uuid.UUID, Run] = {}
+    flow_runs_by_case: dict[uuid.UUID, list[Run]] = {}
     for project_id in sorted(groups, key=str):
         group = plan[project_id]
         env = environments[project_id]
-        # 编排节点：一个用例一个 run，run 之间用 RunDependency 门禁。
+        # 编排节点：一个用例一个 run（固定循环展开成多个串行 run），run 之间用
+        # RunDependency 门禁。下游依赖的是循环的最后一个 run。
         for case_id in group["flow"]:
-            run = Run(
-                task_id=task.id,
-                batch_id=batch.id,
-                team_id=task.team_id,
-                project_id=project_id,
-                iteration_id=task.iteration_id,
-                environment_id=env.id,
-                environment_name=env.name,
-                environment_base_url=env.base_url,
-                created_by=user.id if user else created_by_id,
-                status="queued",
-                run_kind="flow",
-                case_ids=[str(case_id)],
+            meta = flow_meta.get(case_id, {})
+            condition = meta.get("condition")
+            repeat = max(1, min(20, int(meta.get("repeat_count") or 1)))
+            has_predecessor = any(
+                child == case_id for child, _ in task_dependencies
             )
-            db.add(run)
-            runs.append(run)
-            flow_run_by_case[case_id] = run
+            iteration_runs: list[Run] = []
+            for iteration in range(repeat):
+                iteration_condition = condition if iteration == 0 else None
+                run = Run(
+                    task_id=task.id,
+                    batch_id=batch.id,
+                    team_id=task.team_id,
+                    project_id=project_id,
+                    iteration_id=task.iteration_id,
+                    environment_id=env.id,
+                    environment_name=env.name,
+                    environment_base_url=env.base_url,
+                    created_by=user.id if user else created_by_id,
+                    status="queued",
+                    run_kind="flow",
+                    case_ids=[str(case_id)],
+                    flow_inputs_ready=iteration == 0 and not has_predecessor,
+                    condition=iteration_condition,
+                    condition_passed=(
+                        False if iteration_condition is not None else None
+                    ),
+                    loop_index=iteration + 1 if repeat > 1 else None,
+                    loop_total=repeat if repeat > 1 else None,
+                )
+                db.add(run)
+                runs.append(run)
+                iteration_runs.append(run)
+            flow_runs_by_case[case_id] = iteration_runs
+            flow_run_by_case[case_id] = iteration_runs[-1]
 
         # 未编排的用例保持原行为：按 shard_size 切片，每个 run 一个浏览器。
         # case_ids 必须显式落库，否则同一项目里的分片 run 会把编排用例也跑一遍。
@@ -568,7 +601,10 @@ async def spawn_runs(
     await db.flush()
 
     # 编排节点先绑定最近的版本：即使后面被阻塞，报告里也能显示它是哪一版
-    if flow_run_by_case:
+    all_flow_runs = [
+        run for runs_for_case in flow_runs_by_case.values() for run in runs_for_case
+    ]
+    if all_flow_runs:
         versions: dict[str, dict] = {}
         version_rows = (
             await db.execute(
@@ -577,7 +613,7 @@ async def spawn_runs(
                     TestCaseVersion.id,
                     TestCaseVersion.version_no,
                 )
-                .where(TestCaseVersion.case_id.in_(list(flow_run_by_case)))
+                .where(TestCaseVersion.case_id.in_(list(flow_runs_by_case)))
                 .order_by(TestCaseVersion.case_id, TestCaseVersion.version_no.desc())
             )
         ).all()
@@ -586,18 +622,29 @@ async def spawn_runs(
                 str(case_id),
                 {"version_id": str(version_id), "version_no": version_no},
             )
-        for case_id, run in flow_run_by_case.items():
-            if str(case_id) in versions:
-                run.case_versions = {str(case_id): versions[str(case_id)]}
+        for run in all_flow_runs:
+            case_id = str(run.case_ids[0])
+            if case_id in versions:
+                run.case_versions = {case_id: versions[case_id]}
 
     # 只有在本次真正创建的节点之间建边；重跑时被排除的已成功前置自然不再连线
     for case_id, depends_on in task_dependencies:
-        run = flow_run_by_case.get(case_id)
-        predecessor = flow_run_by_case.get(depends_on)
-        if run is not None and predecessor is not None:
+        children = flow_runs_by_case.get(case_id)
+        predecessors = flow_runs_by_case.get(depends_on)
+        if children and predecessors:
             db.add(
                 RunDependency(
-                    run_id=run.id, depends_on_run_id=predecessor.id
+                    run_id=children[0].id,
+                    depends_on_run_id=predecessors[-1].id,
+                )
+            )
+    # 固定循环：第 i 次依赖第 i-1 次，输出按顺序传给下一轮
+    for runs_for_case in flow_runs_by_case.values():
+        for index in range(1, len(runs_for_case)):
+            db.add(
+                RunDependency(
+                    run_id=runs_for_case[index].id,
+                    depends_on_run_id=runs_for_case[index - 1].id,
                 )
             )
     await db.flush()
@@ -612,7 +659,7 @@ async def failed_case_ids(
         select(CaseResult.test_case_id)
         .join(Run, Run.id == CaseResult.run_id)
         .where(
-            CaseResult.status.not_in(("success", "passed")),
+            CaseResult.status.not_in(("success", "passed", "skipped")),
             # 模型/网络/额度导致的失败不重跑：环境没恢复时再跑一遍只会再红一次
             Run.failure_kind.is_(None),
         )

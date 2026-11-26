@@ -100,6 +100,11 @@ cases:
   页面取值优先用 `prompt`；页面结构稳定且用户明确给了选择器时才用 `selector`。
   `as: number` 时用 `tolerance` 做数值容差；字符串默认去首尾空格后精确比较。
   不要给 `dbAssert` 套 `options` 或写 `cacheable`。
+- `capture`：把页面或数据库里的值记录成流程变量，供依赖本用例的编排节点用 `${变量名}` 引用。
+  `capture: { name: ORDER_NO, prompt: <页面取值描述>, as: string }`，或
+  `capture: { name: ORDER_NO, selector: <css选择器>, as: string }`，或
+  `capture: { name: ORDER_NO, datasource: <数据源名>, sql: <单条 SELECT>, column: <列名>, params: [...] }`。
+  只能指定 prompt、selector、sql 中的一个；不要套 `options`。
 
 ## 缓存（每个 aiAct 都必须显式判断）
 
@@ -329,6 +334,7 @@ def steps_of(yaml_text: str) -> list[dict]:
             detail = {}
             if isinstance(value, dict):
                 for key in (
+                    "name",
                     "prompt",
                     "trigger",
                     "file",

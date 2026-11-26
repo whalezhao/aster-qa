@@ -100,7 +100,9 @@ def _terminal_scope(
     """所有已结束的 run（含失败/取消/非用例原因）—— 用于结果分布，不做通过率口径过滤。"""
     conditions = [
         Run.is_debug.is_(False),
-        Run.status.in_(("succeeded", "failed", "cancelled", "timed_out", "blocked")),
+        Run.status.in_(
+            ("succeeded", "failed", "cancelled", "timed_out", "blocked", "skipped")
+        ),
     ]
     if team_id is not None:
         conditions.append(Run.team_id == team_id)
@@ -299,6 +301,7 @@ async def breakdown(
         "exec_failed": "执行失败",
         "excluded": "非用例原因",
         "interrupted": "取消/超时",
+        "skipped": "条件跳过",
     }
     buckets = {
         key: {"key": key, "label": label, "runs": 0, "cases": 0, "failed_cases": 0}
@@ -311,6 +314,7 @@ async def breakdown(
             case((Run.failed == 0, "all_passed"), else_="with_failures"),
         ),
         (Run.status.in_(("cancelled", "timed_out")), "interrupted"),
+        (Run.status == "skipped", "skipped"),
         (Run.failure_kind.is_not(None), "excluded"),
         else_="exec_failed",
     )

@@ -142,7 +142,16 @@ export interface CaseFlowSummary {
   description: string | null;
   node_count: number;
   edge_count: number;
+  current_version_no: number;
   updated_at: string;
+}
+
+export type FlowConditionOp = 'eq' | 'ne' | 'contains' | 'gt' | 'lt';
+
+export interface FlowCondition {
+  variable: string;
+  op: FlowConditionOp;
+  value: string | number | boolean;
 }
 
 export interface CaseFlowNode {
@@ -152,7 +161,19 @@ export interface CaseFlowNode {
   feature_name: string;
   priority: Priority | null;
   position: number;
+  x: number | null;
+  y: number | null;
+  condition: FlowCondition | null;
+  repeat_count: number;
   depends_on: string[];
+}
+
+export interface CaseFlowNodeInput {
+  case_id: string;
+  x?: number | null;
+  y?: number | null;
+  condition?: FlowCondition | null;
+  repeat_count?: number;
 }
 
 export interface CaseFlowDetail {
@@ -160,6 +181,7 @@ export interface CaseFlowDetail {
   project_id: string;
   name: string;
   description: string | null;
+  current_version_no: number;
   nodes: CaseFlowNode[];
   edges: CaseFlowEdge[];
   layers: string[][];
@@ -168,8 +190,29 @@ export interface CaseFlowDetail {
 export interface CaseFlowInput {
   name: string;
   description?: string | null;
-  nodes: string[];
+  nodes: CaseFlowNodeInput[];
   edges: CaseFlowEdge[];
+}
+
+export interface CaseFlowVersionSummary {
+  version_no: number;
+  name: string;
+  change_source: 'create' | 'manual' | 'rollback';
+  change_note: string | null;
+  created_at: string;
+  node_count: number;
+  edge_count: number;
+}
+
+export interface CaseFlowVersionDetail {
+  version_no: number;
+  name: string;
+  description: string | null;
+  nodes: CaseFlowNodeInput[];
+  edges: CaseFlowEdge[];
+  change_source: 'create' | 'manual' | 'rollback';
+  change_note: string | null;
+  created_at: string;
 }
 
 export interface TaskDependency {
@@ -202,6 +245,8 @@ export interface CaseStep {
   deepLocate?: boolean | null;
   effort?: 'fast' | 'balance' | 'deepThink' | null;
   context?: string | null;
+  /** capture 的变量名 */
+  name?: string | null;
   /** dbAssert 的可编辑字段 */
   datasource?: string | null;
   sql?: string | null;
@@ -355,7 +400,9 @@ export type RunStatus =
   | 'cancelled'
   | 'timed_out'
   /** 编排节点：前置用例未通过，本用例没有执行 */
-  | 'blocked';
+  | 'blocked'
+  /** 编排节点：条件不满足，分支没有走 */
+  | 'skipped';
 
 export interface Run {
   id: string;

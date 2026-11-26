@@ -1,3 +1,5 @@
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { createConnection } from 'mysql2/promise';
 import { Client } from 'pg';
 
@@ -31,6 +33,19 @@ interface DataSourceConfig {
   connectTimeoutMs: number;
   statementTimeoutMs: number;
   maxRows: number;
+}
+
+interface CaptureInput {
+  name: string;
+  prompt?: string;
+  selector?: string;
+  datasource?: string;
+  sql?: string;
+  params?: (string | number | boolean | null)[];
+  column?: string;
+  row?: number;
+  as?: 'number' | 'string' | 'boolean';
+  timeoutMs?: number;
 }
 
 interface DbAssertInput {
@@ -142,6 +157,33 @@ function normalizeString(value: unknown, ignoreCase: boolean): string {
 function display(value: unknown): string {
   if (value === null || value === undefined) return '空';
   return String(value);
+}
+
+function coerceCaptured(
+  value: unknown,
+  as?: 'number' | 'string' | 'boolean',
+): unknown {
+  if (!as) return value;
+  if (as === 'number') return parseIntValue(value);
+  if (as === 'boolean') return parseBooleanValue(value);
+  return value === null || value === undefined ? '' : String(value);
+}
+
+function writeFlowOutput(name: string, value: unknown): void {
+  const path = process.env.QA_FLOW_OUTPUT;
+  if (!path) return;
+  let data: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8'));
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      data = parsed as Record<string, unknown>;
+    }
+  } catch {
+    data = {};
+  }
+  data[name] = value;
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(data), 'utf8');
 }
 
 async function pageValue(input: DbAssertInput, context: DbNodeContext): Promise<unknown> {
@@ -375,6 +417,100 @@ export function createDbNodes() {
             expected: compared.expected,
             tolerance: input.tolerance ?? 0,
           },
+        };
+      },
+    }),
+    defineNode<CaptureInput, unknown, DbNodeContext>({
+      name: 'capture',
+      title: 'Capture value',
+      description:
+        'Read a page or database value and expose it to dependent orchestration nodes.',
+      inputSchema: z.strictObject({
+        name: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,63}$/),
+        prompt: z.string().optional(),
+        selector: z.string().optional(),
+        datasource: z.string().optional(),
+        sql: z.string().optional(),
+        params: z
+          .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+          .optional(),
+        column: z.string().optional(),
+        row: z.number().int().nonnegative().optional(),
+        as: z.enum(['number', 'string', 'boolean']).optional(),
+        timeoutMs: z.number().int().positive().optional(),
+      }),
+      async execute(ctx: NodeExecutionContext<CaptureInput, DbNodeContext>) {
+        const { input, context, signal } = ctx;
+        const pageSource = Boolean(input.prompt || input.selector);
+        const sqlSource = Boolean(input.sql);
+        if (Number(pageSource) + Number(sqlSource) !== 1) {
+          throw new Error(
+            'capture 必须且只能指定 prompt、selector、sql 中的一个',
+          );
+        }
+
+        let value: unknown;
+        if (sqlSource) {
+          if (!input.datasource) {
+            throw new Error('capture 使用 sql 时必须指定 datasource');
+          }
+          const source = DATA_SOURCES[input.datasource];
+          if (!source) {
+            throw new Error(
+              `当前环境没有配置数据库数据源 ${input.datasource}；请到环境 → 数据库添加`,
+            );
+          }
+          const sqlError = validateReadonlySql(input.sql as string);
+          if (sqlError) throw new Error(sqlError);
+          const { rows, fieldNames } = await runQuery(
+            source,
+            (input.sql as string).trim().replace(/;\s*$/, ''),
+            input.params,
+            input.timeoutMs ?? source.statementTimeoutMs,
+            signal,
+          );
+          if (rows.length > source.maxRows) {
+            throw new Error(
+              `SQL 返回 ${rows.length} 行，超过数据源 ${source.name} 的上限 ${source.maxRows}`,
+            );
+          }
+          if (rows.length === 0) throw new Error('SQL 没有返回任何行');
+          const rowIndex = input.row ?? 0;
+          if (input.row === undefined && rows.length !== 1) {
+            throw new Error(
+              `SQL 返回 ${rows.length} 行；请加 LIMIT 1 或指定 row 选择其中一行`,
+            );
+          }
+          if (rowIndex >= rows.length) {
+            throw new Error(`row=${rowIndex} 超出结果行数 ${rows.length}`);
+          }
+          const row = rows[rowIndex];
+          const column =
+            input.column?.trim() ||
+            (fieldNames.length === 1 ? fieldNames[0] : '');
+          if (!column) throw new Error('SQL 返回多列；请用 column 指定要取值的列');
+          if (!(column in row)) throw new Error(`结果里没有列 ${column}`);
+          value = row[column];
+        } else {
+          if (Boolean(input.prompt) === Boolean(input.selector)) {
+            throw new Error('capture 必须且只能指定 prompt 或 selector 一个');
+          }
+          value = await pageValue(
+            {
+              prompt: input.prompt,
+              selector: input.selector,
+              as: input.as,
+              timeoutMs: input.timeoutMs,
+            } as DbAssertInput,
+            context,
+          );
+        }
+
+        const captured = coerceCaptured(value, input.as);
+        writeFlowOutput(input.name, captured);
+        return {
+          summary: `已记录变量 ${input.name} = ${display(captured)}`,
+          data: { name: input.name, value: captured },
         };
       },
     }),

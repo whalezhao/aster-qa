@@ -166,3 +166,57 @@ def blocked_reason(predecessor_name: str, status: str) -> str:
         f"{_STATUS_TEXT.get(status, '未通过')}，本用例未执行"
     )
     return text[:255]
+
+
+def _condition_text(value) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    return str(value)
+
+
+def evaluate_condition(condition, inputs: Mapping[str, object] | None) -> bool:
+    """在流程变量上求值一个简单条件；缺变量按不满足处理。"""
+    if not isinstance(condition, dict):
+        return True
+    variable = str(condition.get("variable") or "").strip()
+    if not variable:
+        return True
+    values = inputs or {}
+    if variable not in values:
+        return False
+    actual = values.get(variable)
+    expected = condition.get("value")
+    op = str(condition.get("op") or "eq")
+    if op in {"eq", "ne"}:
+        equal = _condition_text(actual) == _condition_text(expected)
+        return equal if op == "eq" else not equal
+    if op == "contains":
+        return _condition_text(expected) in _condition_text(actual)
+    if op in {"gt", "lt"}:
+        try:
+            left = float(actual)  # type: ignore[arg-type]
+            right = float(expected)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return False
+        return left > right if op == "gt" else left < right
+    return False
+
+
+def condition_reason(condition, inputs: Mapping[str, object] | None) -> str:
+    if not isinstance(condition, dict):
+        return "条件不满足，本用例未执行"
+    variable = str(condition.get("variable") or "").strip() or "变量"
+    values = inputs or {}
+    actual = values.get(variable, "（缺失）")
+    op = str(condition.get("op") or "eq")
+    expected = condition.get("value")
+    return (
+        f"条件不满足：{variable} 的值为 {_condition_text(actual)}，"
+        f"要求 {op} {_condition_text(expected)}；本用例未执行"
+    )[:255]
+
+
+def skip_reason(predecessor_name: str) -> str:
+    return f"前置用例「{predecessor_name}」未执行，本用例随分支跳过"[:255]

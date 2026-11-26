@@ -539,6 +539,47 @@ export const pages: Record<string, string> = {
   被前置用例阻塞: 'Blocked by a prerequisite',
   编排节点: 'Flow node',
   编排执行: 'Flow execution',
+  '条件/循环': 'Condition / loop',
+  条件与循环: 'Condition and loop',
+  条件变量: 'Condition variable',
+  期望值: 'Expected value',
+  '重复次数（固定循环）': 'Repeat count (fixed loop)',
+  清除条件: 'Clear condition',
+  '变量来自前置节点 capture 的输出；条件不满足时该节点及其下游会跳过。重复次数大于 1 时按顺序执行多轮。':
+    'The variable comes from a predecessor capture node. If the condition is false, this node and its downstream are skipped. A repeat count above 1 runs the node sequentially for multiple iterations.',
+  条件跳过: 'Skipped by condition',
+  '变量名，例如 ORDER_NO': 'Variable name, e.g. ORDER_NO',
+  'prompt / selector / sql 只能填一个；变量供依赖本用例的编排节点使用':
+    'Only one of prompt/selector/sql is allowed. The variable is available to dependent orchestration nodes.',
+  '页面取值描述（prompt）': 'Page value prompt',
+  '页面选择器（selector）': 'Page selector',
+  '数据库数据源（可选）': 'Database data source (optional)',
+  'SQL（可选，只允许单条 SELECT/WITH）':
+    'SQL (optional, a single SELECT/WITH)',
+  '参数 JSON，例如 [1]': 'Params JSON, e.g. [1]',
+  列名: 'Column',
+  行号: 'Row',
+  '{n} 个节点条件跳过': '{n} nodes skipped by condition',
+  '循环 {index}/{total}': 'Loop {index}/{total}',
+  自动布局: 'Auto layout',
+  '已选择起点，点击目标节点建立依赖（目标依赖起点）':
+    'Source selected. Click the target node to add a dependency (target depends on source).',
+  '拖动节点调整位置；点「连线」再点另一个节点，后点的是依赖方':
+    'Drag nodes to arrange them. Click "Connect", then click another node; the latter depends on the former.',
+  连线: 'Connect',
+  点击删除这条依赖: 'Click to delete this dependency',
+  版本历史: 'Version history',
+  已回滚编排版本: 'Flow version rolled back',
+  创建: 'Create',
+  回滚: 'Roll back',
+  图编辑: 'Graph',
+  表格: 'Table',
+  '加载中…': 'Loading…',
+  还没有版本: 'No versions yet',
+  '回滚到这个版本？': 'Roll back to this version?',
+  '回滚会生成一个新版本，不会删除历史。':
+    'Rolling back creates a new version; history is kept.',
+  '{cases} 个用例 · {edges} 条依赖': '{cases} cases · {edges} dependencies',
   '重跑本批次的失败/阻塞节点？':
     'Rerun the failed/blocked nodes of this batch?',
   '会按依赖关系重跑失败/阻塞节点；已成功的前置不会重跑。':

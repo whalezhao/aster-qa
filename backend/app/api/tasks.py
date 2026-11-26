@@ -555,13 +555,16 @@ async def set_task_cases(
 ) -> dict[str, int]:
     task = await require_task(db, task_id, user)
     # 重设用例集合时尽量保留编排：先记下标记和边，只保留两端都还在的边
-    old_flags = {
-        row[0]: row[1]
+    old_meta = {
+        row[0]: row[1:]
         for row in (
             await db.execute(
-                select(TaskCase.case_id, TaskCase.is_flow_node).where(
-                    TaskCase.task_id == task_id
-                )
+                select(
+                    TaskCase.case_id,
+                    TaskCase.is_flow_node,
+                    TaskCase.condition,
+                    TaskCase.repeat_count,
+                ).where(TaskCase.task_id == task_id)
             )
         ).all()
     }
@@ -607,7 +610,12 @@ async def set_task_cases(
                     case_id=case_id,
                     source_feature_id=feature_id,
                     position=position,
-                    is_flow_node=old_flags.get(case_id, False) or case_id in edge_ids,
+                    is_flow_node=(
+                        bool(old_meta.get(case_id, (False, None, 1))[0])
+                        or case_id in edge_ids
+                    ),
+                    condition=old_meta.get(case_id, (False, None, 1))[1],
+                    repeat_count=old_meta.get(case_id, (False, None, 1))[2] or 1,
                 )
             )
     for case_id, depends_on in old_edges:

@@ -6,7 +6,9 @@ import pytest
 from app.orchestration import (
     MAX_FLOW_NODES,
     blocked_reason,
+    condition_reason,
     dag_layers,
+    evaluate_condition,
     node_succeeded,
     validate_graph,
 )
@@ -65,6 +67,58 @@ def test_node_succeeded_requires_case_level_success():
     assert not node_succeeded(SimpleNamespace(status="succeeded", failed=None, passed=None))
     assert not node_succeeded(SimpleNamespace(status="failed", failed=1, passed=0))
     assert not node_succeeded(SimpleNamespace(status="blocked", failed=1, passed=0))
+
+
+def test_condition_evaluation():
+    inputs = {"STATUS": "paid", "AMOUNT": 100, "FLAG": True}
+    assert evaluate_condition({"variable": "STATUS", "op": "eq", "value": "paid"}, inputs)
+    assert not evaluate_condition(
+        {"variable": "STATUS", "op": "eq", "value": "unpaid"}, inputs
+    )
+    assert evaluate_condition(
+        {"variable": "STATUS", "op": "ne", "value": "unpaid"}, inputs
+    )
+    assert evaluate_condition(
+        {"variable": "STATUS", "op": "contains", "value": "ai"}, inputs
+    )
+    assert evaluate_condition({"variable": "AMOUNT", "op": "gt", "value": 50}, inputs)
+    assert evaluate_condition({"variable": "AMOUNT", "op": "lt", "value": 500}, inputs)
+    assert not evaluate_condition(
+        {"variable": "MISSING", "op": "eq", "value": "x"}, inputs
+    )
+    assert evaluate_condition(None, inputs)
+    assert "条件不满足" in condition_reason(
+        {"variable": "STATUS", "op": "eq", "value": "unpaid"}, inputs
+    )
+
+
+def test_flow_condition_schema():
+    from pydantic import ValidationError
+
+    from app.schemas import CaseFlowIn, CaseFlowNodeIn, FlowConditionIn
+
+    body = CaseFlowIn(
+        name="flow",
+        nodes=[
+            CaseFlowNodeIn(
+                case_id=A,
+                condition=FlowConditionIn(
+                    variable="STATUS", op="eq", value="paid"
+                ),
+                repeat_count=3,
+            )
+        ],
+    )
+    assert body.nodes[0].condition is not None
+    assert body.nodes[0].condition.variable == "STATUS"
+    assert body.nodes[0].repeat_count == 3
+
+    try:
+        CaseFlowNodeIn(case_id=A, repeat_count=0)
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("repeat_count=0 should be rejected")
 
 
 def test_blocked_reason_is_human_readable_and_bounded():

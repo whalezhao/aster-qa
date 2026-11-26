@@ -251,6 +251,28 @@ export default function ExecutionDetail() {
           />
         )}
 
+        {batch.run_items.some((item) => item.status === 'skipped') && (
+          <Alert
+            style={{ marginTop: 12 }}
+            type="info"
+            showIcon
+            message={t('{n} 个节点条件跳过', {
+              n: batch.run_items.filter((item) => item.status === 'skipped').length,
+            })}
+            description={
+              <Space direction="vertical" size={2}>
+                {batch.run_items
+                  .filter((item) => item.status === 'skipped')
+                  .map((item) => (
+                    <span key={item.id}>
+                      {item.case_name ?? item.id.slice(0, 8)}：{item.blocked_reason}
+                    </span>
+                  ))}
+              </Space>
+            }
+          />
+        )}
+
         {batch.gate_detail && batch.gate_detail.status !== 'disabled' && (
           <Alert
             style={{ marginTop: 12 }}
@@ -406,6 +428,14 @@ export default function ExecutionDetail() {
                       </Tag>
                     )}
                     {r.run_kind === 'flow' && <Tag color="blue">{t('编排节点')}</Tag>}
+                    {r.loop_total && r.loop_total > 1 && (
+                      <Tag>
+                        {t('循环 {index}/{total}', {
+                          index: r.loop_index ?? 0,
+                          total: r.loop_total,
+                        })}
+                      </Tag>
+                    )}
                   </Space>
                 ),
               },

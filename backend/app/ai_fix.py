@@ -88,7 +88,7 @@ async def _latest_failure(
         .join(Run, Run.id == CaseResult.run_id)
         .where(
             CaseResult.test_case_id == case_id,
-            CaseResult.status.not_in(SUCCESS_STATUSES),
+            CaseResult.status.not_in((*SUCCESS_STATUSES, "skipped")),
             Run.team_id == team_id,
         )
         .order_by(Run.started_at.desc().nullslast(), Run.created_at.desc())

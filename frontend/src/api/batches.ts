@@ -85,6 +85,8 @@ export interface BatchRun {
   depends_on_run_ids: string[];
   blocked_reason: string | null;
   case_name: string | null;
+  loop_index: number | null;
+  loop_total: number | null;
 }
 
 export interface BatchDetail extends Batch {

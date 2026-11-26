@@ -48,6 +48,9 @@ export default function FlowDagView({ runs }: { runs: BatchRun[] }) {
                 <div>
                   <Link to={`/runs/${runId}`}>
                     {run.case_name ?? runId.slice(0, 8)}
+                    {run.loop_total && run.loop_total > 1
+                      ? ` · ${run.loop_index}/${run.loop_total}`
+                      : ''}
                   </Link>
                 </div>
                 <Space size={6} wrap>

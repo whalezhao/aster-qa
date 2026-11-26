@@ -3,6 +3,8 @@ import type {
   CaseFlowDetail,
   CaseFlowInput,
   CaseFlowSummary,
+  CaseFlowVersionDetail,
+  CaseFlowVersionSummary,
   FlowRunResult,
   TaskDependency,
 } from './types';
@@ -43,6 +45,35 @@ export async function updateCaseFlow(
 
 export async function deleteCaseFlow(flowId: string): Promise<void> {
   await http.delete(`/api/case-flows/${flowId}`);
+}
+
+export async function getCaseFlowVersions(
+  flowId: string,
+): Promise<CaseFlowVersionSummary[]> {
+  const { data } = await http.get<CaseFlowVersionSummary[]>(
+    `/api/case-flows/${flowId}/versions`,
+  );
+  return data;
+}
+
+export async function getCaseFlowVersion(
+  flowId: string,
+  versionNo: number,
+): Promise<CaseFlowVersionDetail> {
+  const { data } = await http.get<CaseFlowVersionDetail>(
+    `/api/case-flows/${flowId}/versions/${versionNo}`,
+  );
+  return data;
+}
+
+export async function rollbackCaseFlow(
+  flowId: string,
+  versionNo: number,
+): Promise<CaseFlowSummary> {
+  const { data } = await http.post<CaseFlowSummary>(
+    `/api/case-flows/${flowId}/rollback/${versionNo}`,
+  );
+  return data;
 }
 
 export async function runCaseFlow(

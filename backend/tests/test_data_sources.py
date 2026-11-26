@@ -83,6 +83,24 @@ def test_dbassert_yaml_rejects_bad_shapes():
         assert any(expected in error for error in errors), (patch, errors)
 
 
+def test_capture_yaml_validation():
+    good = _case(
+        {"capture": {"name": "ORDER_NO", "selector": "#order-no", "as": "string"}}
+    )
+    errors, _ = validate(good)
+    assert errors == []
+
+    bad = _case({"capture": {"name": "1BAD", "selector": "#x"}})
+    errors, _ = validate(bad)
+    assert any("变量名" in error for error in errors)
+
+    two_sources = _case(
+        {"capture": {"name": "ORDER_NO", "selector": "#x", "prompt": "金额"}}
+    )
+    errors, _ = validate(two_sources)
+    assert any("只能指定" in error for error in errors)
+
+
 def test_referenced_data_sources_includes_lifecycle_steps():
     text = yaml.safe_dump(
         {

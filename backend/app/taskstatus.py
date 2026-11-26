@@ -20,11 +20,15 @@ def aggregate(statuses: Iterable[str]) -> str:
     values = list(statuses)
     if not values:
         return "draft"
-    if any(s in ACTIVE_RUN_STATUSES for s in values):
+    # 条件分支没走到的节点是 skipped，不是失败；聚合时把它当“未执行”忽略。
+    effective = [s for s in values if s != "skipped"]
+    if not effective:
+        return "cancelled" if all(s == "cancelled" for s in values) else "completed"
+    if any(s in ACTIVE_RUN_STATUSES for s in effective):
         return "running"
-    if any(s == "succeeded" for s in values):
+    if any(s == "succeeded" for s in effective):
         return "completed"
-    if all(s == "cancelled" for s in values):
+    if all(s == "cancelled" for s in effective):
         return "cancelled"
     return "failed"
 

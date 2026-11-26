@@ -622,10 +622,24 @@ class CaseFlowEdgeIn(In):
     depends_on_case_id: uuid.UUID
 
 
+class FlowConditionIn(In):
+    variable: str = Field(min_length=1, max_length=64)
+    op: Literal["eq", "ne", "contains", "gt", "lt"] = "eq"
+    value: str | int | float | bool
+
+
+class CaseFlowNodeIn(In):
+    case_id: uuid.UUID
+    x: float | None = None
+    y: float | None = None
+    condition: FlowConditionIn | None = None
+    repeat_count: int = Field(default=1, ge=1, le=20)
+
+
 class CaseFlowIn(In):
     name: str = Field(min_length=1, max_length=128)
     description: str | None = None
-    nodes: list[uuid.UUID] = []
+    nodes: list[CaseFlowNodeIn] = []
     edges: list[CaseFlowEdgeIn] = []
 
 
@@ -637,6 +651,7 @@ class CaseFlowSummaryOut(BaseModel):
     description: str | None
     node_count: int = 0
     edge_count: int = 0
+    current_version_no: int = 1
     updated_at: datetime
 
 
@@ -647,6 +662,10 @@ class CaseFlowNodeOut(BaseModel):
     feature_name: str
     priority: str | None
     position: int
+    x: float | None = None
+    y: float | None = None
+    condition: FlowConditionIn | None = None
+    repeat_count: int = 1
     depends_on: list[uuid.UUID] = []
 
 
@@ -655,9 +674,32 @@ class CaseFlowDetailOut(BaseModel):
     project_id: uuid.UUID
     name: str
     description: str | None
+    current_version_no: int = 1
     nodes: list[CaseFlowNodeOut]
     edges: list[CaseFlowEdgeIn]
     layers: list[list[uuid.UUID]] = []
+
+
+class CaseFlowVersionOut(BaseModel):
+    model_config = ORM
+    version_no: int
+    name: str
+    change_source: str
+    change_note: str | None = None
+    created_at: datetime
+    node_count: int = 0
+    edge_count: int = 0
+
+
+class CaseFlowVersionDetailOut(BaseModel):
+    version_no: int
+    name: str
+    description: str | None
+    nodes: list[CaseFlowNodeIn]
+    edges: list[CaseFlowEdgeIn]
+    change_source: str
+    change_note: str | None = None
+    created_at: datetime
 
 
 class CaseFlowRunIn(In):
@@ -872,6 +914,8 @@ class BatchRunOut(BaseModel):
     depends_on_run_ids: list[uuid.UUID] = []
     blocked_reason: str | None = None
     case_name: str | None = None
+    loop_index: int | None = None
+    loop_total: int | None = None
 
 
 class BatchDetailOut(BatchOut):

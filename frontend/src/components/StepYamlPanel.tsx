@@ -21,6 +21,7 @@ import { t } from '../i18n';
 import { stepKindLabel, yamlRows, type Step, type StepOption } from '../lib/caseYaml';
 import { useResizablePercent } from '../lib/useResizablePercent';
 import DbAssertFields from './DbAssertFields';
+import CaptureFields from './CaptureFields';
 
 const STEP_COLORS = [
   '#7dd3fc',
@@ -305,11 +306,21 @@ function StepOptions({
   onChange: (patch: Partial<StepOption>) => void;
 }) {
   if (
-    !['aiAct', 'aiWaitFor', 'aiAssert', 'upload', 'download', 'dbAssert'].includes(
+    !['aiAct', 'aiWaitFor', 'aiAssert', 'upload', 'download', 'dbAssert', 'capture'].includes(
       step.kind,
     )
   ) {
     return null;
+  }
+  if (step.kind === 'capture') {
+    return (
+      <CaptureFields
+        step={step}
+        value={value}
+        datasources={datasources}
+        onChange={onChange}
+      />
+    );
   }
   if (step.kind === 'dbAssert') {
     return (

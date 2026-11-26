@@ -155,6 +155,14 @@ export default function RunDetail() {
             description={run.error_message}
             style={{ marginBottom: 16 }}
           />
+        ) : run.status === 'skipped' ? (
+          <Alert
+            type="info"
+            showIcon
+            message={t('条件跳过')}
+            description={run.error_message}
+            style={{ marginBottom: 16 }}
+          />
         ) : (
           <Alert
             type="error"
@@ -362,11 +370,17 @@ function CasesTab({ rid }: { rid: string }) {
                       ? 'error'
                       : s === 'blocked'
                         ? 'warning'
-                        : 'default'
+                        : s === 'skipped'
+                          ? 'default'
+                          : 'default'
                 }
                 title={row.blocked_reason ?? undefined}
               >
-                {s === 'blocked' ? t('被前置用例阻塞') : s}
+                {s === 'blocked'
+                  ? t('被前置用例阻塞')
+                  : s === 'skipped'
+                    ? t('条件跳过')
+                    : s}
               </Tag>
             ),
           },

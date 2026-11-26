@@ -135,7 +135,7 @@ async def _batch_facts(db: AsyncSession, batch: RunBatch) -> dict[str, Any]:
         failed_rows = [
             row
             for row in cases
-            if str(row[2]).lower() not in {"success", "passed"}
+            if str(row[2]).lower() not in {"success", "passed", "skipped"}
         ][: max(0, _MAX_FAILED_CASES - len(failed_cases))]
         flaky_ids = set(
             (

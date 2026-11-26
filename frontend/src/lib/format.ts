@@ -79,6 +79,9 @@ export function runStatusView(run: {
   if (run.status === 'blocked') {
     return { color: 'warning', label: t('被前置用例阻塞') };
   }
+  if (run.status === 'skipped') {
+    return { color: 'default', label: t('条件跳过') };
+  }
 
   const kind = failureKindLabel(run.failure_kind);
   if (kind) {

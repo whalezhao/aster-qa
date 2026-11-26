@@ -27,6 +27,19 @@ _DBASSERT_KEYS = {
     "message",
     "timeoutMs",
 }
+_CAPTURE_KEYS = {
+    "name",
+    "prompt",
+    "selector",
+    "datasource",
+    "sql",
+    "params",
+    "column",
+    "row",
+    "as",
+    "timeoutMs",
+}
+_CAPTURE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 _DATASOURCE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,31}$")
 _FORBIDDEN_SQL = re.compile(
     r"\b(insert|update|delete|replace|drop|alter|create|truncate|rename|"
@@ -265,6 +278,109 @@ def validate(text: str) -> tuple[list[str], int]:
                             )
                         if "options" in value:
                             errors.append(f"{where}的 dbAssert 不支持 options")
+                if node == "capture":
+                    if not isinstance(value, dict):
+                        errors.append(
+                            f"{where}的 capture 必须是对象，例如 "
+                            "capture: {name: ORDER_NO, selector: '#order-no'}"
+                        )
+                    else:
+                        unknown = set(value) - _CAPTURE_KEYS
+                        if unknown:
+                            errors.append(
+                                f"{where}的 capture 包含未知字段："
+                                f"{'、'.join(sorted(str(key) for key in unknown))}"
+                            )
+                        name = value.get("name")
+                        if not isinstance(name, str) or not _CAPTURE_NAME.match(
+                            name.strip()
+                        ):
+                            errors.append(
+                                f"{where}的 capture.name 必须是合法变量名"
+                            )
+                        prompt = value.get("prompt")
+                        selector = value.get("selector")
+                        sql = value.get("sql")
+                        sources = sum(
+                            bool(item) for item in (prompt, selector, sql)
+                        )
+                        if sources != 1:
+                            errors.append(
+                                f"{where}的 capture 必须且只能指定 prompt、selector、sql 中的一个"
+                            )
+                        if prompt is not None and (
+                            not isinstance(prompt, str) or not prompt.strip()
+                        ):
+                            errors.append(f"{where}的 capture.prompt 不能为空")
+                        if selector is not None and (
+                            not isinstance(selector, str) or not selector.strip()
+                        ):
+                            errors.append(f"{where}的 capture.selector 不能为空")
+                        if sql:
+                            datasource = value.get("datasource")
+                            if not isinstance(
+                                datasource, str
+                            ) or not _DATASOURCE_NAME.match(
+                                datasource.strip()
+                            ):
+                                errors.append(
+                                    f"{where}的 capture.datasource 必须是合法数据源名称"
+                                )
+                            sql_error = (
+                                validate_readonly_sql(sql)
+                                if isinstance(sql, str)
+                                else "SQL 不能为空"
+                            )
+                            if sql_error:
+                                errors.append(f"{where}的 capture.sql：{sql_error}")
+                            params = value.get("params")
+                            if params is not None and (
+                                not isinstance(params, list)
+                                or any(
+                                    isinstance(item, (dict, list))
+                                    for item in params
+                                )
+                            ):
+                                errors.append(
+                                    f"{where}的 capture.params 必须是字符串/数字/布尔值数组"
+                                )
+                            column = value.get("column")
+                            if column is not None and (
+                                not isinstance(column, str)
+                                or not column.strip()
+                            ):
+                                errors.append(
+                                    f"{where}的 capture.column 必须是非空字符串"
+                                )
+                            row = value.get("row")
+                            if row is not None and (
+                                isinstance(row, bool)
+                                or not isinstance(row, int)
+                                or row < 0
+                            ):
+                                errors.append(
+                                    f"{where}的 capture.row 必须是 >= 0 的整数"
+                                )
+                        as_type = value.get("as")
+                        if as_type is not None and as_type not in {
+                            "number",
+                            "string",
+                            "boolean",
+                        }:
+                            errors.append(
+                                f"{where}的 capture.as 只能是 number/string/boolean"
+                            )
+                        timeout = value.get("timeoutMs")
+                        if timeout is not None and (
+                            isinstance(timeout, bool)
+                            or not isinstance(timeout, int)
+                            or not 1 <= timeout <= 600_000
+                        ):
+                            errors.append(
+                                f"{where}的 capture.timeoutMs 必须在 1-600000 之间"
+                            )
+                        if "options" in value:
+                            errors.append(f"{where}的 capture 不支持 options")
                 if node == "aiAct" and isinstance(value, dict):
                     if "cacheable" in value:
                         errors.append(

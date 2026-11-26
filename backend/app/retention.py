@@ -26,7 +26,7 @@ from .models import Run
 
 log = logging.getLogger("retention")
 
-TERMINAL = ("succeeded", "failed", "cancelled", "timed_out", "blocked")
+TERMINAL = ("succeeded", "failed", "cancelled", "timed_out", "blocked", "skipped")
 INTERVAL_SECONDS = 24 * 3600
 
 

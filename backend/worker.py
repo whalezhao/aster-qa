@@ -184,6 +184,8 @@ def _build_env(
         env.pop("QA_SESSION_SAVE_PATH", None)
     # 数据库密码只走子进程环境，不写进生成的 config / YAML / 报告。
     env["QA_DATASOURCES"] = json.dumps(data_sources or {}, ensure_ascii=False)
+    # capture 节点把本次 run 的输出写到这个文件；工作进程在子进程结束后读取
+    env["QA_FLOW_OUTPUT"] = str(staged.work_dir / "flow-outputs.json")
 
     # 复刻参考实现的做法：每次执行换一个上游会话头，避免所有 run 挤在同一个会话里
     raw = env.get("MIDSCENE_MODEL_INIT_CONFIG_JSON")
@@ -241,7 +243,12 @@ async def claim_next(db) -> Run | None:
     )
     stmt = (
         select(Run)
-        .where(Run.status == "queued", ~not_ready)
+        .where(
+            Run.status == "queued",
+            ~not_ready,
+            Run.flow_inputs_ready.is_not(False),
+            Run.condition_passed.is_not(False),
+        )
         .order_by(Run.created_at)
         .limit(1)
         .with_for_update(skip_locked=True)
@@ -933,6 +940,16 @@ async def process(run_id: uuid.UUID) -> None:
             run.environment_name = env_row.name
             run.environment_base_url = env_row.base_url
 
+        # 编排前置的 capture 输出作为本节点的普通变量；同名时流程变量优先
+        if run.flow_inputs:
+            plain_vars = {
+                **plain_vars,
+                **{
+                    str(key): _flow_input_value(value)
+                    for key, value in run.flow_inputs.items()
+                },
+            }
+
         data_sources: dict[str, dict] = {}
         if env_row is not None:
             data_sources = await load_environment_data_sources(db, env_row.id)
@@ -1170,6 +1187,7 @@ async def process(run_id: uuid.UUID) -> None:
         case_ids = [c.test_case_id for c in (await _case_rows(db, run.id)) if c.test_case_id]
         await persist.refresh_stability(db, case_ids)
         # 编排：前置失败/阻塞的后继在这里直接落成 blocked，不再等认领
+        run.flow_outputs = _read_flow_outputs(staged)
         await ensure_flow_result(db, run)
         await resolve_run_dependents(db, run)
         await refresh_task_status(db, run.task_id)
@@ -1312,6 +1330,25 @@ def _case_ids(summary: parsers.SummaryData) -> list[uuid.UUID]:
         if outcome.source_path and (case_id := staging.case_id_from_source_path(outcome.source_path)):
             ids.append(case_id)
     return ids
+
+
+def _read_flow_outputs(staged: staging.StagedRun) -> dict:
+    path = staged.work_dir / "flow-outputs.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(key)[:64]: value for key, value in list(data.items())[:100]}
+
+
+def _flow_input_value(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
 
 
 def _report_html(staged: staging.StagedRun) -> Path | None:

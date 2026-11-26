@@ -143,16 +143,24 @@ def derive_status(statuses: list[str], real_failed: int, excluded_runs: int) -> 
     """
     if not statuses:
         return "empty"
-    if any(s in ACTIVE_RUN_STATUSES for s in statuses):
+    # skipped 是条件分支没走到，不是失败；参与“是否算完成”但不拉低批次状态。
+    effective = [s for s in statuses if s != "skipped"]
+    if not effective:
+        return (
+            "cancelled"
+            if all(s == "cancelled" for s in statuses)
+            else "completed"
+        )
+    if any(s in ACTIVE_RUN_STATUSES for s in effective):
         return "running"
-    if all(s == "cancelled" for s in statuses):
+    if all(s == "cancelled" for s in effective):
         return "cancelled"
 
-    succeeded = sum(1 for s in statuses if s == "succeeded")
+    succeeded = sum(1 for s in effective if s == "succeeded")
     if succeeded == 0:
         # 一次都没跑成。全是非用例原因的话明确标出来，别伪装成执行失败
-        return "excluded" if excluded_runs == len(statuses) else "failed"
-    if succeeded < len(statuses):
+        return "excluded" if excluded_runs == len(effective) else "failed"
+    if succeeded < len(effective):
         return "partial"
     return "completed_with_failures" if real_failed else "completed"
 
@@ -617,6 +625,8 @@ async def get_batch(batch_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Ba
                 "depends_on_run_ids": deps_map.get(run.id, []),
                 "blocked_reason": blocked_by_run.get(run.id),
                 "case_name": run_case_name(run),
+                "loop_index": run.loop_index,
+                "loop_total": run.loop_total,
             }
             for run, project_name in runs
         ],

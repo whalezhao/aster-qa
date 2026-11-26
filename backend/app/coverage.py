@@ -9,11 +9,13 @@ def _status_for(cases: list[dict]) -> str:
     failed = sum(
         1
         for c in cases
-        if c.get("status") not in (None, *SUCCESS_STATUSES)
+        if c.get("status") not in (None, *SUCCESS_STATUSES, "skipped")
         and not c.get("failure_kind")
     )
     infra = sum(1 for c in cases if c.get("failure_kind"))
-    not_run = sum(1 for c in cases if c.get("status") is None)
+    not_run = sum(
+        1 for c in cases if c.get("status") in (None, "skipped")
+    )
     if failed:
         return "failed"
     if infra:
@@ -34,12 +36,16 @@ def compute_requirement_coverage(rows: list[dict]) -> dict:
     items = []
     for requirement_id, cases in sorted(grouped.items()):
         case_count = len(cases)
-        executed = sum(1 for c in cases if c.get("status") is not None)
+        executed = sum(
+            1
+            for c in cases
+            if c.get("status") not in (None, "skipped")
+        )
         passed = sum(1 for c in cases if c.get("status") in SUCCESS_STATUSES)
         failed = sum(
             1
             for c in cases
-            if c.get("status") not in (None, *SUCCESS_STATUSES)
+            if c.get("status") not in (None, *SUCCESS_STATUSES, "skipped")
             and not c.get("failure_kind")
         )
         infra = sum(1 for c in cases if c.get("failure_kind"))

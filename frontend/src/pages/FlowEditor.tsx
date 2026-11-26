@@ -1,36 +1,65 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { App, Button, Card, Input, Space, Typography } from 'antd';
-import { ArrowLeftOutlined, PlayCircleOutlined, SaveOutlined } from '@ant-design/icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  App,
+  Button,
+  Card,
+  Drawer,
+  Input,
+  Popconfirm,
+  Segmented,
+  Space,
+  Tag,
+  Typography,
+} from 'antd';
+import {
+  ArrowLeftOutlined,
+  HistoryOutlined,
+  PlayCircleOutlined,
+  SaveOutlined,
+} from '@ant-design/icons';
 import { apiError } from '../api/client';
 import { getProjectCases } from '../api/cases';
 import { getFeatures } from '../api/features';
 import {
   createCaseFlow,
   getCaseFlow,
+  getCaseFlowVersions,
+  rollbackCaseFlow,
   runCaseFlow,
   updateCaseFlow,
 } from '../api/flows';
 import { getProject } from '../api/projects';
 import CaseFlowEditor, { type FlowNodeView } from '../components/CaseFlowEditor';
+import FlowGraphEditor from '../components/FlowGraphEditor';
 import FeatureTreeSelect from '../components/FeatureTreeSelect';
 import { t } from '../i18n';
 import { dagLayers } from '../lib/dag';
-import type { CaseFlowEdge } from '../api/types';
+import { fmtDateTime } from '../lib/format';
+import type { CaseFlowEdge, CaseFlowVersionSummary } from '../api/types';
 
 const CASE_PREFIX = 'case:';
+
+const SOURCE_LABELS: Record<string, string> = {
+  create: '创建',
+  manual: '保存',
+  rollback: '回滚',
+};
 
 export default function FlowEditor() {
   const { pid = '', fid = '' } = useParams();
   const isNew = fid === 'new';
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { message } = App.useApp();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [nodes, setNodes] = useState<FlowNodeView[]>([]);
   const [edges, setEdges] = useState<CaseFlowEdge[]>([]);
+  const [view, setView] = useState<'graph' | 'table'>('graph');
+  const [versionOpen, setVersionOpen] = useState(false);
 
   const { data: project } = useQuery({
     queryKey: ['project', pid],
@@ -52,6 +81,11 @@ export default function FlowEditor() {
     queryFn: () => getCaseFlow(fid),
     enabled: Boolean(fid) && !isNew,
   });
+  const versionsQuery = useQuery({
+    queryKey: ['case-flow-versions', fid],
+    queryFn: () => getCaseFlowVersions(fid),
+    enabled: Boolean(fid) && !isNew && versionOpen,
+  });
 
   const featureNames = useMemo(
     () => new Map(features.map((feature) => [feature.id, feature.name])),
@@ -65,6 +99,8 @@ export default function FlowEditor() {
         name: item.name,
         feature_name: featureNames.get(item.feature_id) ?? '',
         priority: item.priority,
+        condition: null,
+        repeat_count: 1,
       });
     }
     for (const node of detail?.nodes ?? []) {
@@ -74,6 +110,10 @@ export default function FlowEditor() {
           name: node.name,
           feature_name: node.feature_name,
           priority: node.priority,
+          x: node.x,
+          y: node.y,
+          condition: node.condition,
+          repeat_count: node.repeat_count,
         });
       }
     }
@@ -90,6 +130,10 @@ export default function FlowEditor() {
         name: node.name,
         feature_name: node.feature_name,
         priority: node.priority,
+        x: node.x,
+        y: node.y,
+        condition: node.condition,
+        repeat_count: node.repeat_count,
       })),
     );
     setEdges(detail.edges);
@@ -106,7 +150,13 @@ export default function FlowEditor() {
       const input = {
         name: name.trim(),
         description: description.trim() || null,
-        nodes: nodes.map((node) => node.case_id),
+        nodes: nodes.map((node) => ({
+          case_id: node.case_id,
+          x: node.x ?? null,
+          y: node.y ?? null,
+          condition: node.condition ?? null,
+          repeat_count: node.repeat_count ?? 1,
+        })),
         edges,
       };
       return isNew
@@ -117,6 +167,10 @@ export default function FlowEditor() {
       message.success(t('编排已保存'));
       if (isNew) {
         navigate(`/projects/${pid}/flows/${result.id}`, { replace: true });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['case-flow', fid] });
+        queryClient.invalidateQueries({ queryKey: ['case-flow-versions', fid] });
+        queryClient.invalidateQueries({ queryKey: ['case-flows', pid] });
       }
     },
     onError: (error) => message.error(apiError(error)),
@@ -134,6 +188,17 @@ export default function FlowEditor() {
         message.success(t('编排已开始执行'));
         navigate(`/executions/${batchId}`);
       }
+    },
+    onError: (error) => message.error(apiError(error)),
+  });
+
+  const rollback = useMutation({
+    mutationFn: (versionNo: number) => rollbackCaseFlow(fid, versionNo),
+    onSuccess: () => {
+      message.success(t('已回滚编排版本'));
+      queryClient.invalidateQueries({ queryKey: ['case-flow', fid] });
+      queryClient.invalidateQueries({ queryKey: ['case-flow-versions', fid] });
+      queryClient.invalidateQueries({ queryKey: ['case-flows', pid] });
     },
     onError: (error) => message.error(apiError(error)),
   });
@@ -158,6 +223,9 @@ export default function FlowEditor() {
     );
   };
 
+  const sourceLabel = (version: CaseFlowVersionSummary) =>
+    t(SOURCE_LABELS[version.change_source] ?? version.change_source);
+
   return (
     <div style={{ padding: 20 }}>
       <Space style={{ marginBottom: 12 }}>
@@ -166,9 +234,24 @@ export default function FlowEditor() {
         </Link>
       </Space>
       <Card
-        title={isNew ? t('新建用例编排') : t('编辑用例编排')}
+        title={
+          <Space>
+            <span>{isNew ? t('新建用例编排') : t('编辑用例编排')}</span>
+            {!isNew && (
+              <Tag color="blue">v{detail?.current_version_no ?? 1}</Tag>
+            )}
+          </Space>
+        }
         extra={
           <Space>
+            {!isNew && (
+              <Button
+                icon={<HistoryOutlined />}
+                onClick={() => setVersionOpen(true)}
+              >
+                {t('版本历史')}
+              </Button>
+            )}
             <Button
               icon={<SaveOutlined />}
               loading={save.isPending}
@@ -210,24 +293,46 @@ export default function FlowEditor() {
             </div>
           </Space>
 
-          <CaseFlowEditor
-            nodes={nodes}
-            edges={edges}
-            onChange={(nextNodes, nextEdges) => {
-              setNodes(nextNodes);
-              setEdges(nextEdges);
-            }}
-            picker={
-              <FeatureTreeSelect
-                teamId={project?.team_id ?? null}
-                projectId={pid}
-                caseOnly
-                value={nodes.map((node) => `${CASE_PREFIX}${node.case_id}`)}
-                onChange={onPick}
-                placeholder={t('按功能勾选要编排的用例')}
-              />
-            }
-          />
+          <Space wrap style={{ width: '100%', justifyContent: 'space-between' }}>
+            <FeatureTreeSelect
+              teamId={project?.team_id ?? null}
+              projectId={pid}
+              caseOnly
+              value={nodes.map((node) => `${CASE_PREFIX}${node.case_id}`)}
+              onChange={onPick}
+              placeholder={t('按功能勾选要编排的用例')}
+              style={{ maxWidth: 760 }}
+            />
+            <Segmented
+              value={view}
+              onChange={(value) => setView(value as 'graph' | 'table')}
+              options={[
+                { value: 'graph', label: t('图编辑') },
+                { value: 'table', label: t('表格') },
+              ]}
+            />
+          </Space>
+
+          {view === 'graph' ? (
+            <FlowGraphEditor
+              nodes={nodes}
+              edges={edges}
+              onChange={(nextNodes, nextEdges) => {
+                setNodes(nextNodes);
+                setEdges(nextEdges);
+              }}
+            />
+          ) : (
+            <CaseFlowEditor
+              nodes={nodes}
+              edges={edges}
+              onChange={(nextNodes, nextEdges) => {
+                setNodes(nextNodes);
+                setEdges(nextEdges);
+              }}
+            />
+          )}
+
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {t(
               '编排内的用例按依赖顺序执行；不属于编排的用例仍按任务原有分片并发执行。前置失败时，依赖它的用例不会再执行。',
@@ -235,6 +340,65 @@ export default function FlowEditor() {
           </Typography.Text>
         </Space>
       </Card>
+
+      <Drawer
+        open={versionOpen}
+        onClose={() => setVersionOpen(false)}
+        title={t('版本历史')}
+        width={520}
+      >
+        {versionsQuery.isLoading ? (
+          <Typography.Text type="secondary">{t('加载中…')}</Typography.Text>
+        ) : (versionsQuery.data ?? []).length === 0 ? (
+          <Typography.Text type="secondary">{t('还没有版本')}</Typography.Text>
+        ) : (
+          <Space direction="vertical" size={10} style={{ width: '100%' }}>
+            {(versionsQuery.data ?? []).map((version) => (
+              <div
+                key={version.version_no}
+                style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 10 }}
+              >
+                <Space wrap>
+                  <Tag
+                    color={
+                      version.version_no === detail?.current_version_no
+                        ? 'blue'
+                        : 'default'
+                    }
+                  >
+                    v{version.version_no}
+                  </Tag>
+                  <span>{version.name}</span>
+                  <Tag>{sourceLabel(version)}</Tag>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {fmtDateTime(version.created_at)}
+                  </Typography.Text>
+                </Space>
+                <div style={{ marginTop: 4 }}>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {t('{cases} 个用例 · {edges} 条依赖', {
+                      cases: version.node_count,
+                      edges: version.edge_count,
+                    })}
+                    {version.change_note ? ` · ${version.change_note}` : ''}
+                  </Typography.Text>
+                </div>
+                {version.version_no !== detail?.current_version_no && (
+                  <Popconfirm
+                    title={t('回滚到这个版本？')}
+                    description={t('回滚会生成一个新版本，不会删除历史。')}
+                    onConfirm={() => rollback.mutate(version.version_no)}
+                  >
+                    <Button size="small" loading={rollback.isPending}>
+                      {t('回滚')}
+                    </Button>
+                  </Popconfirm>
+                )}
+              </div>
+            ))}
+          </Space>
+        )}
+      </Drawer>
     </div>
   );
 }
