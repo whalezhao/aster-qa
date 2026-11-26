@@ -40,6 +40,7 @@ export const STEP_KIND_LABELS: Record<string, string> = {
   setViewportSize: '设置视口',
   upload: '上传文件',
   download: '下载文件',
+  dbAssert: '数据库比对',
 };
 
 export function stepKindLabel(kind: string): string {
@@ -66,6 +67,16 @@ export type StepOption = {
   filename?: string;
   minBytes?: number | null;
   saveAs?: string;
+  /** dbAssert 的步骤级字段 */
+  datasource?: string;
+  sql?: string;
+  params?: string;
+  column?: string;
+  row?: number | null;
+  as?: 'number' | 'string' | 'boolean';
+  tolerance?: number | null;
+  selector?: string;
+  ignoreCase?: boolean;
 };
 
 export type YamlRow = {
@@ -148,6 +159,7 @@ const CONTEXT_KINDS = new Set(['aiAct', 'aiAssert', 'aiWaitFor']);
 const MESSAGE_KINDS = new Set(['aiAssert']);
 const UPLOAD_KIND = 'upload';
 const DOWNLOAD_KIND = 'download';
+const DBASSERT_KIND = 'dbAssert';
 
 /**
  * 这一步要写进 YAML 的东西：
@@ -220,8 +232,105 @@ export function optionSpec(
       stepKeys.saveAs = text ? JSON.stringify(text) : null;
     }
   }
+  if (kind === DBASSERT_KIND) {
+    const textKeys: (keyof StepOption)[] = [
+      'datasource',
+      'sql',
+      'column',
+      'prompt',
+      'selector',
+      'message',
+    ];
+    for (const key of textKeys) {
+      const value = o[key];
+      if (value === undefined) continue;
+      const text = String(value).trim();
+      stepKeys[key] = text ? JSON.stringify(text) : null;
+    }
+    if (o.params !== undefined) {
+      const raw = o.params.trim();
+      if (!raw) stepKeys.params = null;
+      else {
+        try {
+          stepKeys.params = JSON.stringify(JSON.parse(raw));
+        } catch {
+          stepKeys.params = JSON.stringify(raw);
+        }
+      }
+    }
+    if (o.as !== undefined) stepKeys.as = o.as;
+    if (o.row !== undefined) {
+      stepKeys.row = o.row == null ? null : String(o.row);
+    }
+    if (o.tolerance !== undefined) {
+      stepKeys.tolerance = o.tolerance == null ? null : String(o.tolerance);
+    }
+    if (o.ignoreCase !== undefined) {
+      stepKeys.ignoreCase = o.ignoreCase ? 'true' : 'false';
+    }
+    if (o.timeoutMs !== undefined) {
+      stepKeys.timeoutMs = o.timeoutMs == null ? null : String(o.timeoutMs);
+    }
+  }
   if (!Object.keys(opts).length && !Object.keys(stepKeys).length) return null;
   return { opts, stepKeys };
+}
+
+function stepEntryLines(indent: string, key: string, value: string): string[] {
+  if (key === 'sql') {
+    try {
+      const raw = JSON.parse(value);
+      if (typeof raw === 'string' && raw.includes('\n')) {
+        return [
+          `${indent}sql: |`,
+          ...raw.replace(/\n+$/, '').split('\n').map((line) => `${indent}  ${line}`),
+        ];
+      }
+    } catch {
+      // 不是 JSON 字符串时按普通标量写
+    }
+  }
+  return [`${indent}${key}: ${value}`];
+}
+
+function replaceStepEntry(
+  block: string[],
+  childIndent: string,
+  key: string,
+  value: string | null,
+) {
+  const keyIndent = childIndent.length;
+  const exact = block.findIndex((line) =>
+    new RegExp(`^\\s{${keyIndent}}${key}\\s*:`).test(line),
+  );
+  if (value === null) {
+    if (exact < 0) return;
+    let end = exact + 1;
+    while (
+      end < block.length &&
+      (block[end].trim() === '' ||
+        (block[end].match(/^\s*/)?.[0].length ?? 0) > keyIndent)
+    ) {
+      end++;
+    }
+    block.splice(exact, end - exact);
+    return;
+  }
+  const next = stepEntryLines(childIndent, key, value);
+  if (exact >= 0) {
+    let end = exact + 1;
+    while (
+      end < block.length &&
+      (block[end].trim() === '' ||
+        (block[end].match(/^\s*/)?.[0].length ?? 0) > keyIndent)
+    ) {
+      end++;
+    }
+    block.splice(exact, end - exact, ...next);
+    return;
+  }
+  const optIdx = block.findIndex((line) => /^\s+options\s*:\s*$/.test(line));
+  block.splice(optIdx >= 0 ? optIdx : block.length, 0, ...next);
 }
 
 /** 在一个步骤块里合并 options / 同级键：字符串简写会展开成块写法，空了整段删掉 */
@@ -240,7 +349,7 @@ function mergeBlockOptions(
   // `- upload: { prompt: ..., file: KEY }` 这类行内映射：编辑后转成块写法，
   // 否则后面的 shorthand 分支会把它误当成「- aiAct: 文本」。
   const inlineMap = first.match(/^(\s*-\s*(\w+)\s*:)\s*\{(.*)\}\s*$/);
-  if (inlineMap && ['upload', 'download'].includes(inlineMap[2])) {
+  if (inlineMap && ['upload', 'download', 'dbAssert'].includes(inlineMap[2])) {
     const raw = inlineMap[3].trim();
     const parts =
       raw.match(/(?:[^,"']|"[^"]*"|'[^']*')+/g)?.map((item) => item.trim()) ?? [];
@@ -258,8 +367,8 @@ function mergeBlockOptions(
       0,
       1,
       inlineMap[1],
-      ...Array.from(existing.entries()).map(
-        ([key, value]) => `${childIndent}${key}: ${value}`,
+      ...Array.from(existing.entries()).flatMap(([key, value]) =>
+        stepEntryLines(childIndent, key, value),
       ),
     );
     return;
@@ -281,19 +390,9 @@ function mergeBlockOptions(
     return;
   }
 
-  // 与 prompt 同级的键（aiAssert 的 message）
+  // 与 prompt 同级的键（aiAssert 的 message、dbAssert 的 sql 等）
   for (const [key, value] of Object.entries(stepKeys)) {
-    const exact = block.findIndex((l) =>
-      new RegExp(`^\\s{${indent + 4}}${key}\\s*:`).test(l),
-    );
-    if (value === null) {
-      if (exact >= 0) block.splice(exact, 1);
-    } else if (exact >= 0) {
-      block[exact] = `${childIndent}${key}: ${value}`;
-    } else {
-      const optIdx = block.findIndex((l) => /^\s+options\s*:\s*$/.test(l));
-      block.splice(optIdx >= 0 ? optIdx : block.length, 0, `${childIndent}${key}: ${value}`);
-    }
+    replaceStepEntry(block, childIndent, key, value);
   }
 
   const oi = block.findIndex((l) => /^\s+options\s*:\s*$/.test(l));

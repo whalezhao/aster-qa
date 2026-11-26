@@ -29,6 +29,7 @@ Aster（星芒）取意「从一个点辐射出所有用例」—— 也是 logo
 - **定时回归**：每个任务一条 cron（含时区），重叠时自动跳过，失败可通知。
 - **环境与变量**：项目下多套环境（开发 / 预发 / 生产），普通变量走 `${KEY}`，密钥只注入进程环境（`${{KEY}}`）并加密存储。
 - **测试文件库**：按环境上传测试数据（图片 / PDF / Excel 等），用例用 `upload` 节点按 key 引用；同一个 key 在不同环境可以指向不同文件。`download` 节点可等待下载、校验文件名/大小，并把下载产物保留在执行记录里。
+- **数据库比对**：按环境配置 MySQL / OceanBase（MySQL 模式）/ PostgreSQL 只读连接，用例用 `dbAssert` 节点把页面取值和数据库列值做精确/容差比较。
 - **环境登录会话保持**：在环境列表里指定登录用例（可选检查用例），执行前优先复用该环境的浏览器 `storageState`；会话失效时自动重新登录，并可按配置自动重试失败用例。
 - **通知渠道**：通用 Webhook（HMAC 签名）+ 企业微信 / 飞书 / 钉钉 / Slack 机器人。
 - **合规执行报告**：一次执行跨多个项目时，自动把各 run 的报告合并成一份正式报告（报告编号、执行范围、结果汇总、失败详情），支持打印 / 导出 PDF 和按执行记录电子签章（一次只签一条执行记录）；报告内容变更后原签章自动失效。
@@ -140,6 +141,33 @@ cases:
 ```
 
 `upload` 支持 `files: [KEY1, KEY2]`；`download` 的 `filename` / `minBytes` 可选。下载产物会保留在执行详情页的「下载产物」里，并随执行产物按保留策略清理。
+
+### 数据库比对
+
+在「系统详情 → 环境与变量 → 环境行 → 数据库」添加连接。支持 MySQL 8.x、OceanBase MySQL 兼容模式和 PostgreSQL；建议使用只读账号，只授予 `SELECT`。
+
+用例里用 `dbAssert` 节点比较页面值和数据库值：
+
+```yaml
+cases:
+  - name: 核对订单金额
+    steps:
+      - aiAct: 打开订单详情页
+      - dbAssert:
+          datasource: QA_DB
+          sql: SELECT payable_amount FROM orders WHERE order_no = ?
+          params:
+            - ${ORDER_NO}
+          column: payable_amount
+          prompt: 订单详情页的实付金额
+          as: number
+          tolerance: 0.01
+```
+
+- `prompt` 用 AI 从页面取值；页面结构稳定时也可以改用 `selector`。
+- `params` 使用占位符：MySQL/OceanBase 用 `?`，PostgreSQL 用 `$1`；避免把变量拼进 SQL 字符串。
+- 执行器只允许单条 `SELECT` / `WITH`，并限制连接/查询超时和最大返回行数。
+- 数据库密码加密存储，只注入执行子进程，不写进 YAML、配置或报告。
 
 ### Docker 镜像（Docker Hub）
 

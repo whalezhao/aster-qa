@@ -28,6 +28,10 @@ from sqlalchemy import and_, delete, func, or_, select, update
 
 from app.case_versions import snapshot_case
 from app.config import get_settings
+from app.datasources import (
+    load_environment_data_sources,
+    referenced_data_sources,
+)
 from app.db import SessionLocal, engine
 from app.environments import (
     RESERVED_KEYS,
@@ -118,6 +122,7 @@ def _build_env(
     max_download_bytes: int = 50 * 1024 * 1024,
     session_state: Path | None = None,
     session_save_path: Path | None = None,
+    data_sources: dict[str, dict] | None = None,
 ) -> dict[str, str]:
     """组装子进程环境。
 
@@ -166,6 +171,8 @@ def _build_env(
         env["QA_SESSION_SAVE_PATH"] = str(session_save_path)
     else:
         env.pop("QA_SESSION_SAVE_PATH", None)
+    # 数据库密码只走子进程环境，不写进生成的 config / YAML / 报告。
+    env["QA_DATASOURCES"] = json.dumps(data_sources or {}, ensure_ascii=False)
 
     # 复刻参考实现的做法：每次执行换一个上游会话头，避免所有 run 挤在同一个会话里
     raw = env.get("MIDSCENE_MODEL_INIT_CONFIG_JSON")
@@ -326,6 +333,7 @@ async def _run_session_case(
     cache: bool,
     session_state: Path | None,
     save_path: Path | None,
+    data_sources: dict[str, dict] | None = None,
 ) -> tuple[bool, str | None]:
     """跑一次登录/检查用例，不创建用户可见的 Run。"""
     run_id = uuid.uuid4()
@@ -358,6 +366,7 @@ async def _run_session_case(
                 max_download_bytes=settings.max_download_bytes,
                 session_state=session_state,
                 session_save_path=save_path,
+                data_sources=data_sources,
             ),
             timeout_ms=max(settings.case_timeout_ms * 2, 120_000),
         )
@@ -395,6 +404,7 @@ async def prepare_session(
     settings,
     cache: bool,
     force_refresh: bool = False,
+    data_sources: dict[str, dict] | None = None,
 ) -> tuple[Path | None, bool, str | None]:
     """确保当前环境有可用会话。返回 (缓存路径, 是否刷新, 错误)。"""
     if run.project_id is None:
@@ -467,6 +477,7 @@ async def prepare_session(
             cache=cache,
             session_state=None,
             save_path=temp,
+            data_sources=data_sources,
         )
         if not ok:
             temp.unlink(missing_ok=True)
@@ -499,6 +510,7 @@ async def prepare_session(
             cache=cache,
             session_state=cache_path,
             save_path=None,
+            data_sources=data_sources,
         )
 
     state = await current_state()
@@ -545,6 +557,7 @@ async def prepare_session(
                     cache=cache,
                     session_state=cache_path,
                     save_path=None,
+                    data_sources=data_sources,
                 )
                 if not check_ok:
                     ok, error = await refresh()
@@ -563,6 +576,7 @@ async def prepare_session(
                         cache=cache,
                         session_state=cache_path,
                         save_path=None,
+                        data_sources=data_sources,
                     )
                     if not check_ok:
                         return None, False, check_error or "登录会话检查失败"
@@ -865,6 +879,10 @@ async def process(run_id: uuid.UUID) -> None:
             run.environment_name = env_row.name
             run.environment_base_url = env_row.base_url
 
+        data_sources: dict[str, dict] = {}
+        if env_row is not None:
+            data_sources = await load_environment_data_sources(db, env_row.id)
+
         # 测试文件按环境绑定：同名 key 在不同环境可以对应不同文件。
         file_keys: set[str] = set()
         for _case_id, yaml_text in cases:
@@ -927,6 +945,17 @@ async def process(run_id: uuid.UUID) -> None:
             )
             return
 
+        wanted_data_sources = referenced_data_sources([text for _, text in cases])
+        missing_data_sources = sorted(wanted_data_sources - set(data_sources))
+        if missing_data_sources:
+            await _fail(
+                db,
+                run,
+                f"环境「{env_row.name if env_row is not None else '默认'}」缺少用例引用的数据库数据源："
+                f"{'、'.join(missing_data_sources)}；请在环境 → 数据库里配置后重试。",
+            )
+            return
+
         debug_cache = run.debug_cache if run.is_debug else True
         session_state_path: Path | None = None
         session_used = False
@@ -946,6 +975,7 @@ async def process(run_id: uuid.UUID) -> None:
                 base_url=base_url,
                 settings=settings,
                 cache=debug_cache,
+                data_sources=data_sources,
             )
             if session_error:
                 await _fail(db, run, f"登录会话准备失败：{session_error}")
@@ -979,6 +1009,7 @@ async def process(run_id: uuid.UUID) -> None:
                 "QA_BASE_URL": base_url or "",
             },
             variables={**plain_vars, **{key: "" for key in secret_vars}},
+            data_sources=data_sources,
         )
         run.status = "running"
         await db.commit()
@@ -1022,6 +1053,7 @@ async def process(run_id: uuid.UUID) -> None:
             cache=debug_cache,
             max_download_bytes=settings.max_download_bytes,
             session_state=session_state_path,
+            data_sources=data_sources,
         ),
         timeout_ms=timeout_ms,
         poll_cancel=poll_cancel,
@@ -1132,6 +1164,7 @@ async def process(run_id: uuid.UUID) -> None:
                         settings=settings,
                         cache=debug_cache,
                         force_refresh=True,
+                        data_sources=data_sources,
                     )
                     if retry_error:
                         log.warning(

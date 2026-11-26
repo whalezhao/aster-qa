@@ -90,6 +90,17 @@ cases:
 - 测试文件按环境绑定：任务执行时使用所选环境下的同名 key；不同环境可以放不同文件。
 - 只有浏览器真的开始下载文件时才用 `download`；纯页面提示的“导出”不要用。
 
+数据库比对（平台节点，不是 `aiAct`）：
+- `dbAssert`：从页面读一个值，到当前环境的数据库查一个值并比较。
+  `dbAssert: { datasource: <数据源名>, sql: <单条 SELECT>, params: [...], column: <列名>, prompt: <页面取值描述>, as: number|string|boolean, tolerance: 0.01 }`
+  只有用户明确要求“页面值必须等于数据库值”时才使用；不要在普通断言里编造 SQL。
+  `datasource` 只能使用「当前可用的数据库」里列出的名称；没有合适的数据源时先让用户配置，不要编造。
+  SQL 只能是单条 SELECT/WITH，必须带 WHERE 条件；动态值用 `params`，MySQL/OceanBase 用 `?`、PostgreSQL 用 `$1`，不要把变量直接拼进 SQL 字符串。
+  `params` 里的值可以引用环境变量，例如 `- ${ORDER_NO}`。
+  页面取值优先用 `prompt`；页面结构稳定且用户明确给了选择器时才用 `selector`。
+  `as: number` 时用 `tolerance` 做数值容差；字符串默认去首尾空格后精确比较。
+  不要给 `dbAssert` 套 `options` 或写 `cacheable`。
+
 ## 缓存（每个 aiAct 都必须显式判断）
 
 平台已开启执行缓存。缓存的正确写法是 `aiAct` 的选项，不是步骤的独立字段：
@@ -327,6 +338,15 @@ def steps_of(yaml_text: str) -> list[dict]:
                     "timeoutMs",
                     "saveAs",
                     "message",
+                    "datasource",
+                    "sql",
+                    "params",
+                    "column",
+                    "row",
+                    "as",
+                    "tolerance",
+                    "selector",
+                    "ignoreCase",
                 ):
                     if key in value:
                         detail[key] = value[key]
@@ -374,6 +394,15 @@ def _test_row(step: dict, *, phase: str | None = None) -> dict | None:
         filename = value.get("filename") if isinstance(value, dict) else None
         action = f"下载：{text}" if text else "下载文件"
         expected = f"下载文件：{filename}" if filename else "文件下载成功"
+    elif node == "dbAssert":
+        datasource = value.get("datasource") if isinstance(value, dict) else None
+        column = value.get("column") if isinstance(value, dict) else None
+        action = text or "页面值与数据库比对"
+        expected = (
+            f"页面值等于数据源 {datasource} 的 {column}"
+            if datasource and column
+            else "页面值等于数据库值"
+        )
     elif node == "gotoUrl":
         action, expected = f"打开页面 {text}".strip(), "页面加载完成"
     elif node == "sleep":
@@ -401,7 +430,11 @@ def _test_row(step: dict, *, phase: str | None = None) -> dict | None:
     return {
         "kind": node,
         "phase": phase
-        or ("assert" if node == "aiAssert" else "wait" if node == "aiWaitFor" else "action"),
+        or (
+            "assert"
+            if node in ("aiAssert", "dbAssert")
+            else "wait" if node == "aiWaitFor" else "action"
+        ),
         "action": action,
         "expected": expected,
         "note": "；".join(notes) or None,
@@ -501,6 +534,42 @@ def apply_step_options(yaml_text: str, overrides: list[dict]) -> str:
             node = next(iter(step))
             value = step[node]
             chosen = override
+            if node == "dbAssert":
+                base = dict(value) if isinstance(value, dict) else {}
+                fields = {
+                    "datasource": "datasource",
+                    "sql": "sql",
+                    "params": "params",
+                    "column": "column",
+                    "row": "row",
+                    "as_": "as",
+                    "tolerance": "tolerance",
+                    "prompt": "prompt",
+                    "selector": "selector",
+                    "ignore_case": "ignoreCase",
+                    "message": "message",
+                    "timeout_ms": "timeoutMs",
+                }
+                for source_key, yaml_key in fields.items():
+                    if source_key not in chosen:
+                        continue
+                    value_to_set = chosen[source_key]
+                    if (
+                        value_to_set is None
+                        or (isinstance(value_to_set, str) and not value_to_set.strip())
+                        or (isinstance(value_to_set, list) and not value_to_set)
+                    ):
+                        base.pop(yaml_key, None)
+                    elif isinstance(value_to_set, str):
+                        base[yaml_key] = value_to_set.strip()
+                    else:
+                        base[yaml_key] = value_to_set
+                    if yaml_key == "selector" and str(value_to_set or "").strip():
+                        base.pop("prompt", None)
+                    elif yaml_key == "prompt" and str(value_to_set or "").strip():
+                        base.pop("selector", None)
+                steps.append({node: base})
+                continue
             if node in ("upload", "download"):
                 base = dict(value) if isinstance(value, dict) else {}
                 fields = {
@@ -666,7 +735,7 @@ _ACTION_NODES = {
     "upload",
     "download",
 }
-_ASSERT_NODES = {"aiAssert"}
+_ASSERT_NODES = {"aiAssert", "dbAssert"}
 
 
 def _node_text(step: dict, node: str) -> str:
@@ -803,6 +872,7 @@ def build_messages(
     current_yaml: str | None,
     feature_name: str | None,
     files: list[dict] | None = None,
+    datasources: list[dict] | None = None,
     mode: str = "rewrite",
 ) -> list[dict]:
     system = SYSTEM_PROMPT
@@ -824,6 +894,24 @@ def build_messages(
             "\n\n## 当前可用的测试文件\n\n"
             "当前项目还没有测试文件。用户要求上传文件时，先提示用户到「项目 → 测试文件」"
             "上传，不要编造 key。"
+        )
+    if datasources:
+        lines = "\n".join(
+            f"- `{item.get('name', '')}`（{item.get('environment_name', '')}，"
+            f"{item.get('dialect', '')}）"
+            for item in datasources
+        )
+        system += (
+            "\n\n## 当前可用的数据库\n\n"
+            f"{lines}\n\n"
+            "同名数据源在不同环境指向不同数据库，执行时按所选环境解析；用例里只写名称。"
+            "没有合适的数据源时先提示用户到「环境 → 数据库」配置，不要编造名称。"
+        )
+    else:
+        system += (
+            "\n\n## 当前可用的数据库\n\n"
+            "当前项目还没有配置数据库数据源。用户要求数据库比对时，先提示用户到"
+            "「环境 → 数据库」添加，不要编造 datasource。"
         )
     if current_yaml:
         system += (
@@ -885,7 +973,7 @@ _CACHE_REVIEW = (
     "请重新检查这份 YAML 的缓存策略：逐个 aiAct 判断是否需要缓存，并把每个 aiAct 都写成"
     "带 options.cacheable（true 或 false）的形式 —— 稳定的导航/准备步骤用 true，"
     "内容会变或依赖动态结果的交互用 false。只调整缓存选项，不要改其他内容；"
-    "不要改动 `upload` / `download` 节点，也不要给它们添加 options。"
+    "不要改动 `upload` / `download` / `dbAssert` 节点，也不要给它们添加 options。"
     "输出完整 YAML（放在 ```yaml 代码块里）。"
 )
 
@@ -1149,6 +1237,7 @@ async def draft_stream(
     current_yaml: str | None,
     feature_name: str | None,
     files: list[dict] | None = None,
+    datasources: list[dict] | None = None,
     mode: str = "rewrite",
 ) -> AsyncIterator[dict]:
     """流式生成：先发 delta，最后发一次 done（结构同 CaseDraftOut）。
@@ -1160,6 +1249,7 @@ async def draft_stream(
         current_yaml=current_yaml,
         feature_name=feature_name,
         files=files,
+        datasources=datasources,
         mode=mode,
     )
     parts: list[str] = []
@@ -1225,6 +1315,7 @@ async def draft(
     current_yaml: str | None,
     feature_name: str | None,
     files: list[dict] | None = None,
+    datasources: list[dict] | None = None,
     mode: str = "rewrite",
 ) -> DraftResult:
     messages = build_messages(
@@ -1232,6 +1323,7 @@ async def draft(
         current_yaml=current_yaml,
         feature_name=feature_name,
         files=files,
+        datasources=datasources,
         mode=mode,
     )
     reply, usage = await call_model(config, messages)

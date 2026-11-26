@@ -5,12 +5,97 @@
 随版本增加字段（实测已有 cases[].tags、cases[].retry），过严的校验会把合法用例挡在门外。
 """
 
+import re
 from typing import Any
 
 import yaml
 
 KNOWN_TOP = {"cases", "beforeAll", "beforeEach", "afterEach", "tags", "variables"}
 LIST_TOP = {"beforeAll", "beforeEach", "afterEach", "tags"}
+
+_DBASSERT_KEYS = {
+    "datasource",
+    "sql",
+    "params",
+    "column",
+    "row",
+    "as",
+    "tolerance",
+    "prompt",
+    "selector",
+    "ignoreCase",
+    "message",
+    "timeoutMs",
+}
+_DATASOURCE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,31}$")
+_FORBIDDEN_SQL = re.compile(
+    r"\b(insert|update|delete|replace|drop|alter|create|truncate|rename|"
+    r"grant|revoke|call|load_file|into\s+outfile|into\s+dumpfile|"
+    r"for\s+update|lock\s+in\s+share\s+mode)\b",
+    re.IGNORECASE,
+)
+
+
+def _strip_sql_literals(sql: str) -> str:
+    """去掉字符串、反引号标识符和注释，避免把字面量里的 update 当成写操作。"""
+    output: list[str] = []
+    index = 0
+    quote: str | None = None
+    while index < len(sql):
+        char = sql[index]
+        if quote is not None:
+            if char == quote:
+                if index + 1 < len(sql) and sql[index + 1] == quote:
+                    index += 2
+                    continue
+                quote = None
+            elif char == "\\":
+                index += 2
+                continue
+            index += 1
+            continue
+        if char in ("'", '"', "`"):
+            quote = char
+            output.append(" ")
+            index += 1
+            continue
+        if sql.startswith("--", index):
+            end = sql.find("\n", index)
+            index = len(sql) if end < 0 else end
+            output.append(" ")
+            continue
+        if char == "#":
+            end = sql.find("\n", index)
+            index = len(sql) if end < 0 else end
+            output.append(" ")
+            continue
+        if sql.startswith("/*", index):
+            end = sql.find("*/", index + 2)
+            index = len(sql) if end < 0 else end + 2
+            output.append(" ")
+            continue
+        output.append(char)
+        index += 1
+    return "".join(output)
+
+
+def validate_readonly_sql(sql: str) -> str | None:
+    """返回错误文案；None 表示允许执行。执行器侧还有一份同样的守卫。"""
+    if not isinstance(sql, str) or not sql.strip():
+        return "SQL 不能为空"
+    if len(sql) > 10_000:
+        return "SQL 过长（上限 10000 字符）"
+    plain = _strip_sql_literals(sql).strip()
+    if plain.endswith(";"):
+        plain = plain[:-1].rstrip()
+    if ";" in plain:
+        return "只允许单条 SQL，不能包含多条语句"
+    head = re.match(r"([A-Za-z]+)", plain)
+    if head is None or head.group(1).lower() not in {"select", "with"}:
+        return "只允许 SELECT 或 WITH 查询"
+    if _FORBIDDEN_SQL.search(plain):
+        return "只允许只读查询，禁止 INSERT/UPDATE/DELETE/DDL/OUTFILE 等写操作"
+    return None
 
 
 def validate(text: str) -> tuple[list[str], int]:
@@ -92,6 +177,94 @@ def validate(text: str) -> tuple[list[str], int]:
                             errors.append(f"{where}的 download.trigger 不能为空")
                         if "options" in value:
                             errors.append(f"{where}的 download 不支持 options")
+                if node == "dbAssert":
+                    if not isinstance(value, dict):
+                        errors.append(
+                            f"{where}的 dbAssert 必须是对象，例如 "
+                            "dbAssert: {datasource: QA_DB, sql: SELECT ..., prompt: ...}"
+                        )
+                    else:
+                        unknown = set(value) - _DBASSERT_KEYS
+                        if unknown:
+                            errors.append(
+                                f"{where}的 dbAssert 包含未知字段："
+                                f"{'、'.join(sorted(str(key) for key in unknown))}"
+                            )
+                        datasource = value.get("datasource")
+                        if not isinstance(datasource, str) or not _DATASOURCE_NAME.match(
+                            datasource.strip()
+                        ):
+                            errors.append(
+                                f"{where}的 dbAssert.datasource 必须是合法数据源名称"
+                            )
+                        sql = value.get("sql")
+                        sql_error = validate_readonly_sql(sql) if isinstance(sql, str) else "SQL 不能为空"
+                        if sql_error:
+                            errors.append(f"{where}的 dbAssert.sql：{sql_error}")
+                        params = value.get("params")
+                        if params is not None and (
+                            not isinstance(params, list)
+                            or any(
+                                isinstance(item, (dict, list))
+                                for item in params
+                            )
+                        ):
+                            errors.append(
+                                f"{where}的 dbAssert.params 必须是字符串/数字/布尔值数组"
+                            )
+                        column = value.get("column")
+                        if column is not None and (
+                            not isinstance(column, str) or not column.strip()
+                        ):
+                            errors.append(f"{where}的 dbAssert.column 必须是非空字符串")
+                        row = value.get("row")
+                        if row is not None and (
+                            isinstance(row, bool) or not isinstance(row, int) or row < 0
+                        ):
+                            errors.append(f"{where}的 dbAssert.row 必须是 >= 0 的整数")
+                        as_type = value.get("as", "string")
+                        if as_type not in {"number", "string", "boolean"}:
+                            errors.append(
+                                f"{where}的 dbAssert.as 只能是 number/string/boolean"
+                            )
+                        tolerance = value.get("tolerance")
+                        if tolerance is not None and (
+                            isinstance(tolerance, bool)
+                            or not isinstance(tolerance, (int, float))
+                            or tolerance < 0
+                        ):
+                            errors.append(f"{where}的 dbAssert.tolerance 必须是 >= 0 的数字")
+                        prompt = value.get("prompt")
+                        selector = value.get("selector")
+                        if bool(prompt) == bool(selector):
+                            errors.append(
+                                f"{where}的 dbAssert 必须且只能指定 prompt 或 selector 一个"
+                            )
+                        if prompt is not None and (
+                            not isinstance(prompt, str) or not prompt.strip()
+                        ):
+                            errors.append(f"{where}的 dbAssert.prompt 不能为空")
+                        if selector is not None and (
+                            not isinstance(selector, str) or not selector.strip()
+                        ):
+                            errors.append(f"{where}的 dbAssert.selector 不能为空")
+                        ignore_case = value.get("ignoreCase")
+                        if ignore_case is not None and not isinstance(ignore_case, bool):
+                            errors.append(f"{where}的 dbAssert.ignoreCase 必须是布尔值")
+                        message = value.get("message")
+                        if message is not None and not isinstance(message, str):
+                            errors.append(f"{where}的 dbAssert.message 必须是字符串")
+                        timeout = value.get("timeoutMs")
+                        if timeout is not None and (
+                            isinstance(timeout, bool)
+                            or not isinstance(timeout, int)
+                            or not 1 <= timeout <= 600_000
+                        ):
+                            errors.append(
+                                f"{where}的 dbAssert.timeoutMs 必须在 1-600000 之间"
+                            )
+                        if "options" in value:
+                            errors.append(f"{where}的 dbAssert 不支持 options")
                 if node == "aiAct" and isinstance(value, dict):
                     if "cacheable" in value:
                         errors.append(

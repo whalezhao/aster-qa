@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from .. import ai_case
 from ..ai_fix import propose_case_fix
 from ..case_versions import diff_text, rollback_case, snapshot_case
+from ..datasources import project_data_sources
 from ..db import SessionLocal
 from ..deps import (
     CurrentUser,
@@ -98,6 +99,10 @@ async def _project_file_context(db, project_id: uuid.UUID) -> list[dict]:
     return [{"key": key, "name": name} for key, name in sorted(seen.items())]
 
 
+async def _project_datasource_context(db, project_id: uuid.UUID) -> list[dict]:
+    return await project_data_sources(db, project_id)
+
+
 @router.post("/api/features/{feature_id}/ai/case-draft", response_model=CaseDraftOut)
 async def draft_case_with_ai(
     feature_id: uuid.UUID, body: CaseDraftIn, user: CurrentUser, db: DbSession
@@ -109,6 +114,7 @@ async def draft_case_with_ai(
     """
     feature, config = await _draft_ready(feature_id, user, db)
     files = await _project_file_context(db, feature.project_id)
+    datasources = await _project_datasource_context(db, feature.project_id)
 
     try:
         result = await ai_case.draft(
@@ -118,6 +124,7 @@ async def draft_case_with_ai(
             current_yaml=body.current_yaml,
             feature_name=feature.name,
             files=files,
+            datasources=datasources,
             mode=body.mode,
         )
     except httpx.HTTPStatusError as exc:
@@ -157,6 +164,7 @@ async def draft_case_with_ai_stream(
     """
     feature, config = await _draft_ready(feature_id, user, db)
     files = await _project_file_context(db, feature.project_id)
+    datasources = await _project_datasource_context(db, feature.project_id)
 
     async def events():
         async for item in ai_case.draft_stream(
@@ -165,6 +173,7 @@ async def draft_case_with_ai_stream(
             current_yaml=body.current_yaml,
             feature_name=feature.name,
             files=files,
+            datasources=datasources,
             mode=body.mode,
         ):
             if item["event"] == "done":

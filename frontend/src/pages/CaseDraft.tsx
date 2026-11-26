@@ -35,6 +35,7 @@ import {
   type ChatMessage,
   type TrialStepOption,
 } from '../api/cases';
+import { getProjectDataSources } from '../api/datasources';
 import { getFeature } from '../api/features';
 import { getRun } from '../api/runs';
 import { apiError } from '../api/client';
@@ -168,6 +169,11 @@ export default function CaseDraft() {
     queryKey: ['feature', fid],
     queryFn: () => getFeature(fid),
     enabled: Boolean(fid),
+  });
+  const { data: datasources = [] } = useQuery({
+    queryKey: ['project-datasources', feature?.project_id],
+    queryFn: () => getProjectDataSources(feature!.project_id as string),
+    enabled: Boolean(feature?.project_id),
   });
 
   // 右侧 YAML 的实时校验，和手动编辑页用的是同一个接口
@@ -360,6 +366,15 @@ export default function CaseDraft() {
           .split(',')
           .map((item) => item.trim())
           .filter(Boolean);
+        let params: (string | number | boolean | null)[] | undefined;
+        if (opt.params !== undefined) {
+          try {
+            const parsed = JSON.parse(opt.params);
+            if (Array.isArray(parsed)) params = parsed;
+          } catch {
+            // 非法 JSON 不覆盖原 YAML；后端校验会提示修正
+          }
+        }
         return {
           case_index: ci,
           step: si,
@@ -376,6 +391,15 @@ export default function CaseDraft() {
           filename: opt.filename,
           min_bytes: opt.minBytes,
           save_as: opt.saveAs,
+          datasource: opt.datasource,
+          sql: opt.sql,
+          params,
+          column: opt.column,
+          row: opt.row,
+          as: opt.as,
+          tolerance: opt.tolerance,
+          selector: opt.selector,
+          ignore_case: opt.ignoreCase,
         };
       },
     );
@@ -696,6 +720,7 @@ export default function CaseDraft() {
                         startTrial(caseIndex, stepLimit)
                       }
                       highlightKey={highlightKey ?? undefined}
+                      datasources={datasources}
                     />
                   </div>
                 </div>

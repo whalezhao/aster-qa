@@ -16,10 +16,11 @@ import {
   CloseCircleOutlined,
   PlayCircleOutlined,
 } from '@ant-design/icons';
-import type { RunDetail } from '../api/types';
+import type { ProjectDataSource, RunDetail } from '../api/types';
 import { t } from '../i18n';
 import { stepKindLabel, yamlRows, type Step, type StepOption } from '../lib/caseYaml';
 import { useResizablePercent } from '../lib/useResizablePercent';
+import DbAssertFields from './DbAssertFields';
 
 const STEP_COLORS = [
   '#7dd3fc',
@@ -42,6 +43,7 @@ interface Props {
   onTrial?: (caseIndex: number, stepLimit: number) => void;
   /** 目录跳转后高亮的 key（case-{i} / step-{i}-{j}） */
   highlightKey?: string;
+  datasources?: ProjectDataSource[];
 }
 
 /** 步骤 / YAML 逐行对照面板。表头和内容共用同一个 CSS grid，列宽不会错位。 */
@@ -54,6 +56,7 @@ export default function StepYamlPanel({
   trialBusy = false,
   onTrial,
   highlightKey,
+  datasources = [],
 }: Props) {
   const { token } = theme.useToken();
   const stepSplit = useResizablePercent('qa-split-step-yaml', 53, 25, 75);
@@ -195,7 +198,12 @@ export default function StepYamlPanel({
                         )}
                       </div>
 
-                      <StepOptions step={step} value={opt} onChange={(patch) => set(step, patch)} />
+                      <StepOptions
+                        step={step}
+                        value={opt}
+                        datasources={datasources}
+                        onChange={(patch) => set(step, patch)}
+                      />
                     </div>
                   ) : row.caseName ? (
                     <Tag color="processing">
@@ -288,14 +296,30 @@ export default function StepYamlPanel({
 function StepOptions({
   step,
   value,
+  datasources,
   onChange,
 }: {
   step: Step;
   value: StepOption;
+  datasources: ProjectDataSource[];
   onChange: (patch: Partial<StepOption>) => void;
 }) {
-  if (!['aiAct', 'aiWaitFor', 'aiAssert', 'upload', 'download'].includes(step.kind)) {
+  if (
+    !['aiAct', 'aiWaitFor', 'aiAssert', 'upload', 'download', 'dbAssert'].includes(
+      step.kind,
+    )
+  ) {
     return null;
+  }
+  if (step.kind === 'dbAssert') {
+    return (
+      <DbAssertFields
+        step={step}
+        value={value}
+        datasources={datasources}
+        onChange={onChange}
+      />
+    );
   }
   if (step.kind === 'upload') {
     const filesValue =

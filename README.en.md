@@ -48,6 +48,9 @@ also the idea behind the logo.
   The same key can point to different files in different environments. Cases reference it
   through the `upload` node; the `download` node waits for a browser download, can assert
   its filename/size, and keeps the downloaded file on the run.
+- **Database assertions**: per-environment MySQL / OceanBase (MySQL mode) / PostgreSQL
+  read-only connections; the `dbAssert` node compares a page value with a database column
+  using exact or tolerant matching.
 - **Environment login-session reuse**: choose a login case (and an optional check case)
   from an environment. Runs reuse that environment’s Playwright `storageState`; when the
   session expires, the login case is re-run and failed cases can be retried once.
@@ -183,6 +186,37 @@ cases:
 `upload` also accepts `files: [KEY1, KEY2]`; `filename` / `minBytes` on
 `download` are optional. Downloaded files are kept on the run and listed under
 "Downloaded files" in the execution detail page.
+
+### Database assertions
+
+Add a connection under **Project → Environments & variables → environment row →
+Database**. MySQL 8.x, OceanBase MySQL-compatible mode and PostgreSQL are supported.
+Use a read-only account with `SELECT` only.
+
+Compare a page value with a database column through `dbAssert`:
+
+```yaml
+cases:
+  - name: Check order amount
+    steps:
+      - aiAct: Open the order detail page
+      - dbAssert:
+          datasource: QA_DB
+          sql: SELECT payable_amount FROM orders WHERE order_no = ?
+          params:
+            - ${ORDER_NO}
+          column: payable_amount
+          prompt: The paid amount on the order detail page
+          as: number
+          tolerance: 0.01
+```
+
+- `prompt` lets the AI read the page value; use `selector` on stable pages instead.
+- `params` uses placeholders: `?` for MySQL/OceanBase and `$1` for PostgreSQL; do not
+  interpolate values into the SQL string.
+- The runner allows one `SELECT` / `WITH` only, with connection/query timeouts and a row cap.
+- Database credentials are encrypted at rest and injected only into the runner process;
+  they never appear in YAML, generated config, or reports.
 
 ### Docker images (Docker Hub)
 

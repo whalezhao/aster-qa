@@ -282,6 +282,49 @@ class ProjectEnvironmentVariable(Timestamped, Base):
     description: Mapped[str | None] = mapped_column(String(255))
 
 
+class EnvironmentDataSource(Timestamped, Base):
+    """环境级数据库连接。密码在库里是 Fernet 密文，接口只回 password_set。"""
+
+    __tablename__ = "environment_data_sources"
+    __table_args__ = (
+        UniqueConstraint(
+            "environment_id", "name", name="uq_environment_data_sources_name"
+        ),
+        Index("ix_environment_data_sources_env", "environment_id"),
+        CheckConstraint(
+            _in("dialect", "mysql", "oceanbase", "postgres"),
+            name="ck_environment_data_sources_dialect",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    environment_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("project_environments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(32), nullable=False)
+    dialect: Mapped[str] = mapped_column(String(16), nullable=False, default="mysql")
+    host: Mapped[str] = mapped_column(String(255), nullable=False)
+    port: Mapped[int] = mapped_column(Integer, nullable=False, default=3306)
+    database: Mapped[str] = mapped_column(String(128), nullable=False)
+    username: Mapped[str] = mapped_column(String(128), nullable=False)
+    password: Mapped[str] = mapped_column(Text, nullable=False)
+    ssl: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    charset: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="utf8mb4", server_default="utf8mb4"
+    )
+    connect_timeout_ms: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=5000, server_default="5000"
+    )
+    statement_timeout_ms: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=5000, server_default="5000"
+    )
+    max_rows: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=100, server_default="100"
+    )
+
+
 class ProjectSessionConfig(Timestamped, Base):
     """环境级登录会话保持配置。每个环境独立选择登录/检查用例。"""
 

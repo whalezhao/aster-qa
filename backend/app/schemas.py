@@ -509,6 +509,16 @@ class TrialStepOption(In):
     filename: str | None = None
     min_bytes: int | None = Field(default=None, ge=0)
     save_as: str | None = None
+    # dbAssert 的步骤级字段
+    datasource: str | None = None
+    sql: str | None = None
+    params: list[str | int | float | bool] | None = None
+    column: str | None = None
+    row: int | None = Field(default=None, ge=0)
+    as_: str | None = Field(default=None, alias="as", pattern="^(number|string|boolean)$")
+    tolerance: float | None = Field(default=None, ge=0)
+    selector: str | None = None
+    ignore_case: bool | None = None
 
 
 class TrialRunIn(In):
@@ -969,6 +979,80 @@ class WorkerStatusOut(BaseModel):
 
 
 EnvironmentVariableMode = Literal["fixed", "random_string", "random_number"]
+
+
+DataSourceDialect = Literal["mysql", "oceanbase", "postgres"]
+
+
+class EnvironmentDataSourceOut(BaseModel):
+    model_config = ORM
+    id: uuid.UUID
+    environment_id: uuid.UUID
+    name: str
+    dialect: DataSourceDialect
+    host: str
+    port: int
+    database: str
+    username: str
+    ssl: bool
+    charset: str
+    connect_timeout_ms: int
+    statement_timeout_ms: int
+    max_rows: int
+    password_set: bool
+
+
+class ProjectDataSourceOut(EnvironmentDataSourceOut):
+    environment_name: str
+
+
+class EnvironmentDataSourceIn(In):
+    name: str = Field(
+        min_length=1,
+        max_length=32,
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,31}$",
+    )
+    dialect: DataSourceDialect = "mysql"
+    host: str = Field(min_length=1, max_length=255)
+    port: int = Field(default=3306, ge=1, le=65535)
+    database: str = Field(min_length=1, max_length=128)
+    username: str = Field(min_length=1, max_length=128)
+    password: str | None = Field(default=None, max_length=512)
+    ssl: bool = False
+    charset: str = Field(default="utf8mb4", min_length=1, max_length=32)
+    connect_timeout_ms: int = Field(default=5000, ge=500, le=60_000)
+    statement_timeout_ms: int = Field(default=5000, ge=500, le=600_000)
+    max_rows: int = Field(default=100, ge=1, le=10_000)
+
+    @model_validator(mode="after")
+    def _trim_text(self) -> "EnvironmentDataSourceIn":
+        self.name = self.name.strip()
+        self.host = self.host.strip()
+        self.database = self.database.strip()
+        self.username = self.username.strip()
+        self.charset = self.charset.strip()
+        for label, value in (
+            ("名称", self.name),
+            ("主机", self.host),
+            ("数据库", self.database),
+            ("用户名", self.username),
+            ("字符集", self.charset),
+        ):
+            if not value:
+                raise ValueError(f"{label}不能为空")
+        return self
+
+
+class DataSourceTestIn(EnvironmentDataSourceIn):
+    # 编辑未保存的表单可以直接复用已存密码
+    id: uuid.UUID | None = None
+
+
+class DataSourceTestOut(BaseModel):
+    ok: bool
+    latency_ms: int | None = None
+    server_version: str | None = None
+    message: str | None = None
 
 
 class EnvironmentVariableOut(BaseModel):

@@ -150,6 +150,16 @@ export interface CaseStep {
   deepLocate?: boolean | null;
   effort?: 'fast' | 'balance' | 'deepThink' | null;
   context?: string | null;
+  /** dbAssert 的可编辑字段 */
+  datasource?: string | null;
+  sql?: string | null;
+  params?: (string | number | boolean | null)[] | null;
+  column?: string | null;
+  row?: number | null;
+  as?: 'number' | 'string' | 'boolean' | null;
+  tolerance?: number | null;
+  selector?: string | null;
+  ignoreCase?: boolean | null;
 }
 
 export type TestCasePhase = 'precondition' | 'action' | 'wait' | 'assert' | 'cleanup';
@@ -619,6 +629,51 @@ export interface EnvironmentVariableInput {
   is_secret?: boolean;
   description?: string | null;
   clear?: boolean;
+}
+
+export type DataSourceDialect = 'mysql' | 'oceanbase' | 'postgres';
+
+export interface EnvironmentDataSource {
+  id: string;
+  environment_id: string;
+  name: string;
+  dialect: DataSourceDialect;
+  host: string;
+  port: number;
+  database: string;
+  username: string;
+  ssl: boolean;
+  charset: string;
+  connect_timeout_ms: number;
+  statement_timeout_ms: number;
+  max_rows: number;
+  password_set: boolean;
+}
+
+export interface ProjectDataSource extends EnvironmentDataSource {
+  environment_name: string;
+}
+
+export interface EnvironmentDataSourceInput {
+  name: string;
+  dialect: DataSourceDialect;
+  host: string;
+  port: number;
+  database: string;
+  username: string;
+  password?: string | null;
+  ssl: boolean;
+  charset: string;
+  connect_timeout_ms: number;
+  statement_timeout_ms: number;
+  max_rows: number;
+}
+
+export interface DataSourceTestResult {
+  ok: boolean;
+  latency_ms: number | null;
+  server_version: string | null;
+  message: string | null;
 }
 
 export interface ProjectFile {

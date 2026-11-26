@@ -44,6 +44,7 @@ import { defineProjectSetup, defineTestProject } from '@midscene/test/config';
 import { createMidsceneNodes } from '@midscene/test/midscene';
 import { PlaywrightAgent } from '@midscene/web/playwright/agent';
 import { type Page, chromium } from 'playwright';
+import { createDbNodes } from '../../scripts/db-nodes';
 import { createFileNodes } from '../../scripts/file-nodes';
 
 interface ProjectContext {
@@ -115,6 +116,7 @@ export default defineTestProject<ProjectContext>({
   nodes: [
     ...createMidsceneNodes<ProjectContext>({ agentClass: PlaywrightAgent, getAgent }),
     ...createFileNodes<ProjectContext>(getAgentFromContext),
+    ...createDbNodes(),
   ],
   // bail: 0 —— 回归要跑完所有用例拿到完整分布，不能第一个失败就停
   test: {
@@ -178,7 +180,11 @@ def load_runner_env(runner_root: Path) -> dict[str, str]:
     return env
 
 
-def env_fingerprint(env: dict[str, str], variables: dict[str, str] | None = None) -> str:
+def env_fingerprint(
+    env: dict[str, str],
+    variables: dict[str, str] | None = None,
+    data_sources: dict[str, dict] | None = None,
+) -> str:
     """配置指纹，用来做模型漂移归因：通过率跳变时判断是不是换了模型/配置。
 
     只哈希影响执行结果的键，不含 key 本身 —— 换 key 不该被当成配置变更。
@@ -195,6 +201,14 @@ def env_fingerprint(env: dict[str, str], variables: dict[str, str] | None = None
     parts += [f"CACHE={env.get('MIDSCENE_CACHE', '')}"]
     if variables:
         parts.append("VARS=" + ",".join(sorted(variables)))
+    if data_sources:
+        parts.append(
+            "DS="
+            + ",".join(
+                f"{name}:{item.get('dialect', '')}:{item.get('host', '')}:{item.get('database', '')}"
+                for name, item in sorted(data_sources.items())
+            )
+        )
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:32]
 
 

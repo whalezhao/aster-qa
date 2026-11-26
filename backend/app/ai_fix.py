@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .ai_case import call_model, extract_yaml
 from .case_versions import diff_text
+from .datasources import project_data_sources
 from .model_health import describe_model_error
 from .modelconfig import missing_fields
 from .models import CaseResult, Feature, Project, ProjectFile, ProjectModelConfig, Run, TestCase
@@ -32,6 +33,12 @@ SYSTEM_PROMPT = """你是 UI 自动化测试用例修复助手。用户会给你
 - 只修改导致失败的部分，不要顺手改写无关用例。
 - 保留 `upload` / `download` 节点及其 `file` / `files` / `trigger` / `filename` /
   `minBytes` 字段；不要改写成 `aiAct`，也不要删除。
+- 保留 `dbAssert` 节点及其 `datasource` / `sql` / `params` / `column` / `row` /
+  `as` / `tolerance` / `prompt` / `selector` / `ignoreCase` 字段；不要改写成 `aiAct`，
+  也不要删除。
+- 如果失败原因是数据库连接失败、权限不足、表/列不存在，不要改用例，直接说明是环境或
+  数据源问题。SQL 只能是单条 SELECT/WITH，动态值用 `params`；MySQL/OceanBase 用 `?`、
+  PostgreSQL 用 `$1`。
 - 文件 key 只能使用用户消息里「可用测试文件」列出的值；没有对应文件时直接说明原因，
   不要编造 key。测试文件按环境绑定，不要假设某个 key 在所有环境都存在。
   失败与文件有关时，优先检查 key 是否存在、upload 的上传入口描述是否准确、
@@ -151,6 +158,15 @@ async def propose_case_fix(
         if file_map
         else "当前项目还没有测试文件。"
     )
+    datasource_rows = await project_data_sources(db, project_id)
+    datasource_text = (
+        "\n".join(
+            f"- `{item['name']}`（{item['environment_name']}，{item['dialect']}）"
+            for item in datasource_rows
+        )
+        if datasource_rows
+        else "当前项目还没有配置数据库数据源。"
+    )
     prompt = (
         f"## 当前用例 YAML\n```yaml\n{case.yaml_content.strip()}\n```\n\n"
         f"## 最近一次失败\n"
@@ -158,6 +174,7 @@ async def propose_case_fix(
         f"- 运行 ID：{run.id}\n"
         f"- 失败步骤与理由（JSON）：\n```json\n{evidence_text or '[]'}\n```\n\n"
         f"## 可用测试文件\n\n{file_text}\n\n"
+        f"## 可用数据库数据源\n\n{datasource_text}\n\n"
         "请判断根因并给出修复后的完整 YAML。"
     )
 

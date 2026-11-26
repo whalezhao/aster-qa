@@ -53,6 +53,7 @@ const NODE_LABELS: Record<string, string> = {
   sleep: '等待',
   upload: '上传文件',
   download: '下载文件',
+  dbAssert: '数据库比对',
   'runner:host-result': '执行异常',
   execution: '执行段',
 };
@@ -65,6 +66,7 @@ const NODE_COLORS: Record<string, string> = {
   gotoUrl: 'blue',
   upload: 'blue',
   download: 'green',
+  dbAssert: 'purple',
   'runner:host-result': 'red',
   execution: 'blue',
 };

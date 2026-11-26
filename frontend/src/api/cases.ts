@@ -39,6 +39,15 @@ export interface TrialStepOption {
   filename?: string;
   min_bytes?: number | null;
   save_as?: string;
+  datasource?: string;
+  sql?: string;
+  params?: (string | number | boolean | null)[];
+  column?: string;
+  row?: number | null;
+  as?: 'number' | 'string' | 'boolean';
+  tolerance?: number | null;
+  selector?: string;
+  ignore_case?: boolean;
 }
 
 export interface TrialRunResult {

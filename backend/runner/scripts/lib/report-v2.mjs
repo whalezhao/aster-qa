@@ -41,6 +41,7 @@ const NODE_LABELS = {
   aiAct: '操作',
   aiAssert: '断言',
   aiWaitFor: '等待条件',
+  dbAssert: '数据库比对',
   aiQuery: '查询',
   aiInput: '输入',
   aiTap: '点击',

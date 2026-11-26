@@ -108,6 +108,25 @@ export const cases: Record<string, string> = {
   '期望文件名（可选）': 'Expected filename (optional)',
   最小字节: 'Min bytes',
   '超时 ms': 'Timeout ms',
+  '当前项目未配置数据库，请先到 环境 → 数据库 添加数据源。':
+    'No database is configured for this project. Add one under Environment → Database.',
+  数据源: 'Data source',
+  字符串: 'String',
+  数字: 'Number',
+  布尔: 'Boolean',
+  容差: 'Tolerance',
+  '页面取值描述（prompt），与选择器二选一':
+    'Page value description (prompt), or use a selector',
+  'CSS 选择器（selector），与 prompt 二选一':
+    'CSS selector, or use a prompt',
+  '单条 SELECT / WITH 查询，动态值用 ? 占位':
+    'Single SELECT / WITH query; use ? placeholders for values',
+  '参数（JSON 数组，可选），例如 ["${ORDER_NO}"]':
+    'Parameters (JSON array, optional), e.g. ["${ORDER_NO}"]',
+  '列名（单列可省略）': 'Column (optional for a single column)',
+  行号: 'Row',
+  忽略大小写: 'Ignore case',
+  '失败提示（可选）': 'Failure message (optional)',
   '保存文件名（可选）': 'Save as filename (optional)',
   调整对话宽度: 'Resize chat panel',
   调整目录宽度: 'Resize outline',
