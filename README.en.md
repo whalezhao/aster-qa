@@ -236,7 +236,22 @@ but must stay within one project.
   as **blocked by a prerequisite**, counted as failures in pass rate and quality gates;
 - Cases outside the flow keep the original sharding and concurrent execution;
 - **Rerun failed** on a flow batch reruns the failed/blocked subgraph; already successful
-  prerequisites are not rerun.
+  prerequisites are not rerun;
+- The flow editor has **Graph** and **Table** views. Nodes can be dragged and their
+  positions are saved;
+- Every save and rollback creates a version; use **Version history** to review and roll back;
+- A `capture` node turns a page or database value into a flow variable that dependent nodes
+  can reference as `${VARIABLE}`:
+  ```yaml
+  - capture:
+      name: ORDER_NO
+      selector: "#order-no"
+      as: string
+  ```
+- Nodes can have a simple condition (`eq`, `ne`, `contains`, `gt`, `lt`). A false condition
+  skips the node and its downstream; skipped nodes are not counted as failures;
+- A node can repeat a fixed number of times, executing sequentially and passing each
+  iteration's captured outputs to the next.
 
 ### Docker images (Docker Hub)
 
