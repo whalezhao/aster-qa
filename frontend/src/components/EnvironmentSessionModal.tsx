@@ -234,24 +234,41 @@ export default function EnvironmentSessionModal({
           size="small"
           rowKey="environment_id"
           pagination={false}
+          tableLayout="fixed"
           dataSource={config?.states ?? []}
           locale={{ emptyText: t('还没有环境会话缓存') }}
           columns={[
             {
               title: t('最近刷新'),
               dataIndex: 'refreshed_at',
+              width: 140,
               render: (value: string | null) => fmtDateTime(value),
             },
             {
               title: t('最近使用'),
               dataIndex: 'last_used_at',
+              width: 140,
               render: (value: string | null) => fmtDateTime(value),
             },
             {
               title: t('状态'),
               dataIndex: 'last_error',
               render: (value: string | null) =>
-                value ? <Tag color="error">{value}</Tag> : <Tag color="success">{t('正常')}</Tag>,
+                value ? (
+                  <Typography.Text
+                    type="danger"
+                    style={{
+                      display: 'block',
+                      fontSize: 12,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {value}
+                  </Typography.Text>
+                ) : (
+                  <Tag color="success">{t('正常')}</Tag>
+                ),
             },
             {
               title: t('操作'),
