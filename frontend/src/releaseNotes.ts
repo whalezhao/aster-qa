@@ -23,6 +23,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.5.2',
+    date: '2026-11-27',
+    items: [
+      {
+        category: 'improvement',
+        title: 'AI 生成用例支持 XPath 精准定位',
+        description:
+          '在对话里给出 XPath 时，AI 会把它写进单元素动作步骤的 options.xpath，适合元素难找、页面遮挡或要求稳定点击的场景。XPath 命中时优先使用，未命中仍会按描述自动定位。',
+      },
+    ],
+  },
+  {
     version: '0.5.1',
     date: '2026-11-27',
     items: [
