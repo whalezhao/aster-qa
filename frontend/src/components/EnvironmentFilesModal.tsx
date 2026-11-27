@@ -216,6 +216,9 @@ export default function EnvironmentFilesModal({
         onOk={() => form.submit()}
         confirmLoading={upload.isPending}
         forceRender
+        // 两个弹窗都是 forceRender，antd 会给同一批 1000；列表弹窗在 DOM 里更靠后，
+        // 不抬高上传弹窗就会被列表盖住。上传弹窗里没有下拉层，1001 足够。
+        zIndex={1001}
       >
         <Form form={form} layout="vertical" onFinish={(values) => upload.mutate(values)}>
           <Form.Item

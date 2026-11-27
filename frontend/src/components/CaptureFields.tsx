@@ -58,10 +58,18 @@ export default function CaptureFields({
         value={value.sql ?? step.sql ?? ''}
         onChange={(event) => onChange({ sql: event.target.value })}
       />
-      <Space>
+      {/* 三列都用 minmax(0, …)：左栏被拖窄时输入框跟着收缩，不会顶到 YAML 栏 */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.8fr)',
+          gap: 6,
+          width: '100%',
+        }}
+      >
         <Input
           size="small"
-          style={{ width: 220 }}
+          style={{ width: '100%' }}
           placeholder={t('参数 JSON，例如 [1]')}
           value={
             value.params ??
@@ -71,19 +79,20 @@ export default function CaptureFields({
         />
         <Input
           size="small"
-          style={{ width: 140 }}
+          style={{ width: '100%' }}
           placeholder={t('列名')}
           value={value.column ?? step.column ?? ''}
           onChange={(event) => onChange({ column: event.target.value })}
         />
         <InputNumber
           size="small"
+          style={{ width: '100%' }}
           min={0}
           placeholder={t('行号')}
           value={value.row ?? step.row ?? undefined}
           onChange={(next) => onChange({ row: next ?? null })}
         />
-      </Space>
+      </div>
       <Select
         size="small"
         allowClear
