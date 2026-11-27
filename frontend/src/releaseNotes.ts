@@ -23,6 +23,24 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.5.3',
+    date: '2026-11-27',
+    items: [
+      {
+        category: 'feature',
+        title: '环境支持浏览器代理',
+        description:
+          '每个测试环境可以单独配置浏览器出站代理，适合通过 aTrust 等 VPN 访问内网系统。代理只作用于浏览器，模型调用和数据库连接不受影响。',
+      },
+      {
+        category: 'improvement',
+        title: '功能列表支持按名称和创建人筛选',
+        description:
+          '项目详情里的功能列表可以按功能名称搜索，也可以按创建人筛选；子功能命中时会保留父级路径。',
+      },
+    ],
+  },
+  {
     version: '0.5.2',
     date: '2026-11-27',
     items: [
