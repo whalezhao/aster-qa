@@ -97,6 +97,7 @@ export interface Feature {
   stage: FeatureStage;
   iteration_id: string | null;
   released_at: string | null;
+  created_by: string | null;
   created_by_name: string | null;
   updated_by_name: string | null;
 }
@@ -724,6 +725,8 @@ export interface Environment {
   project_id: string;
   name: string;
   base_url: string | null;
+  /** 该环境浏览器出站代理，例如 http://host.docker.internal:8889 */
+  proxy_url: string | null;
   is_default: boolean;
   variables: EnvironmentVariable[];
 }

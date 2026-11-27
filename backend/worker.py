@@ -134,6 +134,7 @@ def _build_env(
     session_state: Path | None = None,
     session_save_path: Path | None = None,
     data_sources: dict[str, dict] | None = None,
+    proxy_url: str | None = None,
 ) -> dict[str, str]:
     """组装子进程环境。
 
@@ -186,6 +187,10 @@ def _build_env(
     env["QA_DATASOURCES"] = json.dumps(data_sources or {}, ensure_ascii=False)
     # capture 节点把本次 run 的输出写到这个文件；工作进程在子进程结束后读取
     env["QA_FLOW_OUTPUT"] = str(staged.work_dir / "flow-outputs.json")
+    if proxy_url:
+        env["QA_PROXY_SERVER"] = proxy_url
+    else:
+        env.pop("QA_PROXY_SERVER", None)
 
     # 复刻参考实现的做法：每次执行换一个上游会话头，避免所有 run 挤在同一个会话里
     raw = env.get("MIDSCENE_MODEL_INIT_CONFIG_JSON")
@@ -367,6 +372,7 @@ async def _run_session_case(
     session_state: Path | None,
     save_path: Path | None,
     data_sources: dict[str, dict] | None = None,
+    proxy_url: str | None = None,
 ) -> tuple[bool, str | None]:
     """跑一次登录/检查用例，不创建用户可见的 Run。"""
     run_id = uuid.uuid4()
@@ -400,6 +406,7 @@ async def _run_session_case(
                 session_state=session_state,
                 session_save_path=save_path,
                 data_sources=data_sources,
+                proxy_url=proxy_url,
             ),
             timeout_ms=max(settings.case_timeout_ms * 2, 120_000),
         )
@@ -511,6 +518,7 @@ async def prepare_session(
             session_state=None,
             save_path=temp,
             data_sources=data_sources,
+            proxy_url=env_row.proxy_url,
         )
         # 登录动作可能已经成功，只是落地页不符合登录用例的最后一条断言（例如门户首页
         # 404）。有检查用例时先保留这份 storageState，交给检查用例判断能否使用。
@@ -556,6 +564,7 @@ async def prepare_session(
             session_state=cache_path,
             save_path=None,
             data_sources=data_sources,
+            proxy_url=env_row.proxy_url,
         )
 
     state = await current_state()
@@ -612,6 +621,7 @@ async def prepare_session(
                     session_state=cache_path,
                     save_path=None,
                     data_sources=data_sources,
+                    proxy_url=env_row.proxy_url,
                 )
                 if not check_ok:
                     ok, error = await refresh(allow_partial=False)
@@ -1125,6 +1135,7 @@ async def process(run_id: uuid.UUID) -> None:
             max_download_bytes=settings.max_download_bytes,
             session_state=session_state_path,
             data_sources=data_sources,
+            proxy_url=env_row.proxy_url if env_row is not None else None,
         ),
         timeout_ms=timeout_ms,
         poll_cancel=poll_cancel,

@@ -17,6 +17,7 @@ import {
 } from '../api/features';
 import { clearModelConfig, getModelConfig, getProject, setModelConfig, testModelConfig } from '../api/projects';
 import { getIterationsByTeam } from '../api/iterations';
+import { getMembers } from '../api/teams';
 import { apiError } from '../api/client';
 import { t } from '../i18n';
 import {
@@ -430,6 +431,8 @@ export default function ProjectDetail() {
   const queryClient = useQueryClient();
 
   const [stage, setStage] = useState<StageFilter>('all');
+  const [featureName, setFeatureName] = useState('');
+  const [featureCreator, setFeatureCreator] = useState<string | undefined>();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Feature | null>(null);
@@ -454,18 +457,26 @@ export default function ProjectDetail() {
     queryFn: () => getIterationsByTeam(project!.team_id),
     enabled: !!project,
   });
+  const { data: members = [] } = useQuery({
+    queryKey: ['team-members', project?.team_id ?? ''],
+    queryFn: () => getMembers(project!.team_id),
+    enabled: !!project,
+  });
 
   const tree = useMemo(
     () => buildFeatureTree(features, caseCounts),
     [features, caseCounts],
   );
-  const visibleTree = useMemo(
-    () =>
-      stage === 'all'
-        ? tree
-        : filterFeatureTree(tree, (node) => node.stage === stage),
-    [tree, stage],
-  );
+  const visibleTree = useMemo(() => {
+    const keyword = featureName.trim().toLowerCase();
+    return filterFeatureTree(
+      tree,
+      (node) =>
+        (stage === 'all' || node.stage === stage) &&
+        (!keyword || node.name.toLowerCase().includes(keyword)) &&
+        (!featureCreator || node.created_by === featureCreator),
+    );
+  }, [tree, stage, featureName, featureCreator]);
   // 分期筛选会把不匹配的子节点从 visibleTree 里摘掉，删除保护要看完整数据
   const parentIds = useMemo(
     () =>
@@ -605,6 +616,32 @@ export default function ProjectDetail() {
               { label: t('当前迭代'), value: 'in_iteration' },
               { label: t('正式'), value: 'released' },
             ]}
+          />
+          <Input.Search
+            allowClear
+            placeholder={t('按功能名称搜索')}
+            style={{ width: 220 }}
+            value={featureName}
+            onChange={(event) => {
+              setFeatureName(event.target.value);
+              setSelectedIds([]);
+            }}
+          />
+          <Select
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            placeholder={t('全部创建人')}
+            style={{ minWidth: 160 }}
+            value={featureCreator}
+            onChange={(value) => {
+              setFeatureCreator(value);
+              setSelectedIds([]);
+            }}
+            options={members.map((member) => ({
+              value: member.user_id,
+              label: member.user.display_name || member.user.username,
+            }))}
           />
           <Button
             type="primary"

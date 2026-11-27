@@ -74,8 +74,12 @@ const setup = defineProjectSetup<ProjectContext>({
     // Docker 里通常以 root 运行，Chromium 的沙箱会直接拒绝启动；容器内用环境变量显式关掉。
     // --disable-dev-shm-usage：容器默认 /dev/shm 很小，不关掉会偶发浏览器崩溃。
     const noSandbox = env.CHROMIUM_NO_SANDBOX === '1';
+    // 环境级出站代理：只给浏览器设置，不注入进程级 HTTP_PROXY，
+    // 否则模型请求和数据库连接也会被带进 VPN。
+    const proxyServer = process.env.QA_PROXY_SERVER;
     const browser = await chromium.launch({
       headless: env.HEADLESS !== 'false',
+      proxy: proxyServer ? { server: proxyServer } : undefined,
       args: noSandbox ? ['--no-sandbox', '--disable-dev-shm-usage'] : [],
     });
     // 跨 run 的登录会话：正常 run 注入 storageState 缓存；登录初始化 run

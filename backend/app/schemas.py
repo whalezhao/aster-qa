@@ -336,6 +336,7 @@ class FeatureOut(BaseModel):
     stage: str
     iteration_id: uuid.UUID | None
     released_at: datetime | None
+    created_by: uuid.UUID | None = None
     created_by_name: str | None = None
     updated_by_name: str | None = None
 
@@ -1198,6 +1199,7 @@ class EnvironmentOut(BaseModel):
     project_id: uuid.UUID
     name: str
     base_url: str | None
+    proxy_url: str | None = None
     is_default: bool
     variables: list[EnvironmentVariableOut] = []
 
@@ -1205,11 +1207,13 @@ class EnvironmentOut(BaseModel):
 class EnvironmentIn(In):
     name: str = Field(min_length=1, max_length=64)
     base_url: str | None = Field(default=None, max_length=512)
+    proxy_url: str | None = Field(default=None, max_length=512)
 
 
 class EnvironmentUpdate(In):
     name: str | None = Field(default=None, min_length=1, max_length=64)
     base_url: str | None = Field(default=None, max_length=512)
+    proxy_url: str | None = Field(default=None, max_length=512)
 
 
 class EnvironmentVariableIn(In):

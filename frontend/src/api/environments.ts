@@ -14,7 +14,7 @@ export async function getTeamEnvironments(teamId: string): Promise<Environment[]
 
 export async function createEnvironment(
   projectId: string,
-  input: { name: string; base_url?: string | null },
+  input: { name: string; base_url?: string | null; proxy_url?: string | null },
 ): Promise<Environment> {
   const { data } = await http.post<Environment>(
     `/api/projects/${projectId}/environments`,
@@ -25,7 +25,7 @@ export async function createEnvironment(
 
 export async function updateEnvironment(
   id: string,
-  input: { name?: string; base_url?: string | null },
+  input: { name?: string; base_url?: string | null; proxy_url?: string | null },
 ): Promise<Environment> {
   const { data } = await http.patch<Environment>(`/api/environments/${id}`, input);
   return data;

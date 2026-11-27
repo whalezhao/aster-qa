@@ -278,12 +278,16 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
 
   const openEdit = (env: Environment) => {
     setEditing(env);
-    form.setFieldsValue({ name: env.name, base_url: env.base_url });
+    form.setFieldsValue({
+      name: env.name,
+      base_url: env.base_url,
+      proxy_url: env.proxy_url,
+    });
     setFormOpen(true);
   };
 
   const save = useMutation({
-    mutationFn: (values: { name: string; base_url?: string }) =>
+    mutationFn: (values: { name: string; base_url?: string; proxy_url?: string }) =>
       editing
         ? updateEnvironment(editing.id, values)
         : createEnvironment(projectId, values),
@@ -336,6 +340,11 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
           {
             title: 'Base URL',
             dataIndex: 'base_url',
+            render: (value: string | null) => value || '-',
+          },
+          {
+            title: t('浏览器代理'),
+            dataIndex: 'proxy_url',
             render: (value: string | null) => value || '-',
           },
           {
@@ -403,6 +412,15 @@ export default function EnvironmentsCard({ projectId }: { projectId: string }) {
             extra={editing?.is_default ? t('默认环境地址跟随系统 Base URL') : undefined}
           >
             <Input disabled={editing?.is_default} placeholder="https://staging.example.com" />
+          </Form.Item>
+          <Form.Item
+            name="proxy_url"
+            label={t('浏览器代理（可选）')}
+            tooltip={t(
+              '只应用于该环境的浏览器出站流量，例如 http://host.docker.internal:8889；不影响模型和数据库连接。',
+            )}
+          >
+            <Input placeholder="http://host.docker.internal:8889" />
           </Form.Item>
         </Form>
       </Modal>

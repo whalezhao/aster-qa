@@ -239,6 +239,9 @@ class ProjectEnvironment(Timestamped, Base):
     )
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     base_url: Mapped[str | None] = mapped_column(String(512))
+    # 该环境的浏览器出站代理（例如 http://host.docker.internal:8889）。
+    # 只作用于 Chromium，不注入进程级 HTTP_PROXY，避免影响模型和数据库连接。
+    proxy_url: Mapped[str | None] = mapped_column(String(512))
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")

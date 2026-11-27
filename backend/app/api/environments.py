@@ -72,6 +72,7 @@ async def _env_out(db, env: ProjectEnvironment) -> EnvironmentOut:
         project_id=env.project_id,
         name=env.name,
         base_url=env.base_url,
+        proxy_url=env.proxy_url,
         is_default=env.is_default,
         variables=await _variables(db, env.id),
     )
@@ -151,6 +152,7 @@ async def create_environment(
         project_id=project_id,
         name=name,
         base_url=(body.base_url or "").strip() or None,
+        proxy_url=(body.proxy_url or "").strip() or None,
         is_default=False,
         created_by=user.id,
     )
@@ -204,6 +206,8 @@ async def update_environment(
                 "默认环境的地址跟随系统 Base URL，请到系统设置修改",
             )
         env.base_url = body.base_url.strip() or None
+    if body.proxy_url is not None:
+        env.proxy_url = body.proxy_url.strip() or None
     await db.commit()
     await db.refresh(env)
     return await _env_out(db, env)

@@ -605,7 +605,12 @@ export const pages: Record<string, string> = {
   '编排内的用例按依赖顺序执行；不属于编排的用例仍按任务原有分片并发执行。前置失败时，依赖它的用例不会再执行。':
     'Orchestrated cases run in dependency order; cases outside the flow still run concurrently in the task shards. If a prerequisite fails, its dependents are not executed.',
   全部创建人: 'All creators',
+  按功能名称搜索: 'Search features by name',
   我的任务: 'My tasks',
   全部执行人: 'All executors',
   我的执行: 'My runs',
+  浏览器代理: 'Browser proxy',
+  '浏览器代理（可选）': 'Browser proxy (optional)',
+  '只应用于该环境的浏览器出站流量，例如 http://host.docker.internal:8889；不影响模型和数据库连接。':
+    'Applies only to browser egress for this environment, e.g. http://host.docker.internal:8889; model and database connections are not affected.',
 };
