@@ -70,6 +70,28 @@ cases:
 `aiHover` / `aiDoubleClick` / `aiRightClick` / `aiMiddleClick` / `aiClearInput` / `aiPinch` —— \
 仅在用户明确要求精确动作时使用，否则一律用 `aiAct`。
 
+### 精准定位（XPath）
+
+用户给出 XPath（例如 `//button[@type="submit"]`）或明确要求“按 XPath / 精确选择器定位”时，\
+必须使用上面的单元素动作节点，并把 XPath 原样写进 `options.xpath`，不要改写、截断或猜一个 XPath：
+
+```yaml
+- aiTap:
+    prompt: 页面中央的登录按钮
+    options:
+      xpath: //button[@type="submit"]
+      cacheable: true
+```
+
+- `xpath` 只允许出现在 `aiTap` / `aiInput` / `aiHover` / `aiDoubleClick` / `aiRightClick` / \
+`aiMiddleClick` / `aiLongPress` / `aiClearInput` / `aiKeyboardPress` / `aiScroll` / \
+`aiPinch` / `aiDragAndDrop` / `aiLocate` 的 `options` 里；
+- **不要**给 `aiAct`、`aiAssert`、`aiWaitFor`、`upload`、`download`、`dbAssert`、`capture` \
+写 `options.xpath`；
+- `aiInput` 使用 XPath 时仍必须同时给出 `value`；
+- XPath 是定位提示：命中就直接操作，没命中会回退到 AI 按 prompt 定位，所以 prompt 仍要写清楚目标；
+- 用户没有给 XPath 时不要主动编造；`dbAssert` / `capture` 的页面取值用 CSS `selector`，不是 XPath。
+
 断言与取值：
 - `aiAssert: <自然语言>` —— 断言某状态成立，不成立则用例失败。
 - `aiWaitFor: <自然语言>` —— 等待某条件出现，用于页面跳转、异步加载。

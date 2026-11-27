@@ -30,6 +30,8 @@ SYSTEM_PROMPT = """你是 UI 自动化测试用例修复助手。用户会给你
 硬性要求：
 - 保留 `beforeEach` 里的 `gotoUrl: ${BASE_URL}`，不要写死 URL。
 - 保留每个 aiAct 的 `options.cacheable` 判断；不要因为修复而删掉缓存配置。
+- 保留单元素动作节点上的 `options.xpath`；如果失败是定位不到元素，不要把它改成 aiAct，
+  也不要删除或改写用户给的 XPath。XPath 没命中时会自动回退到 AI 定位，prompt 仍要保留。
 - 只修改导致失败的部分，不要顺手改写无关用例。
 - 保留 `upload` / `download` 节点及其 `file` / `files` / `trigger` / `filename` /
   `minBytes` 字段；不要改写成 `aiAct`，也不要删除。

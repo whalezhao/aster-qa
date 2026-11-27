@@ -46,7 +46,7 @@ cases:
 | `aiWaitFor` | `aiWaitFor: 出现保存成功提示` | `options.timeoutMs`（默认 15000）、`options.checkIntervalMs`（默认 3000）、`options.context` |
 | `gotoUrl` | `gotoUrl: ${BASE_URL}` | `timeoutMs`（默认 60000）、`waitUntil`（`commit`/`domcontentloaded`/`load`/`networkidle`） |
 | `aiTap` | `aiTap: 右下角的保存按钮` | `options.cacheable`、`options.deepLocate`、`options.xpath` |
-| `aiInput` | 对象形式：`prompt` + `value` | `options.mode`、`options.keyboardTypeDelay`、`options.deepLocate`、`options.cacheable` |
+| `aiInput` | 对象形式：`prompt` + `value` | `options.mode`、`options.keyboardTypeDelay`、`options.deepLocate`、`options.cacheable`、`options.xpath` |
 | `aiKeyboardPress` | `aiKeyboardPress: Enter` | `prompt`（可选，指定目标元素） |
 | `aiScroll` | `aiScroll: 向下滚动到列表底部` | `options.scrollType`、`options.direction`、`options.distance`、`options.cacheable` |
 | `aiQuery` | `aiQuery: 提取商品列表 {name: string, price: number}[]` | `options.context`、`options.domIncluded`、`options.screenshotIncluded` |
@@ -57,6 +57,24 @@ cases:
 | `recordToReport` | `recordToReport: 关键步骤截图` | `options.content`、`options.screenshots` |
 
 其余节点（`aiLocate`、`aiHover`、`aiDoubleClick`、`aiRightClick`、`aiDragAndDrop`、`aiAsk`、`aiLongPress`、`aiPinch`、`aiClearInput`、`setViewportSize`、`setCookies`、`clearCookies`、`setAIContext`、`runGherkinScenario` 等）见执行器自带的节点说明。
+
+### 精准定位（XPath）
+
+单元素动作节点可以写 `options.xpath`，适合页面元素难找、需要稳定点击的场景：
+
+```yaml
+- aiTap:
+    prompt: 页面中央的登录按钮
+    options:
+      xpath: //button[@type="submit"]
+      cacheable: true
+```
+
+- 支持：`aiTap`、`aiInput`、`aiHover`、`aiDoubleClick`、`aiRightClick`、`aiMiddleClick`、`aiLongPress`、`aiClearInput`、`aiKeyboardPress`、`aiScroll`、`aiPinch`、`aiDragAndDrop`、`aiLocate`；
+- 不支持：`aiAct`、`aiAssert`、`aiWaitFor`、`upload`、`download`、`dbAssert`、`capture`；
+- 它是**提示**：命中就直接操作，没命中会回退到 AI 按 prompt 定位；prompt 仍要写清楚目标；
+- XPath 解决的是“找对元素”，不解决“元素被遮挡”。有遮罩时仍要先关闭遮罩或滚动到可点击位置；
+- 平台自己的 `dbAssert` / `capture` 用 CSS `selector`，不是 XPath。
 
 ### 字符串简写 vs 对象形式
 
