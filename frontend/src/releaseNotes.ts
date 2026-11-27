@@ -23,6 +23,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '0.5.1',
+    date: '2026-11-27',
+    items: [
+      {
+        category: 'feature',
+        title: '测试任务按创建人筛选',
+        description:
+          '测试任务列表新增「创建人」列，可以按创建人筛选，也可以一键只看自己的任务，找自己的任务不用再翻列表。',
+      },
+      {
+        category: 'feature',
+        title: '执行记录按执行人筛选',
+        description:
+          '执行记录新增「执行人」筛选和「我的执行」快捷入口，可以直接筛出自己触发或执行过的记录。',
+      },
+      {
+        category: 'improvement',
+        title: '创建人可以管理自己的任务',
+        description:
+          '编辑和删除测试任务不再只限管理员：任务创建人也可以编辑或删除自己创建的任务；团队 owner / admin 仍可管理全部任务。',
+      },
+    ],
+  },
+  {
     version: '0.5.0',
     date: '2026-11-27',
     items: [
