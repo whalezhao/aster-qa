@@ -565,6 +565,9 @@ class TaskOut(BaseModel):
     gate_min_pass_rate: float | None = None
     gate_fail_on_p0: bool = False
     case_selection_mode: str
+    # 创建人：列表要能显示并按创建人筛选；编辑/删除权限也按它判断
+    created_by: uuid.UUID | None = None
+    created_by_name: str | None = None
     # 定时计划摘要，由列表接口批量填充
     schedule_enabled: bool = False
     schedule_cron: str | None = None
@@ -875,6 +878,7 @@ class BatchOut(BaseModel):
     gate_detail: dict | None = None
     created_at: datetime
     # 执行人（批次创建者），合规报告要写清楚是谁触发/执行了这次测试
+    created_by: uuid.UUID | None = None
     created_by_name: str | None = None
     started_at: datetime | None = None
     ended_at: datetime | None = None

@@ -219,6 +219,9 @@ export const server: Record<string, string> = {
   '该功能下已有同名用例，无法回滚到这个版本':
     'A case with this name already exists in this feature; cannot roll back to this version',
 
+  // ---- app/api/tasks.py ----
+  只能删除自己创建的任务: 'You can only delete tasks you created',
+
   // ---- app/webhook.py（事件选择器的标签，非消息体）----
   '任务签名（人工审核通过）': 'Task signed (manually approved)',
   '一次执行完成': 'An execution completed',

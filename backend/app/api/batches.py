@@ -173,10 +173,13 @@ def _scope(
     iteration_id: uuid.UUID | None,
     stage: str | None,
     name: str | None,
+    created_by: uuid.UUID | None = None,
 ) -> list:
     conditions = [RunBatch.team_id.in_(team_ids)]
     if task_id is not None:
         conditions.append(RunBatch.task_id == task_id)
+    if created_by is not None:
+        conditions.append(RunBatch.created_by == created_by)
     if iteration_id is not None:
         conditions.append(RunBatch.iteration_id == iteration_id)
     if name:
@@ -376,6 +379,7 @@ async def list_batches(
     iteration_id: uuid.UUID | None = None,
     stage: str | None = None,
     name: str | None = None,
+    created_by: uuid.UUID | None = None,
     limit: int = Query(default=50, le=200),
     offset: int = 0,
 ) -> BatchListOut:
@@ -394,6 +398,7 @@ async def list_batches(
         iteration_id=iteration_id,
         stage=stage,
         name=name,
+        created_by=created_by,
     )
     total = (
         await db.execute(select(func.count(RunBatch.id)).where(*conditions))
@@ -443,6 +448,7 @@ async def list_batches(
                 "gate_status": batch.gate_status,
                 "gate_detail": batch.gate_detail,
                 "created_at": batch.created_at,
+                "created_by": batch.created_by,
                 "created_by_name": getattr(batch, "created_by_name", None),
                 "started_at": agg.get("started_at"),
                 "ended_at": agg.get("ended_at"),
@@ -587,6 +593,7 @@ async def get_batch(batch_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Ba
         gate_status=gate.get("status"),
         gate_detail=gate,
         created_at=batch.created_at,
+        created_by=batch.created_by,
         created_by_name=creator_name,
         started_at=agg.get("started_at"),
         ended_at=agg.get("ended_at"),

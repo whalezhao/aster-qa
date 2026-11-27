@@ -22,6 +22,7 @@ import { apiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { getProjects } from '../api/projects';
 import { getTasks } from '../api/tasks';
+import { getMembers } from '../api/teams';
 import { useActiveTeam } from '../team/TeamContext';
 import { t } from '../i18n';
 import {
@@ -78,6 +79,7 @@ export default function Executions() {
   const projectId = searchParams.get('project_id') ?? undefined;
   const stage = (searchParams.get('stage') as FeatureStage | null) ?? 'all';
   const name = searchParams.get('name') ?? '';
+  const createdBy = searchParams.get('created_by') ?? undefined;
   const page = Math.max(1, Number(searchParams.get('page') ?? 1) || 1);
   const pageSize = Number(searchParams.get('page_size') ?? 20) || 20;
   // 支持从任务详情跳过来只看某个任务的执行
@@ -106,6 +108,11 @@ export default function Executions() {
     queryFn: () => getTasks(teamId as string),
     enabled: Boolean(teamId),
   });
+  const { data: members = [] } = useQuery({
+    queryKey: ['team-members', teamId],
+    queryFn: () => getMembers(teamId as string),
+    enabled: Boolean(teamId),
+  });
 
   const params = useMemo(
     () => ({
@@ -114,10 +121,11 @@ export default function Executions() {
       stage: stage === 'all' ? undefined : stage,
       name: name.trim() || undefined,
       task_id: taskId,
+      created_by: createdBy,
       limit: pageSize,
       offset: (page - 1) * pageSize,
     }),
-    [teamId, projectId, stage, name, taskId, page, pageSize],
+    [teamId, projectId, stage, name, taskId, createdBy, page, pageSize],
   );
 
   const { data, isLoading } = useQuery({
@@ -181,6 +189,29 @@ export default function Executions() {
             { value: 'released', label: t('正式') },
           ]}
         />
+        <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          placeholder={t('全部执行人')}
+          style={{ minWidth: 160 }}
+          value={createdBy}
+          onChange={(value) => updateParams({ created_by: value })}
+          options={members.map((member) => ({
+            value: member.user_id,
+            label: member.user.display_name || member.user.username,
+          }))}
+        />
+        {me?.id && (
+          <Button
+            type={createdBy === me.id ? 'primary' : 'default'}
+            onClick={() =>
+              updateParams({ created_by: createdBy === me.id ? undefined : me.id })
+            }
+          >
+            {t('我的执行')}
+          </Button>
+        )}
         <Input.Search
           allowClear
           placeholder={t('按任务名搜索')}

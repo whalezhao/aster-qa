@@ -49,6 +49,20 @@ async def require_task(db, task_id: uuid.UUID, user, minimum: str = "member") ->
     return task
 
 
+def task_manage_role(task, user) -> str:
+    """编辑/删除任务需要的最低团队角色：创建人只要成员，其他人要管理员。"""
+    return "member" if task.created_by == user.id else "admin"
+
+
+async def require_task_manage(db, task_id: uuid.UUID, user) -> TestTask:
+    """任务编辑/删除：创建人本人，或测试团队 owner/admin。"""
+    task = await db.get(TestTask, task_id)
+    if task is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "任务不存在")
+    await require_team_role(task.team_id, user, db, task_manage_role(task, user))
+    return task
+
+
 async def resolve_run_groups(db, task: TestTask) -> dict[uuid.UUID, int]:
     """任务下的用例按项目分组。
 

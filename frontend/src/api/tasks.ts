@@ -45,6 +45,8 @@ export interface TaskListParams {
   stage?: 'in_iteration' | 'released';
   status?: string;
   name?: string;
+  /** 按创建人筛；传自己的 id 就是「我的任务」 */
+  created_by?: string;
 }
 
 export async function getTasks(teamId: string, params: TaskListParams = {}): Promise<Task[]> {

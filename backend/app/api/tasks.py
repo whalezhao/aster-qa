@@ -37,6 +37,7 @@ from ..schemas import (
 )
 from ..taskstatus import aggregate
 from ..testcase_export import build_test_case_workbook, rows_from_yaml
+from ..user_names import attach_user_names
 from .batches import derive_status
 from .task_common import (
     active_task_ids,
@@ -45,6 +46,7 @@ from .task_common import (
     merge_flow_into_task,
     purge_artifacts,
     require_task,
+    require_task_manage,
     spawn_runs,
 )
 
@@ -59,6 +61,7 @@ async def _enrich_tasks(db, tasks: list[TestTask]) -> list[TaskOut]:
     """
     if not tasks:
         return []
+    await attach_user_names(db, tasks)
     ids = [t.id for t in tasks]
     feature_counts = dict(
         (
@@ -189,6 +192,7 @@ async def list_tasks(
     stage: str | None = None,
     task_status: str | None = Query(default=None, alias="status"),
     name: str | None = None,
+    created_by: uuid.UUID | None = None,
 ) -> list[TaskOut]:
     """任务粒度的列表。默认支持按系统 / 分期 / 状态 / 名称筛。"""
     await get_team_membership(db, team_id, user)
@@ -223,6 +227,8 @@ async def list_tasks(
         stmt = stmt.where(TestTask.status == task_status)
     if name:
         stmt = stmt.where(TestTask.name.ilike(f"%{name}%"))
+    if created_by is not None:
+        stmt = stmt.where(TestTask.created_by == created_by)
     stmt = stmt.order_by(TestTask.created_at.desc())
     return await _enrich_tasks(db, list((await db.execute(stmt)).scalars()))
 
@@ -415,7 +421,7 @@ async def get_task(task_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Task
 async def update_task(
     task_id: uuid.UUID, body: TaskUpdate, user: CurrentUser, db: DbSession
 ) -> TestTask:
-    task = await require_task(db, task_id, user)
+    task = await require_task_manage(db, task_id, user)
     data = body.model_dump(exclude_unset=True)
     if "environment_name" in data:
         data["environment_name"] = (data["environment_name"] or "").strip() or None
@@ -436,7 +442,7 @@ async def update_task(
 
 @router.delete("/api/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_task(task_id: uuid.UUID, user: CurrentUser, db: DbSession) -> None:
-    task = await require_task(db, task_id, user, "admin")
+    task = await require_task_manage(db, task_id, user)
     if task_id in await active_task_ids(db, [task_id]):
         raise HTTPException(
             status.HTTP_409_CONFLICT, "该任务有执行正在进行或排队中，请先取消再删除"
@@ -460,24 +466,41 @@ async def bulk_delete_tasks(
             await db.execute(select(TestTask).where(TestTask.id.in_(body.task_ids)))
         ).scalars()
     )
+    roles: dict[uuid.UUID, str] = {}
+    allowed: list[TestTask] = []
+    skipped: list[dict[str, str]] = []
     for task in tasks:
-        await require_team_role(task.team_id, user, db, "admin")
+        if task.team_id not in roles:
+            member = await get_team_membership(db, task.team_id, user)
+            roles[task.team_id] = member.role
+        if task.created_by != user.id and roles[task.team_id] not in {"owner", "admin"}:
+            skipped.append(
+                {
+                    "id": str(task.id),
+                    "name": task.name,
+                    "reason": "只能删除自己创建的任务",
+                }
+            )
+            continue
+        allowed.append(task)
 
-    active = await active_task_ids(db, [t.id for t in tasks])
-    deletable = [t for t in tasks if t.id not in active]
+    active = await active_task_ids(db, [t.id for t in allowed])
+    deletable = [t for t in allowed if t.id not in active]
     dirs, midscene_ids = (
         await delete_tasks(db, deletable) if deletable else ([], [])
     )
     await db.commit()
     purge_artifacts(dirs, midscene_ids)
-    return {
-        "deleted": len(deletable),
-        "skipped": [
-            {"id": str(t.id), "name": t.name, "reason": "有执行正在进行或排队中"}
-            for t in tasks
-            if t.id in active
-        ],
-    }
+    skipped.extend(
+        {
+            "id": str(t.id),
+            "name": t.name,
+            "reason": "有执行正在进行或排队中",
+        }
+        for t in allowed
+        if t.id in active
+    )
+    return {"deleted": len(deletable), "skipped": skipped}
 
 
 # ------------------------------------------------------------- 任务的用例 / 标签 / 功能

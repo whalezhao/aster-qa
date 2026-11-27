@@ -17,6 +17,7 @@ import {
 import { getProjects } from '../api/projects';
 import { listCaseFlows } from '../api/flows';
 import { getIterationsByTeam } from '../api/iterations';
+import { getMembers } from '../api/teams';
 import { apiError } from '../api/client';
 import { useActiveTeam } from '../team/TeamContext';
 import { useAuth } from '../auth/AuthContext';
@@ -65,6 +66,9 @@ export default function Tasks() {
   // 测试团队只从上下文取，页面不再自带一个选择器
   const { teamId } = useActiveTeam();
   const { user: me } = useAuth();
+  const teamRole = me?.teams.find((team) => team.team_id === teamId)?.role;
+  const canManageTask = (task: Task) =>
+    task.created_by === me?.id || teamRole === 'owner' || teamRole === 'admin';
 
   const typeOptions = (Object.keys(TASK_TYPE_LABELS) as TaskType[]).map((k) => ({
     value: k,
@@ -132,6 +136,7 @@ export default function Tasks() {
   const projectId = searchParams.get('project_id') ?? undefined;
   const stage = (searchParams.get('stage') as FeatureStage | null) ?? 'all';
   const status = searchParams.get('status') ?? undefined;
+  const createdBy = searchParams.get('created_by') ?? undefined;
   const name = searchParams.get('name') ?? '';
   const [nameInput, setNameInput] = useState(name);
   useEffect(() => setNameInput(name), [name]);
@@ -150,6 +155,7 @@ export default function Tasks() {
     stage: stage === 'all' ? undefined : stage,
     status,
     name: name.trim() || undefined,
+    created_by: createdBy,
   };
 
   const { data: projects = [] } = useQuery({
@@ -165,6 +171,11 @@ export default function Tasks() {
   const { data: iterations = [] } = useQuery({
     queryKey: ['iterations', teamId],
     queryFn: () => getIterationsByTeam(teamId as string),
+    enabled: Boolean(teamId),
+  });
+  const { data: members = [] } = useQuery({
+    queryKey: ['team-members', teamId],
+    queryFn: () => getMembers(teamId as string),
     enabled: Boolean(teamId),
   });
   const { data: teamEnvironments = [] } = useQuery({
@@ -516,6 +527,29 @@ export default function Tasks() {
           onChange={(value) => updateParams({ status: value })}
           options={statusOptions}
         />
+        <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          placeholder={t('全部创建人')}
+          style={{ minWidth: 160 }}
+          value={createdBy}
+          onChange={(value) => updateParams({ created_by: value })}
+          options={members.map((member) => ({
+            value: member.user_id,
+            label: member.user.display_name || member.user.username,
+          }))}
+        />
+        {me?.id && (
+          <Button
+            type={createdBy === me.id ? 'primary' : 'default'}
+            onClick={() =>
+              updateParams({ created_by: createdBy === me.id ? undefined : me.id })
+            }
+          >
+            {t('我的任务')}
+          </Button>
+        )}
         <Input.Search
           allowClear
           placeholder={t('按任务名搜索')}
@@ -602,6 +636,13 @@ export default function Tasks() {
             ),
           },
           {
+            title: t('创建人'),
+            width: 110,
+            sorter: byText<Task>((r) => r.created_by_name ?? ''),
+            render: (_, r) =>
+              r.created_by_name || <Typography.Text type="secondary">-</Typography.Text>,
+          },
+          {
             title: t('定时'),
             width: 120,
             sorter: byDate<Task>((r) => r.schedule_next_run_at),
@@ -653,39 +694,43 @@ export default function Tasks() {
                 <Button size="small" onClick={() => navigate(`/executions?task_id=${r.id}`)}>
                   {t('执行记录')}
                 </Button>
-                <Button
-                  size="small"
-                  onClick={() => {
-                    setEditing(r);
-                    form.setFieldsValue({
-                      name: r.name,
-                      type: r.type,
-                      description: r.description ?? undefined,
-                      project_id: r.project_id,
-                      iteration_id: r.iteration_id,
-                      retry_count: r.retry_count,
-                      environment_name: r.environment_name,
-                      gate_enabled: r.gate_enabled,
-                      gate_min_pass_rate:
-                        r.gate_min_pass_rate == null
-                          ? undefined
-                          : Math.round(r.gate_min_pass_rate * 100),
-                      gate_fail_on_p0: r.gate_fail_on_p0,
-                    });
-                    setOpen(true);
-                  }}
-                >
-                  {t('编辑')}
-                </Button>
-                <Popconfirm
-                  title={t('删除该任务及其执行记录？')}
-                  description={t('执行记录、报告和 AI 结论会一并删除，不可恢复。')}
-                  onConfirm={() => deleteMutation.mutate(r.id)}
-                >
-                  <Button size="small" danger>
-                    {t('删除')}
-                  </Button>
-                </Popconfirm>
+                {canManageTask(r) && (
+                  <>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setEditing(r);
+                        form.setFieldsValue({
+                          name: r.name,
+                          type: r.type,
+                          description: r.description ?? undefined,
+                          project_id: r.project_id,
+                          iteration_id: r.iteration_id,
+                          retry_count: r.retry_count,
+                          environment_name: r.environment_name,
+                          gate_enabled: r.gate_enabled,
+                          gate_min_pass_rate:
+                            r.gate_min_pass_rate == null
+                              ? undefined
+                              : Math.round(r.gate_min_pass_rate * 100),
+                          gate_fail_on_p0: r.gate_fail_on_p0,
+                        });
+                        setOpen(true);
+                      }}
+                    >
+                      {t('编辑')}
+                    </Button>
+                    <Popconfirm
+                      title={t('删除该任务及其执行记录？')}
+                      description={t('执行记录、报告和 AI 结论会一并删除，不可恢复。')}
+                      onConfirm={() => deleteMutation.mutate(r.id)}
+                    >
+                      <Button size="small" danger>
+                        {t('删除')}
+                      </Button>
+                    </Popconfirm>
+                  </>
+                )}
               </Space>
             ),
           },

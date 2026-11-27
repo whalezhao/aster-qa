@@ -604,4 +604,8 @@ export const pages: Record<string, string> = {
     '{n} cases were not executed because a prerequisite did not pass',
   '编排内的用例按依赖顺序执行；不属于编排的用例仍按任务原有分片并发执行。前置失败时，依赖它的用例不会再执行。':
     'Orchestrated cases run in dependency order; cases outside the flow still run concurrently in the task shards. If a prerequisite fails, its dependents are not executed.',
+  全部创建人: 'All creators',
+  我的任务: 'My tasks',
+  全部执行人: 'All executors',
+  我的执行: 'My runs',
 };

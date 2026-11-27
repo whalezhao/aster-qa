@@ -47,6 +47,7 @@ export interface Batch {
   gate_status: GateResult['status'] | null;
   gate_detail: GateResult | null;
   created_at: string;
+  created_by?: string | null;
   created_by_name?: string | null;
   started_at: string | null;
   ended_at: string | null;
@@ -107,6 +108,8 @@ export interface BatchListParams {
   /** 按功能分期过滤：批次里只要有该分期的功能就算命中 */
   stage?: 'in_iteration' | 'released';
   name?: string;
+  /** 按执行人（批次创建者）筛；传自己的 id 就是「我的执行」 */
+  created_by?: string;
   limit?: number;
   offset?: number;
 }

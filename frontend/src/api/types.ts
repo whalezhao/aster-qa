@@ -342,6 +342,9 @@ export interface Task {
   gate_min_pass_rate: number | null;
   gate_fail_on_p0: boolean;
   case_selection_mode: string;
+  /** 创建人：列表显示和编辑/删除权限都用它 */
+  created_by: string | null;
+  created_by_name: string | null;
   /** 下面几个由后端聚合填充 —— 任务列表要能直接看出组合规模与最近执行情况 */
   feature_count: number;
   case_count: number;
